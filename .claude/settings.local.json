@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew --version)",
+      "Read(//Users/lessa/.nvm/versions/**)",
+      "Read(//opt/homebrew/**)",
+      "Read(//usr/local/**)",
+      "Read(//Users/lessa/**)",
+      "Bash(export PATH=\"/opt/homebrew/opt/node@22/bin:$PATH\")",
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias=\"@/*\" --use-npm --turbopack --no-experimental-app)",
+      "Read(//private/tmp/**)",
+      "Bash(rm -rf f3f-next)",
+      "Bash(npx --yes create-next-app@latest f3f-next --typescript --tailwind --eslint --app --src-dir --import-alias=\"@/*\" --use-npm --turbopack --yes)",
+      "Bash(rm -rf /tmp/f3f-next/.git /tmp/f3f-next/CLAUDE.md /tmp/f3f-next/AGENTS.md /tmp/f3f-next/README.md)",
+      "Bash(rsync -a /tmp/f3f-next/ /Users/lessa/Downloads/ProcessosF3F/)",
+      "Bash(rm -rf /tmp/f3f-next)",
+      "Bash(npm install *)",
+      "Bash(npm ls *)",
+      "Bash(openssl rand *)",
+      "Bash(npx prisma *)",
+      "Bash(npm uninstall *)",
+      "Bash(npx shadcn@latest init --yes --force --base-color neutral)",
+      "Bash(npx shadcn@latest init --yes --force --defaults)"
+    ]
+  }
+}
