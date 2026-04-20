@@ -50,7 +50,7 @@ export function TaskRow({ task }: TaskRowProps) {
       case "in_progress":
         return "bg-blue-50 border-blue-200";
       case "review":
-        return "bg-violet-50 border-violet-200";
+        return "bg-blue-50 border-blue-200";
       case "blocked":
         return "bg-orange-50 border-orange-200";
       case "cancelled":
@@ -69,7 +69,7 @@ export function TaskRow({ task }: TaskRowProps) {
       <button
         onClick={handleToggle}
         disabled={isPending}
-        className="shrink-0 text-neutral-300 hover:text-violet-500 transition-colors disabled:opacity-40"
+        className="shrink-0 text-neutral-300 hover:text-blue-500 transition-colors disabled:opacity-40"
         aria-label={isDone ? "Marcar como pendente" : "Marcar como concluída"}
       >
         {isDone
@@ -86,7 +86,7 @@ export function TaskRow({ task }: TaskRowProps) {
           </p>
           <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
             {task.project && (
-              <span className="flex items-center gap-1 text-xs font-medium text-violet-500">
+              <span className="flex items-center gap-1 text-xs font-medium text-blue-500">
                 <FolderKanban className="w-3 h-3 shrink-0" />
                 {task.project.name}
               </span>
@@ -99,7 +99,7 @@ export function TaskRow({ task }: TaskRowProps) {
             )}
             {task.assignee && (
               <span className="flex items-center gap-1 text-xs text-neutral-400">
-                <span className="w-4 h-4 rounded-full bg-violet-100 text-violet-600 text-[9px] font-bold flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[9px] font-bold flex items-center justify-center">
                   {task.assignee.name.charAt(0)}
                 </span>
                 {task.assignee.name.split(" ")[0]}

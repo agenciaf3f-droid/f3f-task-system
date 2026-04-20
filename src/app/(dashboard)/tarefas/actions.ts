@@ -239,6 +239,36 @@ export async function updateTaskAction(
   redirect(`/tarefas/${taskId}`);
 }
 
+export async function updateTaskAssigneeAction(taskId: string, assigneeId: string | null) {
+  const user = await requireAuth();
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId },
+    select: { projectId: true },
+  });
+  if (!task) return;
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { assigneeId: assigneeId || null },
+  });
+  revalidatePath("/tarefas");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+}
+
+export async function updateTaskDueDateAction(taskId: string, dueDate: string | null) {
+  const user = await requireAuth();
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId },
+    select: { projectId: true },
+  });
+  if (!task) return;
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { dueDate: dueDate ? new Date(dueDate) : null },
+  });
+  revalidatePath("/tarefas");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+}
+
 export async function addChecklistItemAction(taskId: string, title: string) {
   const user = await requireAuth();
   const count = await prisma.taskChecklistItem.count({ where: { taskId } });

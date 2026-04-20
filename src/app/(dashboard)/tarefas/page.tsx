@@ -2,7 +2,6 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Plus, CheckSquare } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { TaskFilters } from "./task-filters";
 import { TaskRow } from "./task-row";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 
@@ -55,7 +54,7 @@ export default async function TarefasPage({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Tarefas</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Tarefas</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {tasks.length} tarefa{tasks.length !== 1 ? "s" : ""}
           </p>
@@ -65,15 +64,6 @@ export default async function TarefasPage({
           Nova tarefa
         </LinkButton>
       </div>
-
-      {/* Filters (client component) */}
-      <TaskFilters
-        currentStatus={params.status}
-        currentSectorId={params.sectorId}
-        currentMine={params.mine}
-        currentPriority={params.priority}
-        sectors={sectors}
-      />
 
       {/* Task list */}
       {tasks.length === 0 ? (

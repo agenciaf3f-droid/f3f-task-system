@@ -47,7 +47,7 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
       case "in_progress":
         return "bg-blue-50 border-blue-200";
       case "review":
-        return "bg-violet-50 border-violet-200";
+        return "bg-blue-50 border-blue-200";
       case "blocked":
         return "bg-orange-50 border-orange-200";
       case "cancelled":
@@ -66,7 +66,7 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
       <button
         onClick={handleToggle}
         disabled={isPending}
-        className="shrink-0 text-neutral-300 hover:text-violet-500 transition-colors disabled:opacity-40"
+        className="shrink-0 text-neutral-300 hover:text-blue-500 transition-colors disabled:opacity-40"
         aria-label={isDone ? "Marcar como pendente" : "Marcar como concluída"}
       >
         {isDone

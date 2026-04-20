@@ -75,8 +75,8 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
         onClick={() => setOpen(true)}
         className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
           emptyTrigger
-            ? "text-white bg-violet-600 hover:bg-violet-700"
-            : "text-violet-600 hover:text-violet-700 bg-violet-50 hover:bg-violet-100"
+            ? "text-white bg-blue-600 hover:bg-blue-700"
+            : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100"
         }`}
       >
         <UserPlus className="w-3.5 h-3.5" />
@@ -123,7 +123,7 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
                     <select
                       value={selectedUserId}
                       onChange={(e) => setSelectedUserId(e.target.value)}
-                      className="w-full h-9 pl-9 pr-3 rounded-lg border border-neutral-200 bg-white text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent appearance-none cursor-pointer"
+                      className="w-full h-9 pl-9 pr-3 rounded-lg border border-neutral-200 bg-white text-sm text-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none cursor-pointer"
                     >
                       <option value="">Selecione uma pessoa...</option>
                       {nonMembers.map((u) => (
@@ -134,7 +134,7 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
                   <button
                     onClick={handleAdd}
                     disabled={!selectedUserId || isPending}
-                    className="h-9 px-4 rounded-lg bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+                    className="h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
                   >
                     {isPending
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

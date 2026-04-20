@@ -122,7 +122,7 @@ export function TopBar({ userName, unreadCount = 0 }: { userName: string; unread
             </span>
           )}
         </button>
-        <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold text-white shadow shadow-blue-500/30">
           {initials}
         </div>
       </div>

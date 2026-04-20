@@ -38,7 +38,7 @@ export function NewUserDialog({ sectors }: { sectors: Sector[] }) {
           <DialogTitle>Adicionar membro</DialogTitle>
         </DialogHeader>
         <form action={action} className="flex flex-col gap-4 mt-2">
-          <div className="flex items-start gap-2 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2.5 mb-1">
+          <div className="flex items-start gap-2 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2.5 mb-1">
             <Mail className="w-4 h-4 shrink-0 mt-0.5" />
             <span>Um e-mail com as credenciais de acesso será enviado automaticamente.</span>
           </div>

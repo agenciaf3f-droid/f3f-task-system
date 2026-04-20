@@ -62,7 +62,7 @@ export default async function SetoresPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Setores</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Setores</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             {sectors.length} setor{sectors.length !== 1 ? "es" : ""}
           </p>

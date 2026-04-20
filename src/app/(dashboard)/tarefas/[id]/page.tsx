@@ -25,6 +25,7 @@ export default async function TaskDetailPage({
     include: {
       assignee: { select: { id: true, name: true } },
       sector: { select: { name: true, color: true } },
+      project: { select: { id: true, name: true } },
       createdBy: { select: { name: true } },
       checklistItems: { orderBy: { position: "asc" } },
       comments: {
@@ -43,13 +44,23 @@ export default async function TaskDetailPage({
   return (
     <div className="max-w-3xl">
       {/* Back */}
-      <Link
-        href="/tarefas"
-        className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Voltar às tarefas
-      </Link>
+      {task.projectId ? (
+        <Link
+          href={`/projetos/${task.projectId}`}
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar ao projeto
+        </Link>
+      ) : (
+        <Link
+          href="/tarefas"
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar às tarefas
+        </Link>
+      )}
 
       <div className="flex flex-col gap-6">
         {/* Header card */}

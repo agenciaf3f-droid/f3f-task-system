@@ -34,7 +34,7 @@ export default async function TemplatesPage() {
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Templates</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Templates</h1>
           <p className="text-sm text-neutral-500 mt-0.5">
             Processos padronizados que geram tarefas com 1 clique
           </p>
@@ -70,7 +70,7 @@ export default async function TemplatesPage() {
             {active.map((template) => (
               <div
                 key={template.id}
-                className="bg-white border border-neutral-200 rounded-2xl p-5 flex flex-col gap-4 hover:border-violet-300 hover:shadow-md transition-all"
+                className="bg-white border border-neutral-200 rounded-2xl p-5 flex flex-col gap-4 hover:border-blue-300 hover:shadow-md transition-all"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
@@ -113,7 +113,7 @@ export default async function TemplatesPage() {
                     </span>
                   )}
                   {template.category && (
-                    <span className="bg-violet-50 text-violet-600 border border-violet-100 px-2 py-0.5 rounded-full font-medium">
+                    <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full font-medium">
                       {template.category}
                     </span>
                   )}

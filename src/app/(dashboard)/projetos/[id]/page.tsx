@@ -2,25 +2,40 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ArrowLeft, Plus, CheckCircle2, FolderOpen } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { StatusBadge, PriorityBadge } from "@/components/tasks/task-badges";
+import { StatusBadge } from "@/components/tasks/task-badges";
 import { format, isBefore, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
+import { TaskInlineAssignee, TaskInlineDueDate } from "./task-inline-edit";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+type SortBy = "dueDate" | "assignee" | "default";
+type SortDir = "asc" | "desc";
+
 export default async function ProjetoDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ sortBy?: string; sortDir?: string }>;
 }) {
   const user = await requireAuth();
   const { id } = await params;
+  const sp = await searchParams;
+  const sortBy = (sp.sortBy as SortBy) ?? "default";
+  const sortDir = (sp.sortDir as SortDir) ?? "asc";
+
+  const orderBy = (() => {
+    if (sortBy === "dueDate") return [{ dueDate: sortDir as "asc" | "desc" }];
+    if (sortBy === "assignee") return [{ assignee: { name: sortDir as "asc" | "desc" } }];
+    return [{ status: "asc" as const }, { priority: "desc" as const }, { dueDate: "asc" as const }];
+  })();
 
   const [project, templates, users] = await Promise.all([
     prisma.project.findFirst({
@@ -30,9 +45,9 @@ export default async function ProjetoDetailPage({
         createdBy: { select: { name: true } },
         tasks: {
           where: { deletedAt: null },
-          orderBy: [{ status: "asc" }, { priority: "desc" }, { dueDate: "asc" }],
+          orderBy,
           include: {
-            assignee: { select: { name: true } },
+            assignee: { select: { id: true, name: true } },
             sector: { select: { name: true, color: true } },
             _count: { select: { checklistItems: true, comments: true } },
           },
@@ -59,19 +74,34 @@ export default async function ProjetoDetailPage({
     ? Math.round((doneTasks.length / activeTasks.length) * 100)
     : 0;
   const isCompleted = activeTasks.length > 0 && doneTasks.length === activeTasks.length;
-
   const canManage = user.role === "admin" || user.role === "manager";
+
+  // Membros com tarefas no projeto
+  const memberMap = new Map<string, { name: string; total: number; done: number }>();
+  for (const task of activeTasks) {
+    if (!task.assignee) continue;
+    const entry = memberMap.get(task.assignee.id) ?? { name: task.assignee.name, total: 0, done: 0 };
+    entry.total++;
+    if (task.status === "done") entry.done++;
+    memberMap.set(task.assignee.id, entry);
+  }
+  const members = Array.from(memberMap.entries())
+    .map(([id, data]) => ({ id, ...data, progress: Math.round((data.done / data.total) * 100) }))
+    .sort((a, b) => b.progress - a.progress);
+
+  function sortLink(by: SortBy) {
+    const newDir = sortBy === by && sortDir === "asc" ? "desc" : "asc";
+    return `/projetos/${id}?sortBy=${by}&sortDir=${newDir}`;
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl">
-      <Link
-        href="/projetos"
-        className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors"
-      >
+      <Link href="/projetos" className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Voltar aos projetos
       </Link>
 
+      {/* Project header */}
       <div className="bg-white border border-neutral-200 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -83,9 +113,7 @@ export default async function ProjetoDetailPage({
             </div>
             <div className="min-w-0">
               <p className="text-xs text-neutral-400 font-medium">{project.client.name}</p>
-              <h1 className="text-xl font-semibold text-neutral-900 leading-tight truncate">
-                {project.name}
-              </h1>
+              <h1 className="text-xl font-semibold text-neutral-900 leading-tight truncate">{project.name}</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -96,11 +124,7 @@ export default async function ProjetoDetailPage({
               </span>
             )}
             {canManage && templates.length > 0 && (
-              <ApplyTemplateDialog
-                projectId={project.id}
-                templates={templates}
-                users={users}
-              />
+              <ApplyTemplateDialog projectId={project.id} templates={templates} users={users} />
             )}
             {canManage && (
               <ProjectActions projectId={project.id} currentStatus={project.status} />
@@ -119,17 +143,13 @@ export default async function ProjetoDetailPage({
         <div className="mt-5 pt-5 border-t border-neutral-100">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="text-neutral-500 font-medium">Progresso do projeto</span>
-            <span className={`font-bold text-base ${
-              isCompleted ? "text-green-600" : progress >= 50 ? "text-blue-600" : "text-neutral-700"
-            }`}>
+            <span className={`font-bold text-base ${isCompleted ? "text-green-600" : progress >= 50 ? "text-blue-600" : "text-neutral-700"}`}>
               {progress}%
             </span>
           </div>
           <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                isCompleted ? "bg-green-500" : progress >= 50 ? "bg-blue-500" : "bg-neutral-400"
-              }`}
+              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-green-500" : progress >= 50 ? "bg-blue-500" : "bg-neutral-400"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -139,10 +159,35 @@ export default async function ProjetoDetailPage({
         </div>
       </div>
 
+      {/* Tasks */}
       <div>
-        <h2 className="text-sm font-semibold text-neutral-700 mb-3 uppercase tracking-wide">
-          Tarefas do projeto
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-neutral-700 uppercase tracking-wide">
+            Tarefas do projeto
+          </h2>
+          {activeTasks.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Link
+                href={sortLink("assignee")}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                  sortBy === "assignee" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                }`}
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                Responsável
+              </Link>
+              <Link
+                href={sortLink("dueDate")}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                  sortBy === "dueDate" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                }`}
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                Data
+              </Link>
+            </div>
+          )}
+        </div>
 
         {project.tasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
@@ -155,18 +200,25 @@ export default async function ProjetoDetailPage({
             </LinkButton>
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-neutral-100">
+          <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden divide-y divide-neutral-100">
+            {/* Column header */}
+            <div className="flex items-center gap-4 px-4 py-2 bg-neutral-50 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+              <div className="w-6 shrink-0" />
+              <div className="flex-1">Tarefa</div>
+              <div className="flex items-center gap-6 shrink-0 pr-1">
+                <span className="w-28 text-left hidden sm:block">Responsável</span>
+                <span className="w-16 text-left hidden sm:block">Data</span>
+                <span className="w-24 text-left">Status</span>
+              </div>
+            </div>
+
             {project.tasks.filter((t) => t.status !== "cancelled").map((task) => {
               const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
               const isDueToday = task.dueDate && isToday(task.dueDate);
 
               return (
-                <Link
-                  key={task.id}
-                  href={`/tarefas/${task.id}`}
-                  className="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50/50 transition-colors duration-200 group"
-                >
-                  {/* Checkbox indicator */}
+                <div key={task.id} className="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50/50 transition-colors duration-150 group">
+                  {/* Checkbox */}
                   <div className="w-6 h-6 rounded-md border border-neutral-200 flex items-center justify-center shrink-0 group-hover:border-neutral-300 transition-colors">
                     {task.status === "done" && (
                       <svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
@@ -175,87 +227,100 @@ export default async function ProjetoDetailPage({
                     )}
                   </div>
 
-                  {/* Title */}
-                  <div className="flex-1 min-w-0">
+                  {/* Title — clickable */}
+                  <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0">
                     <p className={`text-sm leading-normal truncate transition-colors ${
-                      task.status === "done"
-                        ? "line-through text-neutral-400"
-                        : "text-neutral-900 group-hover:text-neutral-950"
+                      task.status === "done" ? "line-through text-neutral-400" : "text-neutral-900 group-hover:text-neutral-950"
                     }`}>
                       {task.title}
                     </p>
-                  </div>
-
-                  {/* Meta info - sparse and aligned right */}
-                  <div className="flex items-center gap-6 shrink-0">
-                    {/* Sector */}
                     {task.sector && (
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: task.sector.color ?? "#e5e7eb" }}
-                        />
-                        <span className="text-xs text-neutral-500 hidden sm:inline">
-                          {task.sector.name}
-                        </span>
-                      </div>
+                      <span className="flex items-center gap-1 text-xs text-neutral-400 mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.sector.color ?? "#e5e7eb" }} />
+                        {task.sector.name}
+                      </span>
                     )}
+                  </Link>
 
-                    {/* Assignee */}
-                    {task.assignee && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-6 h-6 rounded-full bg-neutral-200 text-neutral-700 text-[11px] font-semibold flex items-center justify-center shrink-0">
-                          {task.assignee.name.charAt(0)}
-                        </span>
-                        <span className="text-xs text-neutral-600 hidden sm:inline max-w-[80px] truncate">
-                          {task.assignee.name.split(" ")[0]}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Priority (just dot) */}
-                    <div className="flex items-center">
-                      <span className={`w-2 h-2 rounded-full ${
-                        task.priority === "urgent" ? "bg-red-500" :
-                        task.priority === "high" ? "bg-orange-500" :
-                        task.priority === "medium" ? "bg-amber-500" :
-                        "bg-neutral-300"
-                      }`} />
+                  {/* Meta — inline editable */}
+                  <div className="flex items-center gap-6 shrink-0">
+                    {/* Responsável */}
+                    <div className="w-28 hidden sm:block">
+                      <TaskInlineAssignee
+                        taskId={task.id}
+                        assignee={task.assignee}
+                        users={users}
+                      />
                     </div>
 
-                    {/* Due date */}
-                    {task.dueDate && (
-                      <span className={`text-xs whitespace-nowrap transition-colors ${
-                        isOverdue ? "text-red-600 font-medium" :
-                        isDueToday ? "text-amber-600 font-medium" :
-                        "text-neutral-500"
-                      }`}>
-                        {format(task.dueDate, "dd MMM", { locale: ptBR })}
-                      </span>
-                    )}
+                    {/* Data */}
+                    <div className="w-16 hidden sm:block">
+                      <TaskInlineDueDate
+                        taskId={task.id}
+                        dueDate={task.dueDate}
+                        isOverdue={!!isOverdue}
+                        isDueToday={!!isDueToday}
+                      />
+                    </div>
 
-                    {/* Status badge - minimal */}
-                    {task.status !== "todo" && (
-                      <span className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${
-                        task.status === "done" ? "bg-emerald-50 text-emerald-700" :
-                        task.status === "in_progress" ? "bg-blue-50 text-blue-700" :
-                        task.status === "review" ? "bg-violet-50 text-violet-700" :
-                        task.status === "blocked" ? "bg-orange-50 text-orange-700" :
-                        "bg-neutral-100 text-neutral-700"
-                      }`}>
-                        {task.status === "done" && "Concluído"}
-                        {task.status === "in_progress" && "Em andamento"}
-                        {task.status === "review" && "Em revisão"}
-                        {task.status === "blocked" && "Bloqueado"}
-                      </span>
-                    )}
+                    {/* Status */}
+                    <div className="w-24">
+                      {task.status !== "todo" ? (
+                        <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${
+                          task.status === "done" ? "bg-emerald-50 text-emerald-700" :
+                          task.status === "in_progress" ? "bg-blue-50 text-blue-700" :
+                          task.status === "review" ? "bg-blue-50 text-blue-700" :
+                          task.status === "blocked" ? "bg-orange-50 text-orange-700" :
+                          "bg-neutral-100 text-neutral-700"
+                        }`}>
+                          {task.status === "done" && "Concluído"}
+                          {task.status === "in_progress" && "Em andamento"}
+                          {task.status === "review" && "Em revisão"}
+                          {task.status === "blocked" && "Bloqueado"}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-neutral-300">A fazer</span>
+                      )}
+                    </div>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Membros do projeto */}
+      {members.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-neutral-700 mb-3 uppercase tracking-wide">
+            Membros do projeto
+          </h2>
+          <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100">
+            {members.map((member) => (
+              <div key={member.id} className="flex items-center gap-4 px-5 py-4">
+                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-sm font-bold flex items-center justify-center shrink-0">
+                  {getInitials(member.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-neutral-800">{member.name}</span>
+                    <span className={`text-xs font-bold ${member.progress === 100 ? "text-emerald-600" : member.progress >= 50 ? "text-blue-600" : "text-neutral-500"}`}>
+                      {member.done}/{member.total} · {member.progress}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${member.progress === 100 ? "bg-emerald-500" : member.progress >= 50 ? "bg-blue-500" : "bg-blue-400"}`}
+                      style={{ width: `${member.progress}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

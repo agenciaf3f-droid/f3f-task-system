@@ -12,6 +12,7 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: "active",    label: "Ativo"     },
   { value: "paused",    label: "Pausado"   },
   { value: "completed", label: "Concluído" },
+  { value: "archived",  label: "Arquivar"  },
   { value: "cancelled", label: "Cancelado" },
 ];
 

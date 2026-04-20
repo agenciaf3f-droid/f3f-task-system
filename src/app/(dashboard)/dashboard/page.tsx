@@ -57,8 +57,23 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-export default async function DashboardPage() {
+const TASK_FILTERS = [
+  { label: "Minhas tarefas", key: "mine", value: "1" },
+  { label: "A fazer",        key: "status", value: "todo" },
+  { label: "Em revisão",     key: "status", value: "review" },
+  { label: "Concluído",      key: "status", value: "done" },
+] as const;
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ mine?: string; status?: string }>;
+}) {
   const user = await requireAuth();
+  const sp = await searchParams;
+  const activeFilterMine = sp?.mine;
+  const activeFilterStatus = sp?.status;
+
   const { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects } =
     await getDashboardData(user.userId, user.companyId);
 
@@ -86,9 +101,9 @@ export default async function DashboardPage() {
       label: "Em andamento",
       value: inProgressCount,
       icon: TrendingUp,
-      color: "text-violet-600",
-      bg: "bg-violet-50",
-      border: "border-violet-100",
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      border: "border-blue-100",
     },
     {
       label: "Concluídas hoje",
@@ -105,8 +120,8 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">
-            {getGreeting()}, {user.name.split(" ")[0]} 👋
+          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">
+            {getGreeting()}, {user.name.split(" ")[0]}
           </h1>
           <p className="text-sm text-neutral-500 mt-1 capitalize">
             {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
@@ -143,9 +158,36 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
-            <Link href="/tarefas?mine=1" className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1">
+            <Link href="/tarefas?mine=1" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
               Ver todas <ArrowRight className="w-3 h-3" />
             </Link>
+          </div>
+
+          {/* Filtros rápidos */}
+          <div className="flex flex-wrap gap-2">
+            {TASK_FILTERS.map((f) => {
+              const isActive =
+                f.key === "mine" ? activeFilterMine === f.value :
+                f.key === "status" ? activeFilterStatus === f.value : false;
+              const href = isActive
+                ? "/tarefas?mine=1"
+                : f.key === "mine"
+                  ? `/tarefas?mine=${f.value}`
+                  : `/tarefas?mine=1&status=${f.value}`;
+              return (
+                <Link
+                  key={f.label}
+                  href={href}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
+                    isActive
+                      ? "bg-neutral-900 text-white border-neutral-900"
+                      : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400"
+                  }`}
+                >
+                  {f.label}
+                </Link>
+              );
+            })}
           </div>
 
           {myTasks.length === 0 ? (
@@ -177,10 +219,10 @@ export default async function DashboardPage() {
                   <Link
                     key={t.id}
                     href={`/tarefas/${t.id}`}
-                    className="flex items-center gap-2 py-1.5 hover:text-violet-600 transition-colors group"
+                    className="flex items-center gap-2 py-1.5 hover:text-blue-600 transition-colors group"
                   >
                     <Circle className="w-3 h-3 text-neutral-300 shrink-0" />
-                    <span className="text-xs text-neutral-700 truncate flex-1 group-hover:text-violet-600">{t.title}</span>
+                    <span className="text-xs text-neutral-700 truncate flex-1 group-hover:text-blue-600">{t.title}</span>
                     {t.dueDate && (
                       <span className={`text-[10px] font-semibold shrink-0 ${
                         isBefore(t.dueDate, new Date()) ? "text-red-500" : "text-neutral-400"
@@ -198,7 +240,7 @@ export default async function DashboardPage() {
           <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
-              <Link href="/projetos" className="text-xs text-violet-600 hover:text-violet-700 font-medium">Ver todos</Link>
+              <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
             </div>
             {recentProjects.length === 0 ? (
               <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
@@ -217,12 +259,12 @@ export default async function DashboardPage() {
                         >
                           {getInitials(p.client.name)}
                         </div>
-                        <span className="text-xs font-semibold text-neutral-700 group-hover:text-violet-600 truncate transition-colors">{p.name}</span>
+                        <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
                         <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
                       </div>
                       <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-violet-500 transition-all"
+                          className="h-full rounded-full bg-blue-500 transition-all"
                           style={{ width: `${progress}%` }}
                         />
                       </div>

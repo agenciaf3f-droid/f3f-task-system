@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-red-50 text-red-700 border-red-200",
-  manager: "bg-purple-50 text-purple-700 border-purple-200",
+  manager: "bg-blue-50 text-blue-700 border-blue-200",
   supervisor: "bg-blue-50 text-blue-700 border-blue-200",
   member: "bg-neutral-50 text-neutral-600 border-neutral-200",
 };

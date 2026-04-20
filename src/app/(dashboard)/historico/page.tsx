@@ -8,7 +8,7 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   "task.created":        { label: "Tarefa criada",          color: "text-green-600"  },
   "task.status_changed": { label: "Status alterado",        color: "text-blue-600"   },
   "task.deleted":        { label: "Tarefa excluída",        color: "text-red-600"    },
-  "task.commented":      { label: "Comentário adicionado",  color: "text-purple-600" },
+  "task.commented":      { label: "Comentário adicionado",  color: "text-blue-600" },
   "task.updated":        { label: "Tarefa atualizada",      color: "text-amber-600"  },
   "template.created":    { label: "Template criado",        color: "text-green-600"  },
   "template.activated":  { label: "Template ativado",       color: "text-blue-600"   },
