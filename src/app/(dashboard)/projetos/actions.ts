@@ -1,0 +1,256 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
+import { pickColor } from "@/lib/color";
+import type { ProjectStatus } from "@prisma/client";
+
+// ─── Client ───────────────────────────────────────────────────
+
+const clientSchema = z.object({
+  name: z.string().min(1, "Nome do cliente obrigatório").max(255),
+  color: z.string().optional().or(z.literal("")),
+  email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+});
+
+export async function createClientAction(
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const parsed = clientSchema.safeParse({
+    name: formData.get("name"),
+    color: formData.get("color"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  await prisma.client.create({
+    data: {
+      companyId: user.companyId,
+      name: parsed.data.name,
+      color: parsed.data.color || pickColor(parsed.data.name),
+      email: parsed.data.email || null,
+      phone: parsed.data.phone || null,
+    },
+  });
+
+  revalidatePath("/projetos");
+  return {};
+}
+
+export async function deleteClientAction(clientId: string) {
+  const user = await requireAuth();
+  await prisma.client.updateMany({
+    where: { id: clientId, companyId: user.companyId },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath("/projetos");
+}
+
+// ─── Project ──────────────────────────────────────────────────
+
+export async function createProjectAction(
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const name = (formData.get("name") as string)?.trim();
+  const description = (formData.get("description") as string)?.trim();
+  let clientId = formData.get("clientId") as string;
+  const newClientName = (formData.get("newClientName") as string)?.trim();
+  const templateId = (formData.get("templateId") as string)?.trim();
+
+  if (!name) return { error: "Nome do projeto obrigatório." };
+
+  if (clientId === "__new__") {
+    if (!newClientName) return { error: "Nome do cliente obrigatório." };
+    const client = await prisma.client.create({
+      data: { companyId: user.companyId, name: newClientName, color: pickColor(newClientName) },
+    });
+    clientId = client.id;
+  }
+
+  const uuidParsed = z.string().uuid().safeParse(clientId);
+  if (!uuidParsed.success) return { error: "Selecione um cliente." };
+
+  const project = await prisma.project.create({
+    data: {
+      companyId: user.companyId,
+      clientId,
+      createdById: user.userId,
+      name,
+      description: description || null,
+    },
+  });
+
+  if (templateId && templateId !== "__none__") {
+    const template = await prisma.template.findFirst({
+      where: { id: templateId, companyId: user.companyId, isActive: true },
+      include: { templateTasks: { orderBy: { position: "asc" } } },
+    });
+    if (template) {
+      const start = new Date();
+      for (const tt of template.templateTasks) {
+        const dueDate = tt.daysToComplete
+          ? new Date(start.getTime() - tt.daysToComplete * 86400000)
+          : null;
+        await prisma.task.create({
+          data: {
+            companyId: user.companyId,
+            projectId: project.id,
+            templateId: template.id,
+            sectorId: template.sectorId,
+            title: tt.title,
+            description: tt.description,
+            priority: tt.priority,
+            createdById: user.userId,
+            dueDate,
+          },
+        });
+      }
+      await prisma.template.update({
+        where: { id: templateId },
+        data: { useCount: { increment: 1 } },
+      });
+    }
+  }
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "project.created",
+    resourceType: "project",
+    resourceId: project.id,
+    newValue: { name },
+  });
+
+  revalidatePath("/projetos");
+  redirect(`/projetos/${project.id}`);
+}
+
+export async function updateProjectAction(
+  projectId: string,
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const parsed = z.object({
+    name: z.string().min(1, "Nome obrigatório").max(255),
+    description: z.string().optional().or(z.literal("")),
+    status: z.enum(["active", "completed", "paused", "cancelled"]),
+  }).safeParse({
+    name: formData.get("name"),
+    description: formData.get("description"),
+    status: formData.get("status"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  await prisma.project.updateMany({
+    where: { id: projectId, companyId: user.companyId },
+    data: {
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+      status: parsed.data.status as ProjectStatus,
+    },
+  });
+
+  revalidatePath(`/projetos/${projectId}`);
+  revalidatePath("/projetos");
+  redirect(`/projetos/${projectId}`);
+}
+
+export async function updateProjectStatusAction(
+  projectId: string,
+  status: ProjectStatus,
+) {
+  const user = await requireAuth();
+  await prisma.project.updateMany({
+    where: { id: projectId, companyId: user.companyId },
+    data: { status },
+  });
+  revalidatePath(`/projetos/${projectId}`);
+  revalidatePath("/projetos");
+}
+
+export async function deleteProjectAction(projectId: string) {
+  const user = await requireAuth();
+  await prisma.project.updateMany({
+    where: { id: projectId, companyId: user.companyId },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath("/projetos");
+  redirect("/projetos");
+}
+
+export async function applyTemplateToProjectAction(
+  projectId: string,
+  templateId: string,
+  assigneeId: string,
+  startDate: string,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const [project, template] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: projectId, companyId: user.companyId, deletedAt: null },
+    }),
+    prisma.template.findFirst({
+      where: { id: templateId, companyId: user.companyId, isActive: true },
+      include: { templateTasks: { orderBy: { position: "asc" } } },
+    }),
+  ]);
+
+  if (!project) return { error: "Projeto não encontrado." };
+  if (!template) return { error: "Template não encontrado." };
+
+  const start = startDate ? new Date(startDate) : new Date();
+  const resolvedAssignee = assigneeId || null;
+
+  for (const tt of template.templateTasks) {
+    const dueDate = tt.daysToComplete
+      ? new Date(start.getTime() + tt.daysToComplete * 86400000)
+      : null;
+
+    await prisma.task.create({
+      data: {
+        companyId: user.companyId,
+        projectId,
+        templateId: template.id,
+        sectorId: template.sectorId,
+        title: tt.title,
+        description: tt.description,
+        priority: tt.priority,
+        assigneeId: resolvedAssignee,
+        createdById: user.userId,
+        dueDate,
+      },
+    });
+  }
+
+  await prisma.template.update({
+    where: { id: templateId },
+    data: { useCount: { increment: 1 } },
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "project.template_applied",
+    resourceType: "project",
+    resourceId: projectId,
+    newValue: { templateName: template.name, tasksCreated: template.templateTasks.length },
+  });
+
+  revalidatePath(`/projetos/${projectId}`);
+  return {};
+}

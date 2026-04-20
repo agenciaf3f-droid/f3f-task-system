@@ -43,6 +43,13 @@ enum TaskPriority {
   urgent
 }
 
+enum ProjectStatus {
+  active
+  completed
+  paused
+  cancelled
+}
+
 enum NotificationType {
   task_assigned
   task_due
@@ -74,6 +81,9 @@ model Company {
   notifications Notification[]
   activityLogs  ActivityLog[]
   permissions   Permission[]
+  clients       Client[]
+  projects      Project[]
+  webhookConfig WebhookConfig?
 
   @@map("companies")
 }
@@ -90,9 +100,10 @@ model User {
   passwordHash String    @map("password_hash")
   avatarUrl    String?   @map("avatar_url")
   role         UserRole  @default(member)
-  isActive     Boolean   @default(true) @map("is_active")
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  isActive           Boolean   @default(true) @map("is_active")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  lastLoginAt        DateTime? @map("last_login_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   deletedAt    DateTime? @map("deleted_at")
 
@@ -105,10 +116,12 @@ model User {
   checklistDone     TaskChecklistItem[] @relation("ChecklistDoneBy")
   comments          TaskComment[]
   attachments       TaskAttachment[]
-  templates         Template[]
-  notifications     Notification[]
+  templates                Template[]
+  templateTaskAssignments  TemplateTask[]      @relation("TemplateTaskAssignee")
+  notifications            Notification[]
   activityLogs      ActivityLog[]
   permissions       Permission[]
+  projects          Project[]
 
   @@index([companyId])
   @@index([email])
@@ -160,6 +173,7 @@ model Task {
   id           String       @id @default(uuid()) @db.Uuid
   companyId    String       @map("company_id") @db.Uuid
   sectorId     String?      @map("sector_id") @db.Uuid
+  projectId    String?      @map("project_id") @db.Uuid
   templateId   String?      @map("template_id") @db.Uuid
   parentTaskId String?      @map("parent_task_id") @db.Uuid
   title        String       @db.VarChar(500)
@@ -179,6 +193,7 @@ model Task {
 
   company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sector         Sector?             @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
   template       Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
   parentTask     Task?               @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   subtasks       Task[]              @relation("TaskSubtasks")
@@ -192,6 +207,7 @@ model Task {
   @@index([companyId])
   @@index([assigneeId])
   @@index([sectorId])
+  @@index([projectId])
   @@index([status])
   @@index([dueDate])
   @@index([templateId])
@@ -261,6 +277,50 @@ model TaskAttachment {
 }
 
 // ============================================================
+// CLIENTS & PROJECTS
+// ============================================================
+
+model Client {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  name      String    @db.VarChar(255)
+  color     String?   @db.VarChar(7)
+  email     String?   @db.VarChar(255)
+  phone     String?   @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@index([companyId])
+  @@map("clients")
+}
+
+model Project {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  clientId    String        @map("client_id") @db.Uuid
+  createdById String        @map("created_by") @db.Uuid
+  name        String        @db.VarChar(255)
+  description String?
+  status      ProjectStatus @default(active)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  tasks     Task[]
+
+  @@index([companyId])
+  @@index([clientId])
+  @@map("projects")
+}
+
+// ============================================================
 // TEMPLATES (core differentiator)
 // ============================================================
 
@@ -299,9 +359,11 @@ model TemplateTask {
   position            Int          @default(0)
   daysToComplete      Int?         @map("days_to_complete")
   defaultAssigneeRole UserRole?    @map("default_assignee_role")
+  defaultAssigneeId   String?      @map("default_assignee_id") @db.Uuid
 
-  template       Template                @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  checklistItems TemplateChecklistItem[]
+  template         Template                @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  defaultAssignee  User?                   @relation("TemplateTaskAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  checklistItems   TemplateChecklistItem[]
 
   @@index([templateId])
   @@map("template_tasks")
@@ -362,6 +424,24 @@ model ActivityLog {
   @@index([companyId, createdAt])
   @@index([userId])
   @@map("activity_logs")
+}
+
+// ============================================================
+// WEBHOOK CONFIG
+// ============================================================
+
+model WebhookConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @unique @map("company_id") @db.Uuid
+  url       String
+  secret    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_configs")
 }
 
 // ============================================================

@@ -20,7 +20,9 @@
       "Bash(npx prisma *)",
       "Bash(npm uninstall *)",
       "Bash(npx shadcn@latest init --yes --force --base-color neutral)",
-      "Bash(npx shadcn@latest init --yes --force --defaults)"
+      "Bash(npx shadcn@latest init --yes --force --defaults)",
+      "Bash(npx shadcn@latest add input label card badge separator toast)",
+      "Bash(npx shadcn@latest add input label card badge separator sonner dropdown-menu avatar)"
     ]
   }
 }

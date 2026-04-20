@@ -30,6 +30,13 @@ export async function getAuthUser() {
 export async function requireAuth() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.userId },
+    select: { mustChangePassword: true },
+  });
+  if (dbUser?.mustChangePassword) redirect("/minha-conta/senha");
+
   return user;
 }
 
