@@ -4,6 +4,7 @@ import { Users, UserCheck, UserX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
+import { DeleteUserButton } from "./delete-user-button";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -104,7 +105,10 @@ export default async function EquipePage() {
               )}
 
               {currentUser.role === "admin" && u.id !== currentUser.userId && (
-                <ToggleUserButton userId={u.id} isActive={u.isActive} />
+                <>
+                  <ToggleUserButton userId={u.id} isActive={u.isActive} />
+                  <DeleteUserButton userId={u.id} userName={u.name} />
+                </>
               )}
             </div>
           </div>
@@ -132,7 +136,10 @@ export default async function EquipePage() {
                   <p className="text-xs text-neutral-400">{u.email}</p>
                 </div>
                 {currentUser.role === "admin" && (
-                  <ToggleUserButton userId={u.id} isActive={u.isActive} />
+                  <>
+                    <ToggleUserButton userId={u.id} isActive={u.isActive} />
+                    <DeleteUserButton userId={u.id} userName={u.name} />
+                  </>
                 )}
               </div>
             ))}

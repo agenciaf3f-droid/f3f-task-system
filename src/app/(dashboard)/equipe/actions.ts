@@ -95,3 +95,29 @@ export async function toggleUserActiveAction(targetUserId: string) {
 
   revalidatePath("/equipe");
 }
+
+export async function deleteUserAction(targetUserId: string): Promise<{ error?: string }> {
+  const user = await requireRole(["admin"]);
+
+  if (targetUserId === user.userId) {
+    return { error: "Você não pode excluir sua própria conta." };
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, companyId: user.companyId, deletedAt: null },
+    select: { id: true, _count: { select: { assignedTasks: { where: { deletedAt: null, status: { notIn: ["done", "cancelled"] } } } } } },
+  });
+  if (!target) return { error: "Usuário não encontrado." };
+
+  if (target._count.assignedTasks > 0) {
+    return { error: `Este membro tem ${target._count.assignedTasks} tarefa(s) ativa(s). Reatribua-as antes de excluir.` };
+  }
+
+  await prisma.user.update({
+    where: { id: targetUserId },
+    data: { deletedAt: new Date(), isActive: false },
+  });
+
+  revalidatePath("/equipe");
+  return {};
+}
