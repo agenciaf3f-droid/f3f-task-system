@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Clock, User } from "lucide-react";
 import { updateTaskAssigneeAction, updateTaskDueDateAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 
 export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boolean }) {
@@ -18,14 +19,14 @@ export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boole
     <button
       onClick={handleClick}
       disabled={isPending}
-      className={`w-6 h-6 rounded-md border flex items-center justify-center shrink-0 transition-all duration-150 ${
+      className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-all duration-150 ${
         isDone
           ? "bg-emerald-500 border-emerald-500"
           : "border-neutral-300 hover:border-emerald-400 hover:bg-emerald-50"
       } disabled:opacity-40 cursor-pointer`}
     >
       {isDone && (
-        <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
         </svg>
       )}
@@ -33,12 +34,12 @@ export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boole
   );
 }
 
-interface User { id: string; name: string }
+interface UserLite { id: string; name: string }
 
 interface TaskInlineAssigneeProps {
   taskId: string;
   assignee: { id: string; name: string } | null;
-  users: User[];
+  users: UserLite[];
 }
 
 export function TaskInlineAssignee({ taskId, assignee, users }: TaskInlineAssigneeProps) {
@@ -50,25 +51,34 @@ export function TaskInlineAssignee({ taskId, assignee, users }: TaskInlineAssign
     startTransition(() => updateTaskAssigneeAction(taskId, userId || null));
   }
 
+  const assigneeName = assignee?.name;
+
   return (
     <div className="relative">
       <button
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen((v) => !v); }}
         disabled={isPending}
-        className="flex items-center gap-1.5 hover:bg-neutral-100 rounded-md px-1.5 py-0.5 transition-colors disabled:opacity-40"
+        className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors text-xs max-w-[140px] disabled:opacity-40"
       >
-        <span className="w-6 h-6 rounded-full bg-neutral-200 text-neutral-700 text-[11px] font-semibold flex items-center justify-center shrink-0">
-          {assignee ? assignee.name.charAt(0) : "?"}
-        </span>
-        <span className="text-xs text-neutral-600 max-w-[80px] truncate hidden sm:inline">
-          {assignee ? assignee.name.split(" ")[0] : "Sem responsável"}
-        </span>
+        {assigneeName ? (
+          <>
+            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center shrink-0">
+              {assigneeName.charAt(0).toUpperCase()}
+            </span>
+            <span className="text-neutral-700 truncate">{assigneeName.split(" ")[0]}</span>
+          </>
+        ) : (
+          <>
+            <User className="w-3 h-3 text-neutral-400" />
+            <span className="text-neutral-400">Atribuir</span>
+          </>
+        )}
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-neutral-200 rounded-lg shadow-lg py-1 w-44 max-h-48 overflow-y-auto">
+          <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-neutral-200 rounded-lg shadow-lg py-1 w-44 max-h-48 overflow-y-auto">
             <button
               onClick={() => handleSelect("")}
               className="w-full text-left px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-50 transition-colors"
@@ -131,13 +141,31 @@ export function TaskInlineDueDate({ taskId, dueDate, isOverdue, isDueToday }: Ta
     <button
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
       disabled={isPending}
-      className={`text-xs whitespace-nowrap transition-colors hover:underline disabled:opacity-40 ${
-        isOverdue ? "text-red-600 font-medium" :
-        isDueToday ? "text-amber-600 font-medium" :
-        "text-neutral-500 hover:text-neutral-800"
+      className={`flex items-center gap-1 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors text-xs disabled:opacity-40 ${
+        isOverdue ? "text-red-600" :
+        isDueToday ? "text-amber-600" :
+        "text-neutral-500"
       }`}
     >
-      {dueDate ? format(dueDate, "dd MMM", { locale: ptBR }) : <span className="text-neutral-300">+ data</span>}
+      <Clock className="w-3 h-3 text-neutral-400" />
+      {dueDate ? format(dueDate, "dd MMM", { locale: ptBR }) : <span className="text-neutral-300">—</span>}
     </button>
+  );
+}
+
+const PRIORITY_META: Record<string, { label: string; dot: string; text: string }> = {
+  low:    { label: "Baixa",   dot: "bg-neutral-300", text: "text-neutral-500" },
+  medium: { label: "Média",   dot: "bg-blue-400",    text: "text-blue-600" },
+  high:   { label: "Alta",    dot: "bg-orange-400",  text: "text-orange-600" },
+  urgent: { label: "Urgente", dot: "bg-red-500",     text: "text-red-600" },
+};
+
+export function TaskPriorityChip({ priority }: { priority: string }) {
+  const p = PRIORITY_META[priority] ?? PRIORITY_META.medium;
+  return (
+    <span className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs">
+      <span className={`w-2 h-2 rounded-full ${p.dot}`} />
+      <span className={p.text}>{p.label}</span>
+    </span>
   );
 }

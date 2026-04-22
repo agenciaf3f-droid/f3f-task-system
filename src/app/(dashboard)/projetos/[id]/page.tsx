@@ -2,53 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { format, isBefore, isToday } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { isBefore, isToday } from "date-fns";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
-import { TaskInlineAssignee, TaskInlineDueDate, TaskCheckbox } from "./task-inline-edit";
+import { TaskInlineAssignee, TaskInlineDueDate, TaskCheckbox, TaskPriorityChip } from "./task-inline-edit";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-}
-
-function PriorityChip({ priority }: { priority: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    urgent: { label: "Urgente", cls: "bg-red-50 text-red-700 border-red-100" },
-    high:   { label: "Alta",    cls: "bg-orange-50 text-orange-700 border-orange-100" },
-    medium: { label: "Média",   cls: "bg-blue-50 text-blue-600 border-blue-100" },
-    low:    { label: "Baixa",   cls: "bg-neutral-100 text-neutral-500 border-neutral-200" },
-  };
-  const p = map[priority];
-  if (!p) return null;
-  return (
-    <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${p.cls}`}>
-      {p.label}
-    </span>
-  );
-}
-
-function StatusChip({ status }: { status: string }) {
-  if (status === "todo") return <span className="text-xs text-neutral-300">A fazer</span>;
-  const map: Record<string, string> = {
-    done: "bg-emerald-50 text-emerald-700",
-    in_progress: "bg-blue-50 text-blue-700",
-    review: "bg-violet-50 text-violet-700",
-    blocked: "bg-orange-50 text-orange-700",
-  };
-  const label: Record<string, string> = {
-    done: "Concluído",
-    in_progress: "Em andamento",
-    review: "Em revisão",
-    blocked: "Bloqueado",
-  };
-  return (
-    <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${map[status] ?? "bg-neutral-100 text-neutral-600"}`}>
-      {label[status] ?? status}
-    </span>
-  );
 }
 
 type SortBy = "dueDate" | "assignee" | "default";
@@ -119,6 +81,16 @@ export default async function ProjetoDetailPage({
       return (meta as { templatePosition: number }).templatePosition;
     }
     return 9999;
+  }
+
+  // Ordena subtasks de cada parent pela templatePosition
+  for (const t of project.tasks) {
+    t.subtasks.sort((a, b) => {
+      const pa = getTemplatePos(a.metadata);
+      const pb = getTemplatePos(b.metadata);
+      if (pa !== pb) return pa - pb;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
   }
 
   const sortedTasks = [...project.tasks].sort((a, b) => {
@@ -220,13 +192,27 @@ export default async function ProjetoDetailPage({
         </div>
       </div>
 
-      {/* Tasks */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-neutral-700 uppercase tracking-wide">
-            Tarefas do projeto
-          </h2>
-          {activeTasks.length > 0 && (
+      {/* Tasks — espelho 1:1 do editor de template */}
+      {sortedTasks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl">
+          <FolderOpen className="w-10 h-10 mb-3 opacity-30" />
+          <p className="text-sm font-medium">Nenhuma tarefa neste projeto</p>
+          <p className="text-xs mt-1 mb-5 opacity-70">Adicione tarefas ou aplique um template para começar</p>
+          <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar tarefa
+          </LinkButton>
+        </div>
+      ) : (
+        <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+          {/* Header — mesmo layout do template editor */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+            <div>
+              <h2 className="text-sm font-semibold text-neutral-800">Tarefas do projeto</h2>
+              <p className="text-xs text-neutral-400 mt-0.5">
+                {activeTasks.length} tarefa{activeTasks.length !== 1 ? "s" : ""} · {doneTasks.length} concluída{doneTasks.length !== 1 ? "s" : ""} · clique para abrir
+              </p>
+            </div>
             <div className="flex items-center gap-1">
               <Link
                 href={sortLink("assignee")}
@@ -255,97 +241,82 @@ export default async function ProjetoDetailPage({
                 </Link>
               )}
             </div>
-          )}
-        </div>
-
-        {sortedTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
-            <FolderOpen className="w-10 h-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Nenhuma tarefa neste projeto</p>
-            <p className="text-xs mt-1 mb-5 opacity-70">Adicione tarefas ou aplique um template para começar</p>
-            <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Adicionar tarefa
-            </LinkButton>
           </div>
-        ) : (
-          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+
+          {/* Rows — divide-y como no template */}
+          <div className="divide-y divide-neutral-100">
             {sortedTasks.filter((t) => t.status !== "cancelled").map((task, idx) => {
               const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
               const isDueToday = task.dueDate && isToday(task.dueDate);
               const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
-              const doneSubtasks = activeSubtasks.filter((s) => s.status === "done");
+              const hasSub = activeSubtasks.length > 0;
 
               return (
-                <div key={task.id} className="divide-y divide-neutral-100 border-b border-neutral-100 last:border-b-0">
-                  {/* ── Tarefa principal ── */}
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 transition-colors">
-                    <span className="w-5 text-center text-xs font-mono text-neutral-300 shrink-0 select-none">
+                <div key={task.id} className="group">
+                  {/* Main row — mesmo padding/espaçamento do template */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
+                    {/* Index */}
+                    <div className="w-8 shrink-0 flex items-center justify-center text-xs text-neutral-300 font-medium">
                       {idx + 1}
+                    </div>
+
+                    {/* Chevron (decorativo, igual template) */}
+                    <span className="text-neutral-300 shrink-0">
+                      {hasSub ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                     </span>
+
+                    {/* Checkbox para marcar done */}
                     <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
-                    <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium leading-snug truncate ${
-                        task.status === "done" ? "line-through text-neutral-400" : "text-neutral-900"
+                    {/* Title (link para tarefa) — mesmo estilo do template */}
+                    <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0 px-1 py-1">
+                      <span className={`text-sm font-medium block truncate ${
+                        task.status === "done" ? "line-through text-neutral-400" : "text-neutral-800"
                       }`}>
-                        {task.title}
-                      </p>
-                      {task.sector && (
-                        <span className="flex items-center gap-1 text-xs text-neutral-400 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.sector.color ?? "#e5e7eb" }} />
-                          {task.sector.name}
-                        </span>
-                      )}
+                        {task.title || <span className="text-neutral-300">Sem título</span>}
+                      </span>
                     </Link>
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      {activeSubtasks.length > 0 && (
-                        <span className="hidden sm:flex items-center gap-1 text-[11px] text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-md font-medium">
-                          {doneSubtasks.length}/{activeSubtasks.length} sub
+                    {/* Chips — ordem idêntica ao template: data, prioridade, responsável, sub counter */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <TaskInlineDueDate taskId={task.id} dueDate={task.dueDate} isOverdue={!!isOverdue} isDueToday={!!isDueToday} />
+                      <TaskPriorityChip priority={task.priority} />
+                      <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
+                      {hasSub && (
+                        <span className="text-[10px] text-neutral-400 px-1.5">
+                          {activeSubtasks.length} sub
                         </span>
                       )}
-                      <PriorityChip priority={task.priority} />
-                      <div className="w-28 hidden sm:block">
-                        <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
-                      </div>
-                      <div className="w-16 hidden sm:block">
-                        <TaskInlineDueDate taskId={task.id} dueDate={task.dueDate} isOverdue={!!isOverdue} isDueToday={!!isDueToday} />
-                      </div>
-                      <div className="w-24">
-                        <StatusChip status={task.status} />
-                      </div>
                     </div>
                   </div>
 
-                  {/* ── Subtarefas ── */}
-                  {activeSubtasks.map((sub) => (
-                    <div key={sub.id} className="flex items-center gap-3 pl-12 pr-4 py-2.5 bg-neutral-50/50 hover:bg-neutral-50 transition-colors border-t border-neutral-100">
-                      <span className="w-2 h-2 rounded-full bg-neutral-200 shrink-0" />
-                      <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                      <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0">
-                        <p className={`text-sm truncate ${
-                          sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-600"
-                        }`}>
-                          {sub.title}
-                        </p>
-                      </Link>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="w-28 hidden sm:block">
-                          <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
+                  {/* Subtarefas — pl-[72px] idêntico ao template */}
+                  {hasSub && (
+                    <div className="pl-[72px] pr-5 pb-3 pt-1 flex flex-col gap-1">
+                      {activeSubtasks.map((sub) => (
+                        <div key={sub.id} className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                          <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
+                          <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0 px-1 py-1">
+                            <span className={`text-xs block truncate ${
+                              sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700"
+                            }`}>
+                              {sub.title}
+                            </span>
+                          </Link>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
+                          </div>
                         </div>
-                        <div className="w-24">
-                          <StatusChip status={sub.status} />
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Membros do projeto */}
       {members.length > 0 && (
