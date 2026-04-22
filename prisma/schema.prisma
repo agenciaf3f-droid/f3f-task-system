@@ -124,6 +124,7 @@ model User {
   activityLogs      ActivityLog[]
   permissions       Permission[]
   projects          Project[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([companyId])
   @@index([email])
@@ -444,6 +445,24 @@ model WebhookConfig {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("webhook_configs")
+}
+
+// ============================================================
+// PASSWORD RESET
+// ============================================================
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.VarChar(64)
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ============================================================
