@@ -1,0 +1,73 @@
+{
+  "app": {
+    "[project]/src/app/(auth)/login/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/configuracoes/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/dashboard/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/equipe/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/historico/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/minha-conta/senha/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/notificacoes/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/projetos/[id]/editar/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/projetos/[id]/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/projetos/novo/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/projetos/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/relatorios/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/setores/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/tarefas/[id]/editar/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/tarefas/[id]/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/tarefas/nova/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/tarefas/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/templates/[id]/editar/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/templates/novo/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/(dashboard)/templates/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/_not-found/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ],
+    "[project]/src/app/page": [
+      "static/media/1b99372b3eaef0c8-s.p.0gx2haw2tmll8.woff2"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}

@@ -1,0 +1,29 @@
+{
+  "node": {
+    "00801103a62566420882514f52dbcb3425e3412a88": {
+      "workers": {
+        "app/(dashboard)/notificacoes/page": {
+          "moduleId": 48922,
+          "async": false,
+          "exportedName": "markAllReadAction",
+          "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+        }
+      },
+      "exportedName": "markAllReadAction",
+      "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+    },
+    "40316d048f5cbfc0a4b68c97d36e89710121651b5b": {
+      "workers": {
+        "app/(dashboard)/notificacoes/page": {
+          "moduleId": 48922,
+          "async": false,
+          "exportedName": "markOneReadAction",
+          "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+        }
+      },
+      "exportedName": "markOneReadAction",
+      "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,414 @@
+{
+  "node": {
+    "6096c0aa7235ac7cba4b7a759ab1ad5e2cecd09dbe": {
+      "workers": {
+        "app/(auth)/login/page": {
+          "moduleId": 46215,
+          "async": false,
+          "exportedName": "loginAction",
+          "filename": "src/app/(auth)/login/actions.ts"
+        }
+      },
+      "filename": "src/app/(auth)/login/actions.ts",
+      "exportedName": "loginAction"
+    },
+    "605b05d099db77e38be79900b096792e049902bf80": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "updateProfileAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts",
+      "exportedName": "updateProfileAction"
+    },
+    "60982bfc5214ebef6d6fbce2448f4d1c36225602ee": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "changePasswordAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts",
+      "exportedName": "changePasswordAction"
+    },
+    "60d0e8e872de82e9b992b20562c3672e71a09abaf2": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "updateCompanyAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts",
+      "exportedName": "updateCompanyAction"
+    },
+    "60e563095652b89039520d4a42b8c18630835ede9d": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "saveWebhookAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts",
+      "exportedName": "saveWebhookAction"
+    },
+    "606634f7aeac04a19eb7c52686b89e17b9e93ff448": {
+      "workers": {
+        "app/(dashboard)/dashboard/page": {
+          "moduleId": 62537,
+          "async": false,
+          "exportedName": "updateTaskStatusAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        },
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "updateTaskStatusAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        },
+        "app/(dashboard)/tarefas/page": {
+          "moduleId": 55636,
+          "async": false,
+          "exportedName": "updateTaskStatusAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "updateTaskStatusAction"
+    },
+    "60319d4904ccd612bd71d28a6ffd207408d687fe7b": {
+      "workers": {
+        "app/(dashboard)/equipe/page": {
+          "moduleId": 60153,
+          "async": false,
+          "exportedName": "createUserAction",
+          "filename": "src/app/(dashboard)/equipe/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/equipe/actions.ts",
+      "exportedName": "createUserAction"
+    },
+    "407090c72cc569c3fdd19be9f27103a50c27a90806": {
+      "workers": {
+        "app/(dashboard)/equipe/page": {
+          "moduleId": 60153,
+          "async": false,
+          "exportedName": "toggleUserActiveAction",
+          "filename": "src/app/(dashboard)/equipe/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/equipe/actions.ts",
+      "exportedName": "toggleUserActiveAction"
+    },
+    "60e859d27078fc769cc59296e775341bf782bd0ca0": {
+      "workers": {
+        "app/(dashboard)/minha-conta/senha/page": {
+          "moduleId": 3789,
+          "async": false,
+          "exportedName": "forceChangePasswordAction",
+          "filename": "src/app/(dashboard)/minha-conta/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/minha-conta/actions.ts",
+      "exportedName": "forceChangePasswordAction"
+    },
+    "00801103a62566420882514f52dbcb3425e3412a88": {
+      "workers": {
+        "app/(dashboard)/notificacoes/page": {
+          "moduleId": 48922,
+          "async": false,
+          "exportedName": "markAllReadAction",
+          "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/notificacoes/actions.ts",
+      "exportedName": "markAllReadAction"
+    },
+    "40316d048f5cbfc0a4b68c97d36e89710121651b5b": {
+      "workers": {
+        "app/(dashboard)/notificacoes/page": {
+          "moduleId": 48922,
+          "async": false,
+          "exportedName": "markOneReadAction",
+          "filename": "src/app/(dashboard)/notificacoes/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/notificacoes/actions.ts",
+      "exportedName": "markOneReadAction"
+    },
+    "60ba951e71f72ef09a44bc7ae67f0f93c6f33600be": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateProjectStatusAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/projetos/actions.ts",
+      "exportedName": "updateProjectStatusAction"
+    },
+    "408a61b5d96e559b7465c40e804141363c940b28c2": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "deleteProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/projetos/actions.ts",
+      "exportedName": "deleteProjectAction"
+    },
+    "787e01eac3e241412c65fe90e95d1e654367ec1269": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "applyTemplateToProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/projetos/actions.ts",
+      "exportedName": "applyTemplateToProjectAction"
+    },
+    "60cc3fe4be493aabe449d6f7a4299995c8c72ef4f2": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateTaskAssigneeAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "updateTaskAssigneeAction"
+    },
+    "60df9005524d11b0ddcd6af14df708e204c2b6d229": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateTaskDueDateAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "updateTaskDueDateAction"
+    },
+    "70918fe9668976a9fa177f91f39222b5f7701949b7": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/editar/page": {
+          "moduleId": 90836,
+          "async": false,
+          "exportedName": "updateProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/projetos/actions.ts",
+      "exportedName": "updateProjectAction"
+    },
+    "60d9fd9efc5097a205cf470a379a24b9befb465831": {
+      "workers": {
+        "app/(dashboard)/projetos/novo/page": {
+          "moduleId": 23137,
+          "async": false,
+          "exportedName": "createProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/projetos/actions.ts",
+      "exportedName": "createProjectAction"
+    },
+    "60815fc4fe52baa7662055f4a19639ce6149783e5a": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "createSectorAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/setores/actions.ts",
+      "exportedName": "createSectorAction"
+    },
+    "60d3023f1faeebc809c160743e19a59c02f174cb04": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "addSectorMemberAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/setores/actions.ts",
+      "exportedName": "addSectorMemberAction"
+    },
+    "609bed61065f236e67b077dedede78ccda82013d6a": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "removeSectorMemberAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/setores/actions.ts",
+      "exportedName": "removeSectorMemberAction"
+    },
+    "40df93134304760e5fa4d053d85109be2010ebffc6": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "deleteTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "deleteTaskAction"
+    },
+    "6003990eea456224ad823b9264d70c75f38b87d6d0": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "addChecklistItemAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "addChecklistItemAction"
+    },
+    "70a63cca21c1f41b3ba4863776eff1ceb156266b73": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "toggleChecklistItemAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "toggleChecklistItemAction"
+    },
+    "604d5bc97f2c3417f633e71a4eaacc2409bbb4c57a": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "addCommentAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "addCommentAction"
+    },
+    "6087d97a21215c21356a3cbe3cf51b4820f6b3afa9": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "updateTaskProgressAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "updateTaskProgressAction"
+    },
+    "7060146501bccc2c50b89efd8b1a91debc90a7d971": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/editar/page": {
+          "moduleId": 7636,
+          "async": false,
+          "exportedName": "updateTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "updateTaskAction"
+    },
+    "606e05c473255eb5082d042a37ffb7343eca284531": {
+      "workers": {
+        "app/(dashboard)/tarefas/nova/page": {
+          "moduleId": 21070,
+          "async": false,
+          "exportedName": "createTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/tarefas/actions.ts",
+      "exportedName": "createTaskAction"
+    },
+    "708cd990ef7eda5d27a6d2d45dbb37b2d00bd6b379": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "activateTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/templates/actions.ts",
+      "exportedName": "activateTemplateAction"
+    },
+    "40b457426f43531d8da07db2a158f7e2a254111ddf": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "toggleTemplateActiveAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/templates/actions.ts",
+      "exportedName": "toggleTemplateActiveAction"
+    },
+    "4039d6f6e27a361f2e8e6bc599be9a1565d6af7f61": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "deleteTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/templates/actions.ts",
+      "exportedName": "deleteTemplateAction"
+    },
+    "708afbd69a857ead3a78f37e73f7d4d3e677d9e909": {
+      "workers": {
+        "app/(dashboard)/templates/[id]/editar/page": {
+          "moduleId": 21935,
+          "async": false,
+          "exportedName": "updateTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/templates/actions.ts",
+      "exportedName": "updateTemplateAction"
+    },
+    "60afc091c8cc9f9c6f90873d169b70ea4751ac8f84": {
+      "workers": {
+        "app/(dashboard)/templates/novo/page": {
+          "moduleId": 54544,
+          "async": false,
+          "exportedName": "createTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "filename": "src/app/(dashboard)/templates/actions.ts",
+      "exportedName": "createTemplateAction"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "PNjp8FcjJZjNnmCeXQijGRmQjYHiXwQFI9gIkbeMv+w="
+}

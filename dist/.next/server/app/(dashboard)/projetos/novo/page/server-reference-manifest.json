@@ -1,0 +1,17 @@
+{
+  "node": {
+    "60d9fd9efc5097a205cf470a379a24b9befb465831": {
+      "workers": {
+        "app/(dashboard)/projetos/novo/page": {
+          "moduleId": 23137,
+          "async": false,
+          "exportedName": "createProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "exportedName": "createProjectAction",
+      "filename": "src/app/(dashboard)/projetos/actions.ts"
+    }
+  },
+  "edge": {}
+}

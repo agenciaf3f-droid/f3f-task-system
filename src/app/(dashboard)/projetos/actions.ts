@@ -101,7 +101,7 @@ export async function createProjectAction(
       const start = new Date();
       for (const tt of template.templateTasks) {
         const dueDate = tt.daysToComplete
-          ? new Date(start.getTime() - tt.daysToComplete * 86400000)
+          ? new Date(start.getTime() + tt.daysToComplete * 86400000)
           : null;
         await prisma.task.create({
           data: {

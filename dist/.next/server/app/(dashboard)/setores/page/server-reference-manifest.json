@@ -1,0 +1,41 @@
+{
+  "node": {
+    "60815fc4fe52baa7662055f4a19639ce6149783e5a": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "createSectorAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "exportedName": "createSectorAction",
+      "filename": "src/app/(dashboard)/setores/actions.ts"
+    },
+    "60d3023f1faeebc809c160743e19a59c02f174cb04": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "addSectorMemberAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "exportedName": "addSectorMemberAction",
+      "filename": "src/app/(dashboard)/setores/actions.ts"
+    },
+    "609bed61065f236e67b077dedede78ccda82013d6a": {
+      "workers": {
+        "app/(dashboard)/setores/page": {
+          "moduleId": 98052,
+          "async": false,
+          "exportedName": "removeSectorMemberAction",
+          "filename": "src/app/(dashboard)/setores/actions.ts"
+        }
+      },
+      "exportedName": "removeSectorMemberAction",
+      "filename": "src/app/(dashboard)/setores/actions.ts"
+    }
+  },
+  "edge": {}
+}

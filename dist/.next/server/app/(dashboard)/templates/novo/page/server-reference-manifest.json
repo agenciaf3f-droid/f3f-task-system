@@ -1,0 +1,17 @@
+{
+  "node": {
+    "60afc091c8cc9f9c6f90873d169b70ea4751ac8f84": {
+      "workers": {
+        "app/(dashboard)/templates/novo/page": {
+          "moduleId": 54544,
+          "async": false,
+          "exportedName": "createTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "exportedName": "createTemplateAction",
+      "filename": "src/app/(dashboard)/templates/actions.ts"
+    }
+  },
+  "edge": {}
+}

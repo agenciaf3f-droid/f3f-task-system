@@ -1,0 +1,468 @@
+// F3F Task System — Database schema
+// https://www.prisma.io/docs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  admin
+  manager
+  supervisor
+  member
+}
+
+enum CompanyPlan {
+  free
+  pro
+  enterprise
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  review
+  blocked
+  done
+  cancelled
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum ProjectStatus {
+  active
+  completed
+  paused
+  archived
+  cancelled
+}
+
+enum NotificationType {
+  task_assigned
+  task_due
+  task_overdue
+  comment
+  mention
+  system
+}
+
+// ============================================================
+// CORE TENANT
+// ============================================================
+
+model Company {
+  id        String      @id @default(uuid()) @db.Uuid
+  name      String      @db.VarChar(255)
+  slug      String      @unique @db.VarChar(100)
+  logoUrl   String?     @map("logo_url")
+  plan      CompanyPlan @default(free)
+  settings  Json        @default("{}")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  deletedAt DateTime?   @map("deleted_at")
+
+  users         User[]
+  sectors       Sector[]
+  tasks         Task[]
+  templates     Template[]
+  notifications Notification[]
+  activityLogs  ActivityLog[]
+  permissions   Permission[]
+  clients       Client[]
+  projects      Project[]
+  webhookConfig WebhookConfig?
+
+  @@map("companies")
+}
+
+// ============================================================
+// USERS & AUTH
+// ============================================================
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  companyId    String    @map("company_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  role         UserRole  @default(member)
+  isActive           Boolean   @default(true) @map("is_active")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  lastLoginAt        DateTime? @map("last_login_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  managedSectors    Sector[]            @relation("SectorManager")
+  sectorMemberships SectorMember[]
+  assignedTasks     Task[]              @relation("TaskAssignee")
+  createdTasks      Task[]              @relation("TaskCreatedBy")
+  watchedTasks      TaskWatcher[]
+  checklistDone     TaskChecklistItem[] @relation("ChecklistDoneBy")
+  comments          TaskComment[]
+  attachments       TaskAttachment[]
+  templates                Template[]
+  templateTaskAssignments  TemplateTask[]      @relation("TemplateTaskAssignee")
+  notifications            Notification[]
+  activityLogs      ActivityLog[]
+  permissions       Permission[]
+  projects          Project[]
+
+  @@index([companyId])
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================================
+// SECTORS / DEPARTMENTS
+// ============================================================
+
+model Sector {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?
+  color       String?  @db.VarChar(7)
+  managerId   String?  @map("manager_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager   User?          @relation("SectorManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members   SectorMember[]
+  tasks     Task[]
+  templates Template[]
+
+  @@index([companyId])
+  @@map("sectors")
+}
+
+model SectorMember {
+  sectorId  String   @map("sector_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sector Sector @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([sectorId, userId])
+  @@map("sector_members")
+}
+
+// ============================================================
+// TASKS
+// ============================================================
+
+model Task {
+  id           String       @id @default(uuid()) @db.Uuid
+  companyId    String       @map("company_id") @db.Uuid
+  sectorId     String?      @map("sector_id") @db.Uuid
+  projectId    String?      @map("project_id") @db.Uuid
+  templateId   String?      @map("template_id") @db.Uuid
+  parentTaskId String?      @map("parent_task_id") @db.Uuid
+  title        String       @db.VarChar(500)
+  description  String?
+  status       TaskStatus   @default(todo)
+  priority     TaskPriority @default(medium)
+  progress     Int          @default(0)
+  assigneeId   String?      @map("assignee_id") @db.Uuid
+  createdById  String       @map("created_by") @db.Uuid
+  dueDate      DateTime?    @map("due_date")
+  completedAt  DateTime?    @map("completed_at")
+  tags         String[]     @default([])
+  metadata     Json         @default("{}")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  deletedAt    DateTime?    @map("deleted_at")
+
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sector         Sector?             @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  template       Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  parentTask     Task?               @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks       Task[]              @relation("TaskSubtasks")
+  assignee       User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy      User                @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  watchers       TaskWatcher[]
+  checklistItems TaskChecklistItem[]
+  comments       TaskComment[]
+  attachments    TaskAttachment[]
+
+  @@index([companyId])
+  @@index([assigneeId])
+  @@index([sectorId])
+  @@index([projectId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([templateId])
+  @@map("tasks")
+}
+
+model TaskWatcher {
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_watchers")
+}
+
+model TaskChecklistItem {
+  id       String    @id @default(uuid()) @db.Uuid
+  taskId   String    @map("task_id") @db.Uuid
+  title    String    @db.VarChar(500)
+  isDone   Boolean   @default(false) @map("is_done")
+  position Int       @default(0)
+  doneAt   DateTime? @map("done_at")
+  doneById String?   @map("done_by") @db.Uuid
+
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  doneBy User? @relation("ChecklistDoneBy", fields: [doneById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@map("task_checklist_items")
+}
+
+model TaskComment {
+  id        String    @id @default(uuid()) @db.Uuid
+  taskId    String    @map("task_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  content   String
+  isEdited  Boolean   @default(false) @map("is_edited")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  fileName  String   @map("file_name") @db.VarChar(255)
+  fileUrl   String   @map("file_url")
+  fileSize  Int      @map("file_size")
+  mimeType  String   @map("mime_type") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+// ============================================================
+// CLIENTS & PROJECTS
+// ============================================================
+
+model Client {
+  id        String    @id @default(uuid()) @db.Uuid
+  companyId String    @map("company_id") @db.Uuid
+  name      String    @db.VarChar(255)
+  color     String?   @db.VarChar(7)
+  email     String?   @db.VarChar(255)
+  phone     String?   @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@index([companyId])
+  @@map("clients")
+}
+
+model Project {
+  id          String        @id @default(uuid()) @db.Uuid
+  companyId   String        @map("company_id") @db.Uuid
+  clientId    String        @map("client_id") @db.Uuid
+  createdById String        @map("created_by") @db.Uuid
+  name        String        @db.VarChar(255)
+  description String?
+  status      ProjectStatus @default(active)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  tasks     Task[]
+
+  @@index([companyId])
+  @@index([clientId])
+  @@map("projects")
+}
+
+// ============================================================
+// TEMPLATES (core differentiator)
+// ============================================================
+
+model Template {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String   @map("company_id") @db.Uuid
+  sectorId    String?  @map("sector_id") @db.Uuid
+  createdById String   @map("created_by") @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?
+  category    String?  @db.VarChar(100)
+  isActive    Boolean  @default(true) @map("is_active")
+  useCount    Int      @default(0) @map("use_count")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sector        Sector?        @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  templateTasks TemplateTask[]
+  tasks         Task[]
+
+  @@index([companyId])
+  @@index([sectorId])
+  @@map("templates")
+}
+
+model TemplateTask {
+  id                  String       @id @default(uuid()) @db.Uuid
+  templateId          String       @map("template_id") @db.Uuid
+  title               String       @db.VarChar(500)
+  description         String?
+  priority            TaskPriority @default(medium)
+  position            Int          @default(0)
+  daysToComplete      Int?         @map("days_to_complete")
+  defaultAssigneeRole UserRole?    @map("default_assignee_role")
+  defaultAssigneeId   String?      @map("default_assignee_id") @db.Uuid
+
+  template         Template                @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  defaultAssignee  User?                   @relation("TemplateTaskAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  checklistItems   TemplateChecklistItem[]
+
+  @@index([templateId])
+  @@map("template_tasks")
+}
+
+model TemplateChecklistItem {
+  id             String @id @default(uuid()) @db.Uuid
+  templateTaskId String @map("template_task_id") @db.Uuid
+  title          String @db.VarChar(500)
+  position       Int    @default(0)
+
+  templateTask TemplateTask @relation(fields: [templateTaskId], references: [id], onDelete: Cascade)
+
+  @@index([templateTaskId])
+  @@map("template_checklist_items")
+}
+
+// ============================================================
+// NOTIFICATIONS & AUDIT
+// ============================================================
+
+model Notification {
+  id           String           @id @default(uuid()) @db.Uuid
+  companyId    String           @map("company_id") @db.Uuid
+  userId       String           @map("user_id") @db.Uuid
+  type         NotificationType
+  title        String           @db.VarChar(255)
+  body         String?
+  isRead       Boolean          @default(false) @map("is_read")
+  resourceType String?          @map("resource_type") @db.VarChar(50)
+  resourceId   String?          @map("resource_id") @db.Uuid
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([companyId])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  companyId    String   @map("company_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  resourceType String   @map("resource_type") @db.VarChar(50)
+  resourceId   String?  @map("resource_id") @db.Uuid
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  ipAddress    String?  @map("ip_address") @db.VarChar(45)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([resourceType, resourceId])
+  @@index([companyId, createdAt])
+  @@index([userId])
+  @@map("activity_logs")
+}
+
+// ============================================================
+// WEBHOOK CONFIG
+// ============================================================
+
+model WebhookConfig {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @unique @map("company_id") @db.Uuid
+  url       String
+  secret    String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_configs")
+}
+
+// ============================================================
+// PERMISSIONS (fine-grained overrides)
+// ============================================================
+
+model Permission {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  resource  String   @db.VarChar(100)
+  action    String   @db.VarChar(50)
+  isAllowed Boolean  @map("is_allowed")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, resource, action])
+  @@index([companyId])
+  @@map("permissions")
+}

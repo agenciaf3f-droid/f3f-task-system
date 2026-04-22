@@ -1,0 +1,41 @@
+{
+  "node": {
+    "708cd990ef7eda5d27a6d2d45dbb37b2d00bd6b379": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "activateTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "exportedName": "activateTemplateAction",
+      "filename": "src/app/(dashboard)/templates/actions.ts"
+    },
+    "40b457426f43531d8da07db2a158f7e2a254111ddf": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "toggleTemplateActiveAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "exportedName": "toggleTemplateActiveAction",
+      "filename": "src/app/(dashboard)/templates/actions.ts"
+    },
+    "4039d6f6e27a361f2e8e6bc599be9a1565d6af7f61": {
+      "workers": {
+        "app/(dashboard)/templates/page": {
+          "moduleId": 85825,
+          "async": false,
+          "exportedName": "deleteTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "exportedName": "deleteTemplateAction",
+      "filename": "src/app/(dashboard)/templates/actions.ts"
+    }
+  },
+  "edge": {}
+}

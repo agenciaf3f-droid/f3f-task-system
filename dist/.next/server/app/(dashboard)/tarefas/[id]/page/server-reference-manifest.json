@@ -1,0 +1,77 @@
+{
+  "node": {
+    "606634f7aeac04a19eb7c52686b89e17b9e93ff448": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "updateTaskStatusAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskStatusAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "40df93134304760e5fa4d053d85109be2010ebffc6": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "deleteTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "deleteTaskAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "6003990eea456224ad823b9264d70c75f38b87d6d0": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "addChecklistItemAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "addChecklistItemAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "70a63cca21c1f41b3ba4863776eff1ceb156266b73": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "toggleChecklistItemAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "toggleChecklistItemAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "604d5bc97f2c3417f633e71a4eaacc2409bbb4c57a": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "addCommentAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "addCommentAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "6087d97a21215c21356a3cbe3cf51b4820f6b3afa9": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/page": {
+          "moduleId": 11412,
+          "async": false,
+          "exportedName": "updateTaskProgressAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskProgressAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    }
+  },
+  "edge": {}
+}

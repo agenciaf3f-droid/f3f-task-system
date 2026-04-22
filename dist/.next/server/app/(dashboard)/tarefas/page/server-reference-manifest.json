@@ -1,0 +1,17 @@
+{
+  "node": {
+    "606634f7aeac04a19eb7c52686b89e17b9e93ff448": {
+      "workers": {
+        "app/(dashboard)/tarefas/page": {
+          "moduleId": 55636,
+          "async": false,
+          "exportedName": "updateTaskStatusAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskStatusAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    }
+  },
+  "edge": {}
+}

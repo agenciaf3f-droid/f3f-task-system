@@ -1,0 +1,17 @@
+{
+  "node": {
+    "708afbd69a857ead3a78f37e73f7d4d3e677d9e909": {
+      "workers": {
+        "app/(dashboard)/templates/[id]/editar/page": {
+          "moduleId": 21935,
+          "async": false,
+          "exportedName": "updateTemplateAction",
+          "filename": "src/app/(dashboard)/templates/actions.ts"
+        }
+      },
+      "exportedName": "updateTemplateAction",
+      "filename": "src/app/(dashboard)/templates/actions.ts"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,3 @@
+module.exports=[26517,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function(){return(0,b.jsxs)("div",{className:"flex flex-col gap-6 animate-pulse max-w-2xl",children:[(0,b.jsx)("div",{className:"h-8 w-44 bg-neutral-200 rounded-lg"}),Array.from({length:3}).map((a,c)=>(0,b.jsxs)("div",{className:"bg-white border border-neutral-200 rounded-2xl p-6 flex flex-col gap-4",children:[(0,b.jsx)("div",{className:"h-4 w-40 bg-neutral-200 rounded"}),(0,b.jsx)("div",{className:"h-9 bg-neutral-100 rounded-lg"}),(0,b.jsx)("div",{className:"h-9 bg-neutral-100 rounded-lg"}),(0,b.jsx)("div",{className:"h-9 w-28 bg-neutral-200 rounded-lg"})]},c))]})}])},7775,a=>{a.n(a.i(26517))}];
+
+//# sourceMappingURL=src_app_%28dashboard%29_configuracoes_loading_tsx_0cdanf5._.js.map

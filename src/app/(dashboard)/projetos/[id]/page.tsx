@@ -4,15 +4,35 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { StatusBadge } from "@/components/tasks/task-badges";
 import { format, isBefore, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
-import { TaskInlineAssignee, TaskInlineDueDate } from "./task-inline-edit";
+import { TaskInlineAssignee, TaskInlineDueDate, TaskCheckbox } from "./task-inline-edit";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+}
+
+function StatusChip({ status }: { status: string }) {
+  if (status === "todo") return <span className="text-xs text-neutral-300">A fazer</span>;
+  const map: Record<string, string> = {
+    done: "bg-emerald-50 text-emerald-700",
+    in_progress: "bg-blue-50 text-blue-700",
+    review: "bg-violet-50 text-violet-700",
+    blocked: "bg-orange-50 text-orange-700",
+  };
+  const label: Record<string, string> = {
+    done: "Concluído",
+    in_progress: "Em andamento",
+    review: "Em revisão",
+    blocked: "Bloqueado",
+  };
+  return (
+    <span className={`text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${map[status] ?? "bg-neutral-100 text-neutral-600"}`}>
+      {label[status] ?? status}
+    </span>
+  );
 }
 
 type SortBy = "dueDate" | "assignee" | "default";
@@ -44,12 +64,19 @@ export default async function ProjetoDetailPage({
         client: { select: { id: true, name: true, color: true } },
         createdBy: { select: { name: true } },
         tasks: {
-          where: { deletedAt: null },
+          where: { deletedAt: null, parentTaskId: null },
           orderBy,
           include: {
             assignee: { select: { id: true, name: true } },
             sector: { select: { name: true, color: true } },
             _count: { select: { checklistItems: true, comments: true } },
+            subtasks: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: "asc" as const },
+              include: {
+                assignee: { select: { id: true, name: true } },
+              },
+            },
           },
         },
       },
@@ -68,7 +95,9 @@ export default async function ProjetoDetailPage({
 
   if (!project) notFound();
 
-  const activeTasks = project.tasks.filter((t) => t.status !== "cancelled");
+  // Flatten all tasks + subtasks for progress calculation
+  const allTasks = project.tasks.flatMap((t) => [t, ...t.subtasks]);
+  const activeTasks = allTasks.filter((t) => t.status !== "cancelled");
   const doneTasks = activeTasks.filter((t) => t.status === "done");
   const progress = activeTasks.length > 0
     ? Math.round((doneTasks.length / activeTasks.length) * 100)
@@ -200,89 +229,85 @@ export default async function ProjetoDetailPage({
             </LinkButton>
           </div>
         ) : (
-          <div className="bg-white border border-neutral-100 rounded-xl overflow-hidden divide-y divide-neutral-100">
-            {/* Column header */}
-            <div className="flex items-center gap-4 px-4 py-2 bg-neutral-50 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
-              <div className="w-6 shrink-0" />
-              <div className="flex-1">Tarefa</div>
-              <div className="flex items-center gap-6 shrink-0 pr-1">
-                <span className="w-28 text-left hidden sm:block">Responsável</span>
-                <span className="w-16 text-left hidden sm:block">Data</span>
-                <span className="w-24 text-left">Status</span>
-              </div>
-            </div>
-
+          <div className="flex flex-col gap-2">
             {project.tasks.filter((t) => t.status !== "cancelled").map((task) => {
               const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
               const isDueToday = task.dueDate && isToday(task.dueDate);
+              const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
+              const doneSubtasks = activeSubtasks.filter((s) => s.status === "done");
 
               return (
-                <div key={task.id} className="flex items-center gap-4 px-4 py-3 hover:bg-neutral-50/50 transition-colors duration-150 group">
-                  {/* Checkbox */}
-                  <div className="w-6 h-6 rounded-md border border-neutral-200 flex items-center justify-center shrink-0 group-hover:border-neutral-300 transition-colors">
-                    {task.status === "done" && (
-                      <svg className="w-4 h-4 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    )}
-                  </div>
+                <div key={task.id} className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+                  {/* ── Tarefa principal ── */}
+                  <div className="flex items-center gap-3 px-4 py-3 group hover:bg-neutral-50/60 transition-colors">
+                    <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
-                  {/* Title — clickable */}
-                  <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0">
-                    <p className={`text-sm leading-normal truncate transition-colors ${
-                      task.status === "done" ? "line-through text-neutral-400" : "text-neutral-900 group-hover:text-neutral-950"
-                    }`}>
-                      {task.title}
-                    </p>
-                    {task.sector && (
-                      <span className="flex items-center gap-1 text-xs text-neutral-400 mt-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.sector.color ?? "#e5e7eb" }} />
-                        {task.sector.name}
-                      </span>
-                    )}
-                  </Link>
-
-                  {/* Meta — inline editable */}
-                  <div className="flex items-center gap-6 shrink-0">
-                    {/* Responsável */}
-                    <div className="w-28 hidden sm:block">
-                      <TaskInlineAssignee
-                        taskId={task.id}
-                        assignee={task.assignee}
-                        users={users}
-                      />
-                    </div>
-
-                    {/* Data */}
-                    <div className="w-16 hidden sm:block">
-                      <TaskInlineDueDate
-                        taskId={task.id}
-                        dueDate={task.dueDate}
-                        isOverdue={!!isOverdue}
-                        isDueToday={!!isDueToday}
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div className="w-24">
-                      {task.status !== "todo" ? (
-                        <span className={`text-xs font-medium px-2 py-1 rounded-md whitespace-nowrap ${
-                          task.status === "done" ? "bg-emerald-50 text-emerald-700" :
-                          task.status === "in_progress" ? "bg-blue-50 text-blue-700" :
-                          task.status === "review" ? "bg-blue-50 text-blue-700" :
-                          task.status === "blocked" ? "bg-orange-50 text-orange-700" :
-                          "bg-neutral-100 text-neutral-700"
-                        }`}>
-                          {task.status === "done" && "Concluído"}
-                          {task.status === "in_progress" && "Em andamento"}
-                          {task.status === "review" && "Em revisão"}
-                          {task.status === "blocked" && "Bloqueado"}
+                    <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium leading-snug truncate ${
+                        task.status === "done" ? "line-through text-neutral-400" : "text-neutral-900"
+                      }`}>
+                        {task.title}
+                      </p>
+                      {task.sector && (
+                        <span className="flex items-center gap-1 text-xs text-neutral-400 mt-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: task.sector.color ?? "#e5e7eb" }} />
+                          {task.sector.name}
                         </span>
-                      ) : (
-                        <span className="text-xs text-neutral-300">A fazer</span>
                       )}
+                    </Link>
+
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="w-28 hidden sm:block">
+                        <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
+                      </div>
+                      <div className="w-16 hidden sm:block">
+                        <TaskInlineDueDate taskId={task.id} dueDate={task.dueDate} isOverdue={!!isOverdue} isDueToday={!!isDueToday} />
+                      </div>
+                      <div className="w-24">
+                        <StatusChip status={task.status} />
+                      </div>
                     </div>
                   </div>
+
+                  {/* ── Subtarefas ── */}
+                  {activeSubtasks.length > 0 && (
+                    <div className="border-t border-neutral-100 divide-y divide-neutral-100">
+                      {/* Mini progresso */}
+                      {activeSubtasks.length > 1 && (
+                        <div className="px-4 py-1.5 flex items-center gap-2 bg-neutral-50">
+                          <div className="flex-1 h-1 bg-neutral-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-400 rounded-full transition-all"
+                              style={{ width: `${Math.round((doneSubtasks.length / activeSubtasks.length) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] text-neutral-400 shrink-0">
+                            {doneSubtasks.length}/{activeSubtasks.length} sub-tarefas
+                          </span>
+                        </div>
+                      )}
+                      {activeSubtasks.map((sub) => (
+                        <div key={sub.id} className="flex items-center gap-3 pl-10 pr-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
+                          <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
+                          <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0">
+                            <p className={`text-sm truncate ${
+                              sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700"
+                            }`}>
+                              {sub.title}
+                            </p>
+                          </Link>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="w-28 hidden sm:block">
+                              <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
+                            </div>
+                            <div className="w-24">
+                              <StatusChip status={sub.status} />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -1,0 +1,65 @@
+{
+  "node": {
+    "60ba951e71f72ef09a44bc7ae67f0f93c6f33600be": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateProjectStatusAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "exportedName": "updateProjectStatusAction",
+      "filename": "src/app/(dashboard)/projetos/actions.ts"
+    },
+    "408a61b5d96e559b7465c40e804141363c940b28c2": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "deleteProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "exportedName": "deleteProjectAction",
+      "filename": "src/app/(dashboard)/projetos/actions.ts"
+    },
+    "787e01eac3e241412c65fe90e95d1e654367ec1269": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "applyTemplateToProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "exportedName": "applyTemplateToProjectAction",
+      "filename": "src/app/(dashboard)/projetos/actions.ts"
+    },
+    "60cc3fe4be493aabe449d6f7a4299995c8c72ef4f2": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateTaskAssigneeAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskAssigneeAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    },
+    "60df9005524d11b0ddcd6af14df708e204c2b6d229": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/page": {
+          "moduleId": 12188,
+          "async": false,
+          "exportedName": "updateTaskDueDateAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskDueDateAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,17 @@
+{
+  "node": {
+    "70918fe9668976a9fa177f91f39222b5f7701949b7": {
+      "workers": {
+        "app/(dashboard)/projetos/[id]/editar/page": {
+          "moduleId": 90836,
+          "async": false,
+          "exportedName": "updateProjectAction",
+          "filename": "src/app/(dashboard)/projetos/actions.ts"
+        }
+      },
+      "exportedName": "updateProjectAction",
+      "filename": "src/app/(dashboard)/projetos/actions.ts"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,17 @@
+{
+  "node": {
+    "7060146501bccc2c50b89efd8b1a91debc90a7d971": {
+      "workers": {
+        "app/(dashboard)/tarefas/[id]/editar/page": {
+          "moduleId": 7636,
+          "async": false,
+          "exportedName": "updateTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "updateTaskAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    }
+  },
+  "edge": {}
+}

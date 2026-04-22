@@ -1,0 +1,29 @@
+{
+  "node": {
+    "60319d4904ccd612bd71d28a6ffd207408d687fe7b": {
+      "workers": {
+        "app/(dashboard)/equipe/page": {
+          "moduleId": 60153,
+          "async": false,
+          "exportedName": "createUserAction",
+          "filename": "src/app/(dashboard)/equipe/actions.ts"
+        }
+      },
+      "exportedName": "createUserAction",
+      "filename": "src/app/(dashboard)/equipe/actions.ts"
+    },
+    "407090c72cc569c3fdd19be9f27103a50c27a90806": {
+      "workers": {
+        "app/(dashboard)/equipe/page": {
+          "moduleId": 60153,
+          "async": false,
+          "exportedName": "toggleUserActiveAction",
+          "filename": "src/app/(dashboard)/equipe/actions.ts"
+        }
+      },
+      "exportedName": "toggleUserActiveAction",
+      "filename": "src/app/(dashboard)/equipe/actions.ts"
+    }
+  },
+  "edge": {}
+}

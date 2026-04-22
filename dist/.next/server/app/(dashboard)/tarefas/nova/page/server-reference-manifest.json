@@ -1,0 +1,17 @@
+{
+  "node": {
+    "606e05c473255eb5082d042a37ffb7343eca284531": {
+      "workers": {
+        "app/(dashboard)/tarefas/nova/page": {
+          "moduleId": 21070,
+          "async": false,
+          "exportedName": "createTaskAction",
+          "filename": "src/app/(dashboard)/tarefas/actions.ts"
+        }
+      },
+      "exportedName": "createTaskAction",
+      "filename": "src/app/(dashboard)/tarefas/actions.ts"
+    }
+  },
+  "edge": {}
+}

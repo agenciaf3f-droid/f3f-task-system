@@ -1,0 +1,3 @@
+module.exports=[82087,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function(){return(0,b.jsxs)("div",{className:"flex flex-col gap-6 animate-pulse max-w-lg",children:[(0,b.jsx)("div",{className:"h-8 w-40 bg-neutral-200 rounded-lg"}),(0,b.jsxs)("div",{className:"bg-white border border-neutral-200 rounded-2xl p-6 flex flex-col gap-4",children:[(0,b.jsx)("div",{className:"h-4 w-36 bg-neutral-200 rounded"}),(0,b.jsx)("div",{className:"h-9 bg-neutral-100 rounded-lg"}),(0,b.jsx)("div",{className:"h-9 bg-neutral-100 rounded-lg"}),(0,b.jsx)("div",{className:"h-9 w-28 bg-neutral-200 rounded-lg"})]})]})}])},86681,a=>{a.n(a.i(82087))}];
+
+//# sourceMappingURL=src_app_%28dashboard%29_minha-conta_loading_tsx_0ju0wo8._.js.map

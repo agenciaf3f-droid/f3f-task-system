@@ -1,0 +1,17 @@
+{
+  "node": {
+    "60e859d27078fc769cc59296e775341bf782bd0ca0": {
+      "workers": {
+        "app/(dashboard)/minha-conta/senha/page": {
+          "moduleId": 3789,
+          "async": false,
+          "exportedName": "forceChangePasswordAction",
+          "filename": "src/app/(dashboard)/minha-conta/actions.ts"
+        }
+      },
+      "exportedName": "forceChangePasswordAction",
+      "filename": "src/app/(dashboard)/minha-conta/actions.ts"
+    }
+  },
+  "edge": {}
+}

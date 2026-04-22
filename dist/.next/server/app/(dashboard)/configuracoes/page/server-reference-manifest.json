@@ -1,0 +1,53 @@
+{
+  "node": {
+    "605b05d099db77e38be79900b096792e049902bf80": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "updateProfileAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "exportedName": "updateProfileAction",
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+    },
+    "60982bfc5214ebef6d6fbce2448f4d1c36225602ee": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "changePasswordAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "exportedName": "changePasswordAction",
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+    },
+    "60d0e8e872de82e9b992b20562c3672e71a09abaf2": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "updateCompanyAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "exportedName": "updateCompanyAction",
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+    },
+    "60e563095652b89039520d4a42b8c18630835ede9d": {
+      "workers": {
+        "app/(dashboard)/configuracoes/page": {
+          "moduleId": 95485,
+          "async": false,
+          "exportedName": "saveWebhookAction",
+          "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+        }
+      },
+      "exportedName": "saveWebhookAction",
+      "filename": "src/app/(dashboard)/configuracoes/actions.ts"
+    }
+  },
+  "edge": {}
+}
