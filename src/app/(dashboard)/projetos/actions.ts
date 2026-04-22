@@ -95,7 +95,12 @@ export async function createProjectAction(
   if (templateId && templateId !== "__none__") {
     const template = await prisma.template.findFirst({
       where: { id: templateId, companyId: user.companyId, isActive: true },
-      include: { templateTasks: { orderBy: { position: "asc" } } },
+      include: {
+        templateTasks: {
+          orderBy: { position: "asc" },
+          include: { checklistItems: { orderBy: { position: "asc" } } },
+        },
+      },
     });
     if (template) {
       const start = new Date();
@@ -103,7 +108,7 @@ export async function createProjectAction(
         const dueDate = tt.daysToComplete
           ? new Date(start.getTime() + tt.daysToComplete * 86400000)
           : null;
-        await prisma.task.create({
+        const parentTask = await prisma.task.create({
           data: {
             companyId: user.companyId,
             projectId: project.id,
@@ -116,6 +121,19 @@ export async function createProjectAction(
             dueDate,
           },
         });
+        for (const ci of tt.checklistItems) {
+          if (!ci.title?.trim()) continue;
+          await prisma.task.create({
+            data: {
+              companyId: user.companyId,
+              projectId: project.id,
+              parentTaskId: parentTask.id,
+              title: ci.title.trim(),
+              priority: tt.priority,
+              createdById: user.userId,
+            },
+          });
+        }
       }
       await prisma.template.update({
         where: { id: templateId },
@@ -206,7 +224,12 @@ export async function applyTemplateToProjectAction(
     }),
     prisma.template.findFirst({
       where: { id: templateId, companyId: user.companyId, isActive: true },
-      include: { templateTasks: { orderBy: { position: "asc" } } },
+      include: {
+        templateTasks: {
+          orderBy: { position: "asc" },
+          include: { checklistItems: { orderBy: { position: "asc" } } },
+        },
+      },
     }),
   ]);
 
@@ -221,7 +244,7 @@ export async function applyTemplateToProjectAction(
       ? new Date(start.getTime() + tt.daysToComplete * 86400000)
       : null;
 
-    await prisma.task.create({
+    const parentTask = await prisma.task.create({
       data: {
         companyId: user.companyId,
         projectId,
@@ -235,6 +258,21 @@ export async function applyTemplateToProjectAction(
         dueDate,
       },
     });
+
+    for (const ci of tt.checklistItems) {
+      if (!ci.title?.trim()) continue;
+      await prisma.task.create({
+        data: {
+          companyId: user.companyId,
+          projectId,
+          parentTaskId: parentTask.id,
+          title: ci.title.trim(),
+          priority: tt.priority,
+          assigneeId: resolvedAssignee,
+          createdById: user.userId,
+        },
+      });
+    }
   }
 
   await prisma.template.update({
