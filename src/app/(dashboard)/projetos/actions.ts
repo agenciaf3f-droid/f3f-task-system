@@ -104,7 +104,8 @@ export async function createProjectAction(
     });
     if (template) {
       const start = new Date();
-      for (const tt of template.templateTasks) {
+      for (let tIdx = 0; tIdx < template.templateTasks.length; tIdx++) {
+        const tt = template.templateTasks[tIdx];
         const dueDate = tt.daysToComplete
           ? new Date(start.getTime() + tt.daysToComplete * 86400000)
           : null;
@@ -119,9 +120,11 @@ export async function createProjectAction(
             priority: tt.priority,
             createdById: user.userId,
             dueDate,
+            metadata: { templatePosition: tIdx },
           },
         });
-        for (const ci of tt.checklistItems) {
+        for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
+          const ci = tt.checklistItems[cIdx];
           if (!ci.title?.trim()) continue;
           await prisma.task.create({
             data: {
@@ -131,6 +134,7 @@ export async function createProjectAction(
               title: ci.title.trim(),
               priority: tt.priority,
               createdById: user.userId,
+              metadata: { templatePosition: cIdx },
             },
           });
         }
@@ -239,7 +243,8 @@ export async function applyTemplateToProjectAction(
   const start = startDate ? new Date(startDate) : new Date();
   const resolvedAssignee = assigneeId || null;
 
-  for (const tt of template.templateTasks) {
+  for (let tIdx = 0; tIdx < template.templateTasks.length; tIdx++) {
+    const tt = template.templateTasks[tIdx];
     const dueDate = tt.daysToComplete
       ? new Date(start.getTime() + tt.daysToComplete * 86400000)
       : null;
@@ -256,10 +261,12 @@ export async function applyTemplateToProjectAction(
         assigneeId: resolvedAssignee,
         createdById: user.userId,
         dueDate,
+        metadata: { templatePosition: tIdx },
       },
     });
 
-    for (const ci of tt.checklistItems) {
+    for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
+      const ci = tt.checklistItems[cIdx];
       if (!ci.title?.trim()) continue;
       await prisma.task.create({
         data: {
@@ -270,6 +277,7 @@ export async function applyTemplateToProjectAction(
           priority: tt.priority,
           assigneeId: resolvedAssignee,
           createdById: user.userId,
+          metadata: { templatePosition: cIdx },
         },
       });
     }

@@ -52,26 +52,18 @@ function StatusChip({ status }: { status: string }) {
 }
 
 type SortBy = "dueDate" | "assignee" | "default";
-type SortDir = "asc" | "desc";
 
 export default async function ProjetoDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sortBy?: string; sortDir?: string }>;
+  searchParams: Promise<{ sortBy?: string }>;
 }) {
   const user = await requireAuth();
   const { id } = await params;
   const sp = await searchParams;
   const sortBy = (sp.sortBy as SortBy) ?? "default";
-  const sortDir = (sp.sortDir as SortDir) ?? "asc";
-
-  const orderBy = (() => {
-    if (sortBy === "dueDate") return [{ dueDate: sortDir as "asc" | "desc" }];
-    if (sortBy === "assignee") return [{ assignee: { name: sortDir as "asc" | "desc" } }];
-    return [{ createdAt: "asc" as const }];
-  })();
 
   const [project, templates, users] = await Promise.all([
     prisma.project.findFirst({
@@ -81,7 +73,7 @@ export default async function ProjetoDetailPage({
         createdBy: { select: { name: true } },
         tasks: {
           where: { deletedAt: null, parentTaskId: null },
-          orderBy,
+          orderBy: { createdAt: "asc" },
           include: {
             assignee: { select: { id: true, name: true } },
             sector: { select: { name: true, color: true } },
@@ -121,6 +113,31 @@ export default async function ProjetoDetailPage({
   const isCompleted = activeTasks.length > 0 && doneTasks.length === activeTasks.length;
   const canManage = user.role === "admin" || user.role === "manager";
 
+  // Sort tasks in JS to respect templatePosition stored in metadata
+  function getTemplatePos(meta: unknown): number {
+    if (meta && typeof meta === "object" && "templatePosition" in meta) {
+      return (meta as { templatePosition: number }).templatePosition;
+    }
+    return 9999;
+  }
+
+  const sortedTasks = [...project.tasks].sort((a, b) => {
+    if (sortBy === "dueDate") {
+      const da = a.dueDate ? a.dueDate.getTime() : Infinity;
+      const db = b.dueDate ? b.dueDate.getTime() : Infinity;
+      if (da !== db) return da - db;
+    }
+    if (sortBy === "assignee") {
+      const na = a.assignee?.name ?? "zzz";
+      const nb = b.assignee?.name ?? "zzz";
+      if (na !== nb) return na.localeCompare(nb);
+    }
+    const pa = getTemplatePos(a.metadata);
+    const pb = getTemplatePos(b.metadata);
+    if (pa !== pb) return pa - pb;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  });
+
   // Membros com tarefas no projeto
   const memberMap = new Map<string, { name: string; total: number; done: number }>();
   for (const task of activeTasks) {
@@ -135,8 +152,7 @@ export default async function ProjetoDetailPage({
     .sort((a, b) => b.progress - a.progress);
 
   function sortLink(by: SortBy) {
-    const newDir = sortBy === by && sortDir === "asc" ? "desc" : "asc";
-    return `/projetos/${id}?sortBy=${by}&sortDir=${newDir}`;
+    return `/projetos/${id}?sortBy=${sortBy === by ? "default" : by}`;
   }
 
   return (
@@ -230,11 +246,19 @@ export default async function ProjetoDetailPage({
                 <ArrowUpDown className="w-3 h-3" />
                 Data
               </Link>
+              {sortBy !== "default" && (
+                <Link
+                  href={`/projetos/${id}`}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-400 hover:border-neutral-400 transition-colors"
+                >
+                  Padrão
+                </Link>
+              )}
             </div>
           )}
         </div>
 
-        {project.tasks.length === 0 ? (
+        {sortedTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-neutral-400 border border-dashed border-neutral-200 rounded-xl">
             <FolderOpen className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm font-medium">Nenhuma tarefa neste projeto</p>
@@ -246,7 +270,7 @@ export default async function ProjetoDetailPage({
           </div>
         ) : (
           <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-            {project.tasks.filter((t) => t.status !== "cancelled").map((task, idx) => {
+            {sortedTasks.filter((t) => t.status !== "cancelled").map((task, idx) => {
               const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
               const isDueToday = task.dueDate && isToday(task.dueDate);
               const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
