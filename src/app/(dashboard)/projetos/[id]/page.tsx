@@ -54,7 +54,7 @@ export default async function ProjetoDetailPage({
   const orderBy = (() => {
     if (sortBy === "dueDate") return [{ dueDate: sortDir as "asc" | "desc" }];
     if (sortBy === "assignee") return [{ assignee: { name: sortDir as "asc" | "desc" } }];
-    return [{ status: "asc" as const }, { priority: "desc" as const }, { dueDate: "asc" as const }];
+    return [{ createdAt: "asc" as const }];
   })();
 
   const [project, templates, users] = await Promise.all([
