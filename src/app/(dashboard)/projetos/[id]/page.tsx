@@ -14,6 +14,22 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+function PriorityChip({ priority }: { priority: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    urgent: { label: "Urgente", cls: "bg-red-50 text-red-700 border-red-100" },
+    high:   { label: "Alta",    cls: "bg-orange-50 text-orange-700 border-orange-100" },
+    medium: { label: "Média",   cls: "bg-blue-50 text-blue-600 border-blue-100" },
+    low:    { label: "Baixa",   cls: "bg-neutral-100 text-neutral-500 border-neutral-200" },
+  };
+  const p = map[priority];
+  if (!p) return null;
+  return (
+    <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${p.cls}`}>
+      {p.label}
+    </span>
+  );
+}
+
 function StatusChip({ status }: { status: string }) {
   if (status === "todo") return <span className="text-xs text-neutral-300">A fazer</span>;
   const map: Record<string, string> = {
@@ -229,17 +245,20 @@ export default async function ProjetoDetailPage({
             </LinkButton>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {project.tasks.filter((t) => t.status !== "cancelled").map((task) => {
+          <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+            {project.tasks.filter((t) => t.status !== "cancelled").map((task, idx) => {
               const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
               const isDueToday = task.dueDate && isToday(task.dueDate);
               const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
               const doneSubtasks = activeSubtasks.filter((s) => s.status === "done");
 
               return (
-                <div key={task.id} className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+                <div key={task.id} className="divide-y divide-neutral-100 border-b border-neutral-100 last:border-b-0">
                   {/* ── Tarefa principal ── */}
-                  <div className="flex items-center gap-3 px-4 py-3 group hover:bg-neutral-50/60 transition-colors">
+                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50/60 transition-colors">
+                    <span className="w-5 text-center text-xs font-mono text-neutral-300 shrink-0 select-none">
+                      {idx + 1}
+                    </span>
                     <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
                     <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0">
@@ -256,7 +275,13 @@ export default async function ProjetoDetailPage({
                       )}
                     </Link>
 
-                    <div className="flex items-center gap-4 shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
+                      {activeSubtasks.length > 0 && (
+                        <span className="hidden sm:flex items-center gap-1 text-[11px] text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-md font-medium">
+                          {doneSubtasks.length}/{activeSubtasks.length} sub
+                        </span>
+                      )}
+                      <PriorityChip priority={task.priority} />
                       <div className="w-28 hidden sm:block">
                         <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
                       </div>
@@ -270,44 +295,27 @@ export default async function ProjetoDetailPage({
                   </div>
 
                   {/* ── Subtarefas ── */}
-                  {activeSubtasks.length > 0 && (
-                    <div className="border-t border-neutral-100 divide-y divide-neutral-100">
-                      {/* Mini progresso */}
-                      {activeSubtasks.length > 1 && (
-                        <div className="px-4 py-1.5 flex items-center gap-2 bg-neutral-50">
-                          <div className="flex-1 h-1 bg-neutral-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-emerald-400 rounded-full transition-all"
-                              style={{ width: `${Math.round((doneSubtasks.length / activeSubtasks.length) * 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] text-neutral-400 shrink-0">
-                            {doneSubtasks.length}/{activeSubtasks.length} sub-tarefas
-                          </span>
+                  {activeSubtasks.map((sub) => (
+                    <div key={sub.id} className="flex items-center gap-3 pl-12 pr-4 py-2.5 bg-neutral-50/50 hover:bg-neutral-50 transition-colors border-t border-neutral-100">
+                      <span className="w-2 h-2 rounded-full bg-neutral-200 shrink-0" />
+                      <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
+                      <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0">
+                        <p className={`text-sm truncate ${
+                          sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-600"
+                        }`}>
+                          {sub.title}
+                        </p>
+                      </Link>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="w-28 hidden sm:block">
+                          <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
                         </div>
-                      )}
-                      {activeSubtasks.map((sub) => (
-                        <div key={sub.id} className="flex items-center gap-3 pl-10 pr-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
-                          <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                          <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0">
-                            <p className={`text-sm truncate ${
-                              sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700"
-                            }`}>
-                              {sub.title}
-                            </p>
-                          </Link>
-                          <div className="flex items-center gap-4 shrink-0">
-                            <div className="w-28 hidden sm:block">
-                              <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
-                            </div>
-                            <div className="w-24">
-                              <StatusChip status={sub.status} />
-                            </div>
-                          </div>
+                        <div className="w-24">
+                          <StatusChip status={sub.status} />
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               );
             })}
