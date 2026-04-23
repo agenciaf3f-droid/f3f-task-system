@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
 
 const schema = z.object({
   password: z.string().min(8, "Mínimo 8 caracteres"),
@@ -16,7 +16,7 @@ const schema = z.object({
 export type ResetState = { error?: string };
 
 export async function resetPasswordAction(
-  token: string,
+  _token: string,
   _prev: ResetState,
   formData: FormData,
 ): Promise<ResetState> {
@@ -26,27 +26,19 @@ export async function resetPasswordAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const record = await prisma.passwordResetToken.findUnique({
-    where: { token },
-    include: { user: { select: { id: true } } },
-  });
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
 
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
-    return { error: "Link inválido ou expirado. Solicite um novo." };
+  if (error) return { error: "Link expirado. Solicite um novo link de redefinição." };
+
+  // Clear mustChangePassword flag if set
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.email) {
+    await prisma.user.updateMany({
+      where: { email: user.email },
+      data: { mustChangePassword: false },
+    });
   }
-
-  const passwordHash = await hashPassword(parsed.data.password);
-
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: record.userId },
-      data: { passwordHash, mustChangePassword: false },
-    }),
-    prisma.passwordResetToken.update({
-      where: { token },
-      data: { usedAt: new Date() },
-    }),
-  ]);
 
   redirect("/login");
 }

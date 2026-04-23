@@ -1,19 +1,10 @@
-import bcrypt from "bcryptjs";
+"use server";
+
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { UserRole } from "@prisma/client";
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
-
-export async function verifyPassword(
-  password: string,
-  hash: string,
-): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
 
 export async function getAuthUser() {
   const session = await getSession();
@@ -47,23 +38,24 @@ export async function requireRole(allowedRoles: UserRole[]) {
 }
 
 export async function loginUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase().trim() },
-    select: {
-      id: true,
-      companyId: true,
-      email: true,
-      name: true,
-      role: true,
-      passwordHash: true,
-      isActive: true,
-    },
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.toLowerCase().trim(),
+    password,
   });
 
-  if (!user || !user.isActive) return { error: "Credenciais inválidas." };
+  if (error || !data.user) return { error: "Credenciais inválidas." };
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) return { error: "Credenciais inválidas." };
+  const user = await prisma.user.findUnique({
+    where: { email: email.toLowerCase().trim(), isActive: true, deletedAt: null },
+    select: { id: true, companyId: true, email: true, name: true, role: true },
+  });
+
+  if (!user) {
+    await supabase.auth.signOut();
+    return { error: "Credenciais inválidas." };
+  }
 
   const session = await getSession();
   session.userId = user.id;
@@ -82,6 +74,8 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function logoutUser() {
+  const supabase = await createSupabaseServerClient();
+  await supabase.auth.signOut();
   const session = await getSession();
   session.destroy();
 }

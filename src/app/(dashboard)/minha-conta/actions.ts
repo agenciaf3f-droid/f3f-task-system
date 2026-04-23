@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getAuthUser, hashPassword, verifyPassword } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const changeSchema = z.object({
   newPassword: z.string().min(6, "Mínimo 6 caracteres"),
@@ -26,11 +27,14 @@ export async function forceChangePasswordAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const newHash = await hashPassword(parsed.data.newPassword);
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.newPassword });
+
+  if (error) return { error: "Erro ao atualizar senha. Tente novamente." };
 
   await prisma.user.update({
     where: { id: user.userId },
-    data: { passwordHash: newHash, mustChangePassword: false },
+    data: { mustChangePassword: false },
   });
 
   redirect("/dashboard");

@@ -1,8 +1,7 @@
 "use server";
 
-import crypto from "crypto";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { sendPasswordResetEmail } from "@/lib/email";
 
 export type ForgotState = { error?: string; success?: boolean };
 
@@ -15,27 +14,17 @@ export async function forgotPasswordAction(
 
   const user = await prisma.user.findFirst({
     where: { email, deletedAt: null, isActive: true },
-    select: { id: true, name: true, email: true },
   });
 
   // Responde sucesso mesmo se email não existir (evitar enumeração)
   if (!user) return { success: true };
 
-  // Invalida tokens antigos do mesmo usuário
-  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const supabase = await createSupabaseServerClient();
 
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-
-  await prisma.passwordResetToken.create({
-    data: { userId: user.id, token, expiresAt },
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${appUrl}/auth/callback?next=/redefinir-senha/reset`,
   });
-
-  sendPasswordResetEmail({
-    toEmail: user.email,
-    toName: user.name,
-    resetToken: token,
-  }).catch((err) => console.error("[email] Password reset error:", err));
 
   return { success: true };
 }

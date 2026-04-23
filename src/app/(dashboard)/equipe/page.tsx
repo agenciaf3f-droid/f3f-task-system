@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Users, UserCheck, UserX } from "lucide-react";
+import { Users, UserCheck, UserX, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
@@ -39,6 +39,7 @@ export default async function EquipePage() {
           },
         },
       },
+      // include mustChangePassword to detect pending status
     }),
     prisma.sector.findMany({
       where: { companyId: currentUser.companyId, deletedAt: null },
@@ -47,7 +48,8 @@ export default async function EquipePage() {
     }),
   ]);
 
-  const active = users.filter((u) => u.isActive);
+  const pending = users.filter((u) => u.isActive && u.mustChangePassword);
+  const active = users.filter((u) => u.isActive && !u.mustChangePassword);
   const inactive = users.filter((u) => !u.isActive);
 
   function initials(name: string) {
@@ -62,12 +64,58 @@ export default async function EquipePage() {
           <p className="text-sm text-neutral-500 mt-0.5">
             {active.length} membro{active.length !== 1 ? "s" : ""} ativo
             {active.length !== 1 ? "s" : ""}
+            {pending.length > 0 && ` · ${pending.length} convite${pending.length !== 1 ? "s" : ""} pendente${pending.length !== 1 ? "s" : ""}`}
           </p>
         </div>
         {currentUser.role === "admin" && (
           <NewUserDialog sectors={sectors} />
         )}
       </div>
+
+      {/* Pending users (invited, never logged in) */}
+      {pending.length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-amber-600 mb-3 flex items-center gap-1.5">
+            <Clock className="w-4 h-4" />
+            Convite pendente ({pending.length})
+          </h2>
+          <div className="grid gap-2">
+            {pending.map((u) => (
+              <div
+                key={u.id}
+                className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3"
+              >
+                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-sm font-semibold text-amber-700 shrink-0">
+                  {initials(u.name)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-900">{u.name}</p>
+                  <p className="text-xs text-neutral-500 truncate">{u.email}</p>
+                  {u.sectorMemberships.length > 0 && (
+                    <p className="text-xs text-neutral-400 mt-0.5">
+                      {u.sectorMemberships.map((sm) => sm.sector.name).join(", ")}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border bg-amber-50 text-amber-700 border-amber-300">
+                    <Clock className="w-3 h-3" />
+                    Pendente
+                  </span>
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[u.role]}`}
+                  >
+                    {ROLE_LABELS[u.role]}
+                  </span>
+                  {currentUser.role === "admin" && (
+                    <DeleteUserButton userId={u.id} userName={u.name} />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active users */}
       <div className="grid gap-3">
