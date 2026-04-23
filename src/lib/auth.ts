@@ -24,11 +24,15 @@ export async function requireAuth() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: user.userId },
-    select: { mustChangePassword: true, avatarUrl: true },
+    select: { mustChangePassword: true, avatarUrl: true, role: true },
   });
   if (dbUser?.mustChangePassword) redirect("/minha-conta/senha");
 
-  return { ...user, avatarUrl: dbUser?.avatarUrl ?? null };
+  return {
+    ...user,
+    role: (dbUser?.role ?? user.role) as typeof user.role,
+    avatarUrl: dbUser?.avatarUrl ?? null,
+  };
 }
 
 export async function requireRole(allowedRoles: UserRole[]) {
