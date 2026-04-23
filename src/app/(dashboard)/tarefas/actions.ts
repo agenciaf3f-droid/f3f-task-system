@@ -382,3 +382,46 @@ export async function addCommentAction(taskId: string, content: string) {
 
   revalidatePath(`/tarefas/${taskId}`);
 }
+
+export async function getTaskDetailsAction(taskId: string): Promise<{
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  dueDate: Date | null;
+  assignee: { id: string; name: string } | null;
+  project: { id: string; name: string } | null;
+  checklistItems: { id: string; title: string; isDone: boolean }[];
+  commentsCount: number;
+} | null> {
+  const user = await requireAuth();
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      priority: true,
+      dueDate: true,
+      assignee: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true } },
+      checklistItems: { orderBy: { position: "asc" }, select: { id: true, title: true, isDone: true } },
+      _count: { select: { comments: true } },
+    },
+  });
+  if (!task) return null;
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    dueDate: task.dueDate,
+    assignee: task.assignee,
+    project: task.project,
+    checklistItems: task.checklistItems.map((i) => ({ id: i.id, title: i.title, isDone: i.isDone })),
+    commentsCount: task._count.comments,
+  };
+}

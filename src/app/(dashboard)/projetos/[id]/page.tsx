@@ -2,12 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { isBefore, isToday } from "date-fns";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
-import { TaskInlineAssignee, TaskInlineDueDate, TaskCheckbox, TaskPriorityChip } from "./task-inline-edit";
+import { TaskList } from "./task-list";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -213,108 +212,37 @@ export default async function ProjetoDetailPage({
                 {activeTasks.length} tarefa{activeTasks.length !== 1 ? "s" : ""} · {doneTasks.length} concluída{doneTasks.length !== 1 ? "s" : ""} · clique para abrir
               </p>
             </div>
-            <div className="flex items-center gap-1">
-              <Link
-                href={sortLink("assignee")}
-                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                  sortBy === "assignee" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
-                }`}
-              >
-                <ArrowUpDown className="w-3 h-3" />
-                Responsável
-              </Link>
-              <Link
-                href={sortLink("dueDate")}
-                className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border transition-colors ${
-                  sortBy === "dueDate" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
-                }`}
-              >
-                <ArrowUpDown className="w-3 h-3" />
-                Data
-              </Link>
-              {sortBy !== "default" && (
+            <div className="flex items-center">
+              <div className="w-32 flex justify-end">
                 <Link
-                  href={`/projetos/${id}`}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border border-neutral-200 text-neutral-400 hover:border-neutral-400 transition-colors"
+                  href={sortLink("assignee")}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+                    sortBy === "assignee" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                  }`}
                 >
-                  Padrão
+                  <ArrowUpDown className="w-3 h-3" />
+                  Responsável
                 </Link>
-              )}
+              </div>
+              <div className="w-24 flex justify-end">
+                <Link
+                  href={sortLink("dueDate")}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+                    sortBy === "dueDate" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                  }`}
+                >
+                  <ArrowUpDown className="w-3 h-3" />
+                  Data
+                </Link>
+              </div>
+              <div className="w-28 flex justify-end pr-1">
+                <span className="text-xs text-neutral-400 font-medium">Status</span>
+              </div>
             </div>
           </div>
 
-          {/* Rows — divide-y como no template */}
-          <div className="divide-y divide-neutral-100">
-            {sortedTasks.filter((t) => t.status !== "cancelled").map((task, idx) => {
-              const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
-              const isDueToday = task.dueDate && isToday(task.dueDate);
-              const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
-              const hasSub = activeSubtasks.length > 0;
-
-              return (
-                <div key={task.id} className="group">
-                  {/* Main row — mesmo padding/espaçamento do template */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
-                    {/* Index */}
-                    <div className="w-8 shrink-0 flex items-center justify-center text-xs text-neutral-300 font-medium">
-                      {idx + 1}
-                    </div>
-
-                    {/* Chevron (decorativo, igual template) */}
-                    <span className="text-neutral-300 shrink-0">
-                      {hasSub ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    </span>
-
-                    {/* Checkbox para marcar done */}
-                    <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
-
-                    {/* Title (link para tarefa) — mesmo estilo do template */}
-                    <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0 px-1 py-1">
-                      <span className={`text-sm font-medium block truncate ${
-                        task.status === "done" ? "line-through text-neutral-400" : "text-neutral-800"
-                      }`}>
-                        {task.title || <span className="text-neutral-300">Sem título</span>}
-                      </span>
-                    </Link>
-
-                    {/* Chips — ordem idêntica ao template: data, prioridade, responsável, sub counter */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      <TaskInlineDueDate taskId={task.id} dueDate={task.dueDate} isOverdue={!!isOverdue} isDueToday={!!isDueToday} />
-                      <TaskPriorityChip priority={task.priority} />
-                      <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
-                      {hasSub && (
-                        <span className="text-[10px] text-neutral-400 px-1.5">
-                          {activeSubtasks.length} sub
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Subtarefas — pl-[72px] idêntico ao template */}
-                  {hasSub && (
-                    <div className="pl-[72px] pr-5 pb-3 pt-1 flex flex-col gap-1">
-                      {activeSubtasks.map((sub) => (
-                        <div key={sub.id} className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
-                          <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                          <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0 px-1 py-1">
-                            <span className={`text-xs block truncate ${
-                              sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700"
-                            }`}>
-                              {sub.title}
-                            </span>
-                          </Link>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {/* Task list — client component com drawer, collapse e colunas alinhadas */}
+          <TaskList tasks={sortedTasks} users={users} />
         </div>
       )}
 

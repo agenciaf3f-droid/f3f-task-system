@@ -43,10 +43,16 @@ export default async function ProjetosPage({
     deletedAt: null,
     ...(clientId ? { clientId } : {}),
     ...(user.role === "member" && {
-      tasks: { some: { assigneeId: user.userId, deletedAt: null } },
+      OR: [
+        { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
+        { createdById: user.userId },
+      ],
     }),
     ...(user.role === "supervisor" && sectorUserIds && {
-      tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } },
+      OR: [
+        { tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } } },
+        { createdById: user.userId },
+      ],
     }),
   };
 
@@ -255,10 +261,16 @@ export default async function ProjetosPage({
       companyId: user.companyId,
       deletedAt: null,
       ...(user.role === "member" && {
-        tasks: { some: { assigneeId: user.userId, deletedAt: null } },
+        OR: [
+          { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
+          { createdById: user.userId },
+        ],
       }),
       ...(user.role === "supervisor" && sectorUserIds && {
-        tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } },
+        OR: [
+          { tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } } },
+          { createdById: user.userId },
+        ],
       }),
     },
     select: {
