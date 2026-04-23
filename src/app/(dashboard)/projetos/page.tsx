@@ -10,18 +10,40 @@ function getInitials(name: string) {
 
 export default async function ProjetosPage() {
   const user = await requireAuth();
-  const restrictToOwn = user.role === "member";
-  const canManage = user.role === "admin" || user.role === "manager"; // editar, arquivar
-  const canCreate = true; // todos podem criar projetos
+  const canManage = user.role === "admin" || user.role === "manager";
+
+  // Supervisor: busca todos os membros dos seus setores
+  let sectorUserIds: string[] | null = null;
+  if (user.role === "supervisor") {
+    const mySectos = await prisma.sectorMember.findMany({
+      where: { userId: user.userId },
+      select: { sectorId: true },
+    });
+    const sectorIds = mySectos.map((s) => s.sectorId);
+    if (sectorIds.length > 0) {
+      const members = await prisma.sectorMember.findMany({
+        where: { sectorId: { in: sectorIds } },
+        select: { userId: true },
+      });
+      sectorUserIds = members.map((m) => m.userId);
+    } else {
+      sectorUserIds = [user.userId];
+    }
+  }
 
   const projects = await prisma.project.findMany({
     where: {
       companyId: user.companyId,
       deletedAt: null,
-      ...(restrictToOwn && {
+      // Member: só projetos com tarefas próprias
+      ...(user.role === "member" && {
         tasks: { some: { assigneeId: user.userId, deletedAt: null } },
       }),
-
+      // Supervisor: projetos com tarefas de qualquer membro do seu setor
+      ...(user.role === "supervisor" && sectorUserIds && {
+        tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } },
+      }),
+      // Admin e Manager: sem filtro — veem tudo
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -69,8 +91,10 @@ export default async function ProjetosPage() {
           </div>
           <p className="text-sm font-semibold text-neutral-600">Nenhum projeto ainda</p>
           <p className="text-xs text-neutral-400 mt-1 mb-5">
-            {restrictToOwn
+            {user.role === "member"
               ? "Você ainda não tem tarefas atribuídas em nenhum projeto."
+              : user.role === "supervisor"
+              ? "Nenhum projeto com tarefas atribuídas ao seu setor ainda."
               : "Crie seu primeiro projeto para começar"}
           </p>
           {canCreate && (
