@@ -268,6 +268,71 @@ async function main() {
 
   await createTemplate(company.id, "Gratuitinho", gratuitinhoTasks, adminUser.id);
 
+  // --- TEMPLATE: ONBOARDING ---
+  const onboardingTasks: TemplateTaskSpec[] = [
+    {
+      title: "Criar e etiquetar o cliente com etiqueta 'clientes'",
+      priority: "high",
+      daysToComplete: 1,
+    },
+    {
+      title: "Mensagem 1 - Boas vindas",
+      priority: "high",
+      daysToComplete: 1,
+    },
+    {
+      title: "Mensagem 2 - Confirma estratégia + definição do orçamento",
+      priority: "high",
+      daysToComplete: 1,
+    },
+    {
+      title: "Mensagem 3 - Enviar vídeo para receber o convite da conta",
+      priority: "high",
+      daysToComplete: 1,
+    },
+    {
+      title: "Passo 1 - Aceitar convite + entrar na conta de anúncios",
+      priority: "high",
+      daysToComplete: 2,
+    },
+    {
+      title: "Passo 2 - Confirmar se o cliente entrou na conta de anúncios",
+      priority: "medium",
+      daysToComplete: 2,
+      subtasks: [
+        "Nome para colocar na conta: SEU_NOME - F3F | (GESTOR)",
+        "Ex: Primeiro nome: Raphael Leça - F3F | Segundo nome: (GESTOR - FUNCAO)",
+      ],
+    },
+    {
+      title: "Mensagem 4 - Após entrar na conta de anúncio, enviar mensagem pedindo criativos",
+      priority: "high",
+      daysToComplete: 2,
+    },
+    {
+      title: "Criar públicos de envolvimento",
+      priority: "medium",
+      daysToComplete: 3,
+    },
+    {
+      title: "Assistir vídeo AULA para criar a pasta de organização",
+      priority: "medium",
+      daysToComplete: 3,
+    },
+    {
+      title: "Adicionar links úteis no sistema",
+      priority: "medium",
+      daysToComplete: 3,
+    },
+    {
+      title: "Subir o primeiro anúncio",
+      priority: "high",
+      daysToComplete: 7,
+    },
+  ];
+
+  await createTemplate(company.id, "Onboarding", onboardingTasks, adminUser.id);
+
   console.log("\n🎉 Templates criados com sucesso!");
 }
 
