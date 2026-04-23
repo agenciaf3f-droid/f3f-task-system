@@ -25,10 +25,10 @@ export function DeleteUserButton({ userId, userName }: { userId: string; userNam
     <>
       <button
         onClick={() => { setError(null); setOpen(true); }}
-        className="p-1.5 rounded-md text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-        title="Excluir membro"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
       >
         <Trash2 className="w-3.5 h-3.5" />
+        Excluir
       </button>
 
       {open && (
