@@ -16,7 +16,7 @@ interface DashboardTaskRowProps {
     status: TaskStatus;
     priority: TaskPriority;
     dueDate: Date | null;
-    project: { name: string } | null;
+    project: { name: string; client: { name: string } } | null;
     sector: { name: string; color: string | null } | null;
   };
 }
@@ -83,7 +83,7 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
           </p>
           {task.project && (
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mt-0.5 truncate">
-              {task.project.name}
+              {task.project.client.name} · {task.project.name}
             </p>
           )}
         </div>

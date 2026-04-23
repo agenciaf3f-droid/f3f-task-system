@@ -29,7 +29,7 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
       select: {
         id: true, title: true, status: true, priority: true, dueDate: true, progress: true,
         sector: { select: { name: true, color: true } },
-        project: { select: { name: true } },
+        project: { select: { name: true, client: { select: { name: true } } } },
       },
     }),
     prisma.task.count({
