@@ -2,29 +2,21 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FileText, Plus, Hash, Pencil } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { ActivateTemplateDialog } from "./activate-template-dialog";
 import { ToggleTemplateButton } from "./toggle-template-button";
 import { DeleteTemplateButton } from "./delete-template-button";
 
 export default async function TemplatesPage() {
   const user = await requireAuth();
 
-  const [templates, users] = await Promise.all([
-    prisma.template.findMany({
-      where: { companyId: user.companyId, deletedAt: null },
-      orderBy: [{ isActive: "desc" }, { position: "asc" }, { name: "asc" }],
-      include: {
-        sector: { select: { name: true, color: true } },
-        createdBy: { select: { name: true } },
-        _count: { select: { templateTasks: true } },
-      },
-    }),
-    prisma.user.findMany({
-      where: { companyId: user.companyId, isActive: true, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const templates = await prisma.template.findMany({
+    where: { companyId: user.companyId, deletedAt: null },
+    orderBy: [{ isActive: "desc" }, { position: "asc" }, { name: "asc" }],
+    include: {
+      sector: { select: { name: true, color: true } },
+      createdBy: { select: { name: true } },
+      _count: { select: { templateTasks: true } },
+    },
+  });
 
   const canManage = user.role === "admin" || user.role === "manager";
   const active = templates.filter((t) => t.isActive);
@@ -123,22 +115,12 @@ export default async function TemplatesPage() {
                 </div>
 
                 {/* Footer actions */}
-                <div className="flex items-center justify-between pt-1 mt-auto border-t border-neutral-100 gap-2">
-                  {canManage && (
-                    <div className="flex items-center gap-2">
-                      <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
-                      <DeleteTemplateButton templateId={template.id} templateName={template.name} />
-                    </div>
-                  )}
-                  <div className="ml-auto">
-                    <ActivateTemplateDialog
-                      templateId={template.id}
-                      templateName={template.name}
-                      taskCount={template._count.templateTasks}
-                      users={users}
-                    />
+                {canManage && (
+                  <div className="flex items-center gap-2 pt-1 mt-auto border-t border-neutral-100">
+                    <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
+                    <DeleteTemplateButton templateId={template.id} templateName={template.name} />
                   </div>
-                </div>
+                )}
               </div>
             ))}
           </div>

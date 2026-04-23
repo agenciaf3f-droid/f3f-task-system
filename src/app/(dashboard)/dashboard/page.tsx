@@ -1,21 +1,31 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Clock, AlertTriangle, TrendingUp, CheckCircle2, ArrowRight, Circle, Flame } from "lucide-react";
+import type { Prisma, TaskStatus } from "@prisma/client";
+import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame } from "lucide-react";
 import { format, isBefore } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DashboardTaskRow } from "./dashboard-task-row";
 
-async function getDashboardData(userId: string, companyId: string) {
+async function getDashboardData(userId: string, companyId: string, statusFilter?: string) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
 
+  const taskWhere: Prisma.TaskWhereInput = {
+    companyId,
+    assigneeId: userId,
+    deletedAt: null,
+    ...(statusFilter
+      ? { status: statusFilter as TaskStatus }
+      : { status: { notIn: ["done", "cancelled"] as TaskStatus[] } }),
+  };
+
   const [myTasks, overdueCount, todayCount, completedTodayCount, recentProjects] = await Promise.all([
     prisma.task.findMany({
-      where: { companyId, assigneeId: userId, status: { notIn: ["done", "cancelled"] }, deletedAt: null },
+      where: taskWhere,
       orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
-      take: 12,
+      take: 20,
       select: {
         id: true, title: true, status: true, priority: true, dueDate: true, progress: true,
         sector: { select: { name: true, color: true } },
@@ -61,24 +71,23 @@ function getInitials(name: string) {
 }
 
 const TASK_FILTERS = [
-  { label: "Minhas tarefas", key: "mine", value: "1" },
-  { label: "A fazer",        key: "status", value: "todo" },
-  { label: "Em revisão",     key: "status", value: "review" },
-  { label: "Concluído",      key: "status", value: "done" },
+  { label: "Minhas tarefas", status: undefined },
+  { label: "A fazer",        status: "todo" },
+  { label: "Em revisão",     status: "review" },
+  { label: "Concluído",      status: "done" },
 ] as const;
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ mine?: string; status?: string }>;
+  searchParams?: Promise<{ status?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
-  const activeFilterMine = sp?.mine;
-  const activeFilterStatus = sp?.status;
+  const activeStatus = sp?.status;
 
   const { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects } =
-    await getDashboardData(user.userId, user.companyId);
+    await getDashboardData(user.userId, user.companyId, activeStatus);
 
   const inProgressCount = myTasks.filter((t) => t.status === "in_progress").length;
   const urgentTasks = myTasks.filter((t) => t.priority === "urgent" || t.priority === "high");
@@ -161,28 +170,21 @@ export default async function DashboardPage({
         <div className="lg:col-span-2 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
-            <Link href="/tarefas?mine=1" className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1">
-              Ver todas <ArrowRight className="w-3 h-3" />
-            </Link>
           </div>
 
           {/* Filtros rápidos */}
           <div className="flex flex-wrap gap-2">
             {TASK_FILTERS.map((f) => {
-              const isActive =
-                f.key === "mine" ? activeFilterMine === f.value :
-                f.key === "status" ? activeFilterStatus === f.value : false;
-              const href = isActive
-                ? "/tarefas?mine=1"
-                : f.key === "mine"
-                  ? `/tarefas?mine=${f.value}`
-                  : `/tarefas?mine=1&status=${f.value}`;
+              const isActive = activeStatus === f.status;
+              const href = isActive || f.status === undefined
+                ? "/dashboard"
+                : `/dashboard?status=${f.status}`;
               return (
                 <Link
                   key={f.label}
                   href={href}
                   className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                    isActive
+                    (f.status === undefined && !activeStatus) || isActive
                       ? "bg-neutral-900 text-white border-neutral-900"
                       : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400"
                   }`}

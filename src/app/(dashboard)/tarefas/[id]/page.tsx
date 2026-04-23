@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ArrowLeft, Calendar, User, Building2, Pencil } from "lucide-react";
+import { ArrowLeft, Calendar, User, Building2, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge, PriorityBadge } from "@/components/tasks/task-badges";
@@ -44,23 +44,13 @@ export default async function TaskDetailPage({
   return (
     <div className="max-w-3xl">
       {/* Back */}
-      {task.projectId ? (
-        <Link
-          href={`/projetos/${task.projectId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar ao projeto
-        </Link>
-      ) : (
-        <Link
-          href="/tarefas"
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar às tarefas
-        </Link>
-      )}
+      <Link
+        href={task.projectId ? `/projetos/${task.projectId}` : "/dashboard"}
+        className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 mb-6 transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        {task.projectId ? "Voltar ao projeto" : "Voltar ao dashboard"}
+      </Link>
 
       <div className="flex flex-col gap-6">
         {/* Header card */}
@@ -98,6 +88,14 @@ export default async function TaskDetailPage({
 
           {/* Meta grid */}
           <div className="grid grid-cols-2 gap-y-3 text-sm">
+            {task.project && (
+              <div className="flex items-center gap-2 text-neutral-600 col-span-2">
+                <FolderKanban className="w-4 h-4 text-neutral-400 shrink-0" />
+                <Link href={`/projetos/${task.project.id}`} className="hover:text-blue-600 transition-colors font-medium">
+                  {task.project.name}
+                </Link>
+              </div>
+            )}
             {task.assignee && (
               <div className="flex items-center gap-2 text-neutral-600">
                 <User className="w-4 h-4 text-neutral-400 shrink-0" />
