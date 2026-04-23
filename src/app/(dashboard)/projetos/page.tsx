@@ -10,16 +10,18 @@ function getInitials(name: string) {
 
 export default async function ProjetosPage() {
   const user = await requireAuth();
-  const isMemberLevel = user.role === "member";
-  const canManage = user.role === "admin" || user.role === "manager" || user.role === "supervisor";
+  const restrictToOwn = user.role === "member";
+  const canManage = user.role === "admin" || user.role === "manager"; // editar, arquivar
+  const canCreate = true; // todos podem criar projetos
 
   const projects = await prisma.project.findMany({
     where: {
       companyId: user.companyId,
       deletedAt: null,
-      ...(isMemberLevel && {
+      ...(restrictToOwn && {
         tasks: { some: { assigneeId: user.userId, deletedAt: null } },
       }),
+
     },
     orderBy: { createdAt: "desc" },
     include: {
@@ -52,7 +54,7 @@ export default async function ProjetosPage() {
             {active.length} ativo{active.length !== 1 ? "s" : ""}
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <LinkButton href="/projetos/novo">
             <Plus className="w-4 h-4 mr-2" />
             Novo projeto
@@ -67,11 +69,11 @@ export default async function ProjetosPage() {
           </div>
           <p className="text-sm font-semibold text-neutral-600">Nenhum projeto ainda</p>
           <p className="text-xs text-neutral-400 mt-1 mb-5">
-            {isMemberLevel
+            {restrictToOwn
               ? "Você ainda não tem tarefas atribuídas em nenhum projeto."
               : "Crie seu primeiro projeto para começar"}
           </p>
-          {canManage && (
+          {canCreate && (
             <LinkButton href="/projetos/novo" size="sm">
               <Plus className="w-4 h-4 mr-2" />
               Novo projeto
