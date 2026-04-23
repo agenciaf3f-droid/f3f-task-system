@@ -2,7 +2,10 @@
 
 import { useState, useRef, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X, Bell } from "lucide-react";
+import Link from "next/link";
+import { Search, X, Bell, AlertTriangle, Clock } from "lucide-react";
+import { format, isBefore, differenceInHours } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface SearchResult {
   id: string;
@@ -10,25 +13,50 @@ interface SearchResult {
   status: string;
 }
 
-export function TopBar({ userName, unreadCount = 0 }: { userName: string; unreadCount?: number }) {
-  const [open, setOpen] = useState(false);
+interface UpcomingTask {
+  id: string;
+  title: string;
+  dueDate: Date | string | null;
+  status: string;
+  project: { name: string } | null;
+}
+
+interface TopBarProps {
+  userName: string;
+  unreadCount?: number;
+  userAvatar?: string | null;
+  upcomingTasks?: UpcomingTask[];
+}
+
+function getInitials(name: string) {
+  return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+}
+
+export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = [] }: TopBarProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const bellRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  const initials = userName.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const initials = getInitials(userName);
+  const now = new Date();
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen(true);
+        setSearchOpen(true);
         setTimeout(() => inputRef.current?.focus(), 10);
       }
-      if (e.key === "Escape") { setOpen(false); setQuery(""); setResults([]); }
+      if (e.key === "Escape") {
+        setSearchOpen(false); setQuery(""); setResults([]);
+        setBellOpen(false);
+      }
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
@@ -36,13 +64,16 @@ export function TopBar({ userName, unreadCount = 0 }: { userName: string; unread
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false); setQuery(""); setResults([]);
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false); setQuery(""); setResults([]);
+      }
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setBellOpen(false);
       }
     }
-    if (open) document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  }, []);
 
   useEffect(() => {
     if (!query.trim() || query.length < 2) { setResults([]); return; }
@@ -56,16 +87,21 @@ export function TopBar({ userName, unreadCount = 0 }: { userName: string; unread
   }, [query]);
 
   function selectResult(id: string) {
-    setOpen(false); setQuery(""); setResults([]);
+    setSearchOpen(false); setQuery(""); setResults([]);
     router.push(`/tarefas/${id}`);
   }
+
+  const overdueCount = upcomingTasks.filter(
+    (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
+  ).length;
+  const alertCount = overdueCount > 0 ? overdueCount : upcomingTasks.length;
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between px-8 py-3 bg-white border-b border-neutral-200/80 backdrop-blur-sm">
       {/* Search */}
-      <div ref={containerRef} className="relative">
+      <div ref={searchRef} className="relative">
         <button
-          onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 10); }}
+          onClick={() => { setSearchOpen(true); setTimeout(() => inputRef.current?.focus(), 10); }}
           className="flex items-center gap-2.5 px-3.5 py-2 text-sm text-neutral-400 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg transition-colors w-64"
         >
           <Search className="w-3.5 h-3.5 shrink-0" />
@@ -73,7 +109,7 @@ export function TopBar({ userName, unreadCount = 0 }: { userName: string; unread
           <kbd className="text-[10px] text-neutral-300 bg-white px-1.5 py-0.5 rounded border border-neutral-200 font-mono">⌘K</kbd>
         </button>
 
-        {open && (
+        {searchOpen && (
           <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2.5 border-b border-neutral-100">
               <Search className="w-4 h-4 text-neutral-400 shrink-0" />
@@ -114,17 +150,94 @@ export function TopBar({ userName, unreadCount = 0 }: { userName: string; unread
 
       {/* Right actions */}
       <div className="flex items-center gap-3">
-        <button className="relative flex items-center justify-center w-8 h-8 rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition-colors">
-          <Bell className="w-4 h-4" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
+        {/* Bell */}
+        <div ref={bellRef} className="relative">
+          <button
+            onClick={() => setBellOpen((v) => !v)}
+            className="relative flex items-center justify-center w-8 h-8 rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
+          >
+            <Bell className="w-4 h-4" />
+            {alertCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+                {alertCount > 9 ? "9+" : alertCount}
+              </span>
+            )}
+          </button>
+
+          {bellOpen && (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
+                <p className="text-sm font-bold text-neutral-900">Tarefas próximas</p>
+                {overdueCount > 0 && (
+                  <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                    {overdueCount} atrasada{overdueCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              {upcomingTasks.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
+                  <p className="text-xs text-neutral-400 mt-1">Nenhuma tarefa vencendo nas próximas 48h</p>
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto divide-y divide-neutral-50">
+                  {upcomingTasks.map((task) => {
+                    const due = task.dueDate ? new Date(task.dueDate) : null;
+                    const isOverdue = due && isBefore(due, now);
+                    const hoursLeft = due ? differenceInHours(due, now) : null;
+                    return (
+                      <Link
+                        key={task.id}
+                        href={`/tarefas/${task.id}`}
+                        onClick={() => setBellOpen(false)}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
+                      >
+                        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isOverdue ? "bg-red-100" : "bg-amber-100"}`}>
+                          {isOverdue
+                            ? <AlertTriangle className="w-3 h-3 text-red-600" />
+                            : <Clock className="w-3 h-3 text-amber-600" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-neutral-900 truncate">{task.title}</p>
+                          {task.project && (
+                            <p className="text-[11px] text-neutral-400 truncate">{task.project.name}</p>
+                          )}
+                        </div>
+                        {due && (
+                          <div className="shrink-0 text-right">
+                            <p className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
+                              {isOverdue
+                                ? `${Math.abs(hoursLeft!)}h atraso`
+                                : hoursLeft! < 24
+                                ? `${hoursLeft}h`
+                                : format(due, "dd/MM", { locale: ptBR })}
+                            </p>
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
-        </button>
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold text-white shadow shadow-blue-500/30">
-          {initials}
         </div>
+
+        {/* Avatar */}
+        <Link href="/minha-conta">
+          {userAvatar ? (
+            <img
+              src={userAvatar}
+              alt={userName}
+              className="w-8 h-8 rounded-full object-cover border border-neutral-200 hover:ring-2 hover:ring-blue-400 transition-all"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold text-white shadow shadow-blue-500/30 hover:ring-2 hover:ring-blue-400 transition-all cursor-pointer">
+              {initials}
+            </div>
+          )}
+        </Link>
       </div>
     </header>
   );

@@ -108,7 +108,7 @@ export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarPr
 
         {/* Settings */}
         <div className="flex flex-col gap-0.5">
-          <NavLink item={{ label: "Configurações", href: "/configuracoes", icon: Settings }} />
+          <NavLink item={{ label: "Configurações", href: "/minha-conta", icon: Settings }} />
         </div>
       </nav>
 
