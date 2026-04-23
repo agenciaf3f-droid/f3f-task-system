@@ -56,7 +56,10 @@ export async function createUserAction(
   if (inviteError) {
     await prisma.user.delete({ where: { id: newUser.id } });
     console.error("[invite] Supabase error:", inviteError);
-    return { error: `Erro Supabase: ${inviteError.message}` };
+    if (inviteError.message?.includes("rate limit")) {
+      return { error: "Limite de emails atingido. Aguarde alguns minutos e tente novamente." };
+    }
+    return { error: "Erro ao enviar convite. Tente novamente." };
   }
 
   if (parsed.data.sectorId) {
