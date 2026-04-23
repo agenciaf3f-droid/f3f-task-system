@@ -208,7 +208,7 @@ export async function activateTemplateAction(
     data: { useCount: { increment: 1 } },
   });
 
-  revalidatePath("/tarefas");
+  
   revalidatePath("/dashboard");
   revalidatePath("/templates");
   return { success: true };

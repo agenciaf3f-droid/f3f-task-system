@@ -97,13 +97,12 @@ export async function createTaskAction(
     }
   }
 
-  revalidatePath("/tarefas");
   revalidatePath("/dashboard");
   if (projectId) {
     revalidatePath(`/projetos/${projectId}`);
     redirect(`/projetos/${projectId}`);
   }
-  redirect("/tarefas");
+  redirect("/dashboard");
 }
 
 export async function updateTaskStatusAction(taskId: string, status: TaskStatus) {
@@ -141,7 +140,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
     });
   }
 
-  revalidatePath("/tarefas");
+  
   revalidatePath(`/tarefas/${taskId}`);
   revalidatePath("/dashboard");
   if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
@@ -161,7 +160,7 @@ export async function deleteTaskAction(taskId: string) {
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, companyId: user.companyId },
-    select: { title: true },
+    select: { title: true, projectId: true },
   });
 
   await prisma.task.update({
@@ -180,9 +179,12 @@ export async function deleteTaskAction(taskId: string) {
     });
   }
 
-  revalidatePath("/tarefas");
   revalidatePath("/dashboard");
-  redirect("/tarefas");
+  if (task?.projectId) {
+    revalidatePath(`/projetos/${task.projectId}`);
+    redirect(`/projetos/${task.projectId}`);
+  }
+  redirect("/dashboard");
 }
 
 export async function updateTaskAction(
@@ -251,7 +253,7 @@ export async function updateTaskAction(
   }
 
   revalidatePath(`/tarefas/${taskId}`);
-  revalidatePath("/tarefas");
+  
   redirect(`/tarefas/${taskId}`);
 }
 
@@ -287,7 +289,7 @@ export async function updateTaskAssigneeAction(taskId: string, assigneeId: strin
     }
   }
 
-  revalidatePath("/tarefas");
+  
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
 
@@ -302,7 +304,7 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
     where: { id: taskId, companyId: user.companyId },
     data: { dueDate: dueDate ? new Date(dueDate) : null },
   });
-  revalidatePath("/tarefas");
+  
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
 
