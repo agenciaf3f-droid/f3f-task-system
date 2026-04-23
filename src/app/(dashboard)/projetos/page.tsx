@@ -76,7 +76,7 @@ export default async function ProjetosPage() {
             {active.length} ativo{active.length !== 1 ? "s" : ""}
           </p>
         </div>
-        {canCreate && (
+        {true && (
           <LinkButton href="/projetos/novo">
             <Plus className="w-4 h-4 mr-2" />
             Novo projeto
@@ -97,7 +97,7 @@ export default async function ProjetosPage() {
               ? "Nenhum projeto com tarefas atribuídas ao seu setor ainda."
               : "Crie seu primeiro projeto para começar"}
           </p>
-          {canCreate && (
+          {true && (
             <LinkButton href="/projetos/novo" size="sm">
               <Plus className="w-4 h-4 mr-2" />
               Novo projeto
