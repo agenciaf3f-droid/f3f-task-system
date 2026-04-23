@@ -42,7 +42,11 @@ export async function createUserAction(
     return { error: "E-mail já pertence a um membro ativo." };
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "http://localhost:3000");
 
   // Se existia mas nunca ativou, limpar o registro antigo para re-convidar
   if (existing) {
