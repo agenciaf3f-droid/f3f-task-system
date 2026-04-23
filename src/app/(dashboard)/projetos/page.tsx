@@ -10,8 +10,8 @@ function getInitials(name: string) {
 
 export default async function ProjetosPage() {
   const user = await requireAuth();
-  const isMemberLevel = user.role === "member" || user.role === "supervisor";
-  const canManage = user.role === "admin" || user.role === "manager";
+  const isMemberLevel = user.role === "member";
+  const canManage = user.role === "admin" || user.role === "manager" || user.role === "supervisor";
 
   const projects = await prisma.project.findMany({
     where: {
