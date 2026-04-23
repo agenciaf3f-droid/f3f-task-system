@@ -10,7 +10,7 @@ function getInitials(name: string) {
 
 export default async function ProjetosPage() {
   const user = await requireAuth();
-  const canManage = user.role === "admin" || user.role === "manager";
+  const canManage = user.role === "admin" || user.role === "manager" || user.role === "supervisor";
 
   // Supervisor: busca todos os membros dos seus setores
   let sectorUserIds: string[] | null = null;

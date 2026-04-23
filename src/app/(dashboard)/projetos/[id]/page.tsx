@@ -73,7 +73,7 @@ export default async function ProjetoDetailPage({
     ? Math.round((doneTasks.length / activeTasks.length) * 100)
     : 0;
   const isCompleted = activeTasks.length > 0 && doneTasks.length === activeTasks.length;
-  const canManage = user.role === "admin" || user.role === "manager";
+  const canManage = user.role === "admin" || user.role === "manager" || user.role === "supervisor";
 
   // Sort tasks in JS to respect templatePosition stored in metadata
   function getTemplatePos(meta: unknown): number {
