@@ -32,7 +32,10 @@ async function getDashboardData(userId: string, companyId: string) {
       where: { companyId, assigneeId: userId, status: "done", completedAt: { gte: todayStart }, deletedAt: null },
     }),
     prisma.project.findMany({
-      where: { companyId, deletedAt: null, status: "active" },
+      where: {
+        companyId, deletedAt: null, status: "active",
+        tasks: { some: { assigneeId: userId, deletedAt: null } },
+      },
       orderBy: { updatedAt: "desc" },
       take: 4,
       select: {

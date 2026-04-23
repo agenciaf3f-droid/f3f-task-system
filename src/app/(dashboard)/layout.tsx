@@ -23,6 +23,7 @@ export default async function DashboardLayout({
         userName={user.name}
         userRole={user.role}
         userEmail={user.email}
+        userAvatar={user.avatarUrl}
       />
       <div className="pl-64 flex flex-col min-h-screen">
         <Suspense fallback={<TopBar userName={user.name} unreadCount={0} />}>

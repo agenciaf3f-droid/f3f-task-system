@@ -41,9 +41,10 @@ interface SidebarProps {
   userName: string;
   userRole: UserRole;
   userEmail: string;
+  userAvatar?: string | null;
 }
 
-export function Sidebar({ userName, userRole, userEmail }: SidebarProps) {
+export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -113,10 +114,18 @@ export function Sidebar({ userName, userRole, userEmail }: SidebarProps) {
 
       {/* User footer */}
       <div className="border-t border-white/6 p-3 shrink-0">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow shadow-blue-500/30">
-            {initials}
-          </div>
+        <Link href="/minha-conta" className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition-colors">
+          {userAvatar ? (
+            <img
+              src={userAvatar}
+              alt={userName}
+              className="w-8 h-8 rounded-full object-cover shrink-0 shadow shadow-blue-500/30"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xs font-bold text-white shrink-0 shadow shadow-blue-500/30">
+              {initials}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-white truncate">{userName}</p>
             <p className="text-[11px] text-slate-500 truncate">{userEmail}</p>
@@ -128,7 +137,7 @@ export function Sidebar({ userName, userRole, userEmail }: SidebarProps) {
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </Link>
       </div>
     </aside>
   );
