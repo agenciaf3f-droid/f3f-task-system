@@ -22,6 +22,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var h=window.location.hash;if(h&&h.indexOf("access_token=")!==-1&&window.location.pathname!=="/auth/callback"){window.location.replace("/auth/callback"+h);}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={`${outfit.variable} font-sans antialiased`}>
         {children}
         <Toaster richColors position="top-right" />
