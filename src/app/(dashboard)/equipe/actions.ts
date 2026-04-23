@@ -56,7 +56,7 @@ export async function createUserAction(
   if (inviteError) {
     await prisma.user.delete({ where: { id: newUser.id } });
     console.error("[invite] Supabase error:", inviteError);
-    return { error: "Erro ao enviar convite. Tente novamente." };
+    return { error: `Erro Supabase: ${inviteError.message}` };
   }
 
   if (parsed.data.sectorId) {
