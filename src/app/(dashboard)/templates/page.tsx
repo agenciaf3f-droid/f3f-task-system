@@ -12,7 +12,7 @@ export default async function TemplatesPage() {
   const [templates, users] = await Promise.all([
     prisma.template.findMany({
       where: { companyId: user.companyId, deletedAt: null },
-      orderBy: [{ isActive: "desc" }, { useCount: "desc" }, { name: "asc" }],
+      orderBy: [{ isActive: "desc" }, { position: "asc" }, { name: "asc" }],
       include: {
         sector: { select: { name: true, color: true } },
         createdBy: { select: { name: true } },

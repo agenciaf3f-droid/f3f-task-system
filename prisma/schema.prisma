@@ -337,6 +337,7 @@ model Template {
   category    String?  @db.VarChar(100)
   isActive    Boolean  @default(true) @map("is_active")
   useCount    Int      @default(0) @map("use_count")
+  position    Int      @default(0)
   version     Int      @default(1)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
