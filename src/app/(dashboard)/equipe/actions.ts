@@ -32,10 +32,29 @@ export async function createUserAction(
 
   const emailLower = parsed.data.email.toLowerCase();
 
-  const existing = await prisma.user.findUnique({ where: { email: emailLower } });
-  if (existing) return { error: "E-mail já cadastrado." };
+  const existing = await prisma.user.findUnique({
+    where: { email: emailLower },
+    select: { id: true, mustChangePassword: true, lastLoginAt: true },
+  });
+
+  // Bloquear apenas se o usuário já ativou a conta (já fez login)
+  if (existing && existing.lastLoginAt !== null) {
+    return { error: "E-mail já pertence a um membro ativo." };
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  // Se existia mas nunca ativou, limpar o registro antigo para re-convidar
+  if (existing) {
+    await prisma.sectorMember.deleteMany({ where: { userId: existing.id } });
+    await prisma.user.delete({ where: { id: existing.id } });
+    // Deletar também do Supabase Auth para poder re-convidar
+    const supabaseUsers = await supabaseAdmin.auth.admin.listUsers();
+    const supabaseUser = supabaseUsers.data.users.find((u) => u.email === emailLower);
+    if (supabaseUser) {
+      await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
+    }
+  }
 
   const newUser = await prisma.user.create({
     data: {
