@@ -29,8 +29,10 @@ async function TopBarLoader({ userName, userId, userAvatar }: { userName: string
 
 export default async function DashboardLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode;
+  modal?: React.ReactNode;
 }) {
   const user = await requireAuth();
 
@@ -50,6 +52,7 @@ export default async function DashboardLayout({
           <div className="max-w-screen-xl mx-auto px-8 py-8">{children}</div>
         </main>
       </div>
+      {modal}
     </div>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { isBefore, isToday } from "date-fns";
 import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate } from "./task-inline-edit";
-import { TaskDrawer } from "./task-drawer";
 
 const STATUS_LABELS: Record<string, string> = {
   todo: "A fazer",
@@ -52,7 +52,6 @@ interface TaskListProps {
 
 export function TaskList({ tasks, users }: TaskListProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   function toggleCollapse(id: string) {
     setCollapsedIds((prev) => {
@@ -102,17 +101,14 @@ export function TaskList({ tasks, users }: TaskListProps) {
                 {/* Checkbox */}
                 <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
-                {/* Title — clique abre o drawer */}
-                <button
-                  onClick={() => setOpenTaskId(task.id)}
-                  className="flex-1 min-w-0 px-1 py-1 text-left"
-                >
+                {/* Title — clique abre modal via intercepting route */}
+                <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0 px-1 py-1">
                   <span className={`text-sm font-medium block truncate ${
                     task.status === "done" ? "line-through text-neutral-400" : "text-neutral-800 hover:text-blue-700"
                   } transition-colors`}>
                     {task.title || <span className="text-neutral-300">Sem título</span>}
                   </span>
-                </button>
+                </Link>
 
                 {/* Colunas fixas: Responsável | Data | Status */}
                 <div className="flex items-center shrink-0">
@@ -147,16 +143,13 @@ export function TaskList({ tasks, users }: TaskListProps) {
                       <div key={sub.id} className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
                         <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                        <button
-                          onClick={() => setOpenTaskId(sub.id)}
-                          className="flex-1 min-w-0 px-1 py-0.5 text-left"
-                        >
+                        <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0 px-1 py-0.5">
                           <span className={`text-xs block truncate ${
                             sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700 hover:text-blue-700"
                           } transition-colors`}>
                             {sub.title}
                           </span>
-                        </button>
+                        </Link>
                         <div className="flex items-center shrink-0">
                           <div className="w-32 flex justify-end">
                             <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
@@ -186,8 +179,6 @@ export function TaskList({ tasks, users }: TaskListProps) {
           );
         })}
       </div>
-
-      <TaskDrawer taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
     </>
   );
 }
