@@ -1,17 +1,17 @@
 import { Resend } from "resend";
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL;
 
-function assertEmailConfig() {
-  if (!resend) {
-    return { ok: false, reason: "RESEND_API_KEY ausente" } as const;
-  }
-  if (!FROM_EMAIL) {
-    return { ok: false, reason: "RESEND_FROM_EMAIL ausente" } as const;
-  }
-  return { ok: true } as const;
+type EmailConfig =
+  | { ok: true; client: Resend; from: string }
+  | { ok: false; reason: string };
+
+function getEmailConfig(): EmailConfig {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!apiKey) return { ok: false, reason: "RESEND_API_KEY ausente" };
+  if (!from) return { ok: false, reason: "RESEND_FROM_EMAIL ausente" };
+  return { ok: true, client: new Resend(apiKey), from };
 }
 
 // ─── Layout base ──────────────────────────────────────────────
@@ -69,11 +69,12 @@ export async function sendInviteEmail({
   invitedByName: string;
   companyName: string;
 }) {
-  const config = assertEmailConfig();
+  const config = getEmailConfig();
   if (!config.ok) {
     console.log(`[DEV] Invite email desativado (${config.reason}) → ${toEmail} | senha=${tempPassword}`);
     return;
   }
+  const { client, from } = config;
 
   const html = emailWrapper(emailBody(`
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Olá, ${toName}!</h1>
@@ -93,8 +94,8 @@ export async function sendInviteEmail({
     ${primaryButton(`${APP_URL}/login`, "Acessar o sistema")}
   `));
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  await client.emails.send({
+    from,
     to: toEmail,
     subject: `Você foi convidado para ${companyName} — F3F Tasks`,
     html,
@@ -122,11 +123,12 @@ export async function sendTaskAssignedEmail({
   priority: string;
   assignedByName: string;
 }) {
-  const config = assertEmailConfig();
+  const config = getEmailConfig();
   if (!config.ok) {
     console.log(`[DEV] Task assigned email desativado (${config.reason}) → ${toEmail} | task=${taskTitle}`);
     return;
   }
+  const { client, from } = config;
 
   const priorityLabel: Record<string, string> = {
     low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -157,8 +159,8 @@ export async function sendTaskAssignedEmail({
     ${primaryButton(`${APP_URL}/tarefas/${taskId}`, "Ver tarefa")}
   `));
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  await client.emails.send({
+    from,
     to: toEmail,
     subject: `Tarefa atribuída: ${taskTitle}`,
     html,
@@ -176,11 +178,12 @@ export async function sendDueReminderEmail({
   toName: string;
   tasks: { id: string; title: string; projectName: string | null; dueDate: string; isOverdue: boolean }[];
 }) {
-  const config = assertEmailConfig();
+  const config = getEmailConfig();
   if (!config.ok) {
     console.log(`[DEV] Due reminder email desativado (${config.reason}) → ${toEmail} | tasks=${tasks.length}`);
     return;
   }
+  const { client, from } = config;
 
   const overdue = tasks.filter((t) => t.isOverdue);
   const dueToday = tasks.filter((t) => !t.isOverdue);
@@ -214,8 +217,8 @@ export async function sendDueReminderEmail({
     ${primaryButton(`${APP_URL}/tarefas`, "Ver todas as tarefas")}
   `));
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  await client.emails.send({
+    from,
     to: toEmail,
     subject: `${overdue.length > 0 ? `${overdue.length} tarefa${overdue.length !== 1 ? "s" : ""} atrasada${overdue.length !== 1 ? "s" : ""} — ` : ""}F3F Tasks`,
     html,
@@ -233,11 +236,12 @@ export async function sendPasswordResetEmail({
   toName: string;
   resetToken: string;
 }) {
-  const config = assertEmailConfig();
+  const config = getEmailConfig();
   if (!config.ok) {
     console.log(`[DEV] Password reset email desativado (${config.reason}) → ${toEmail} | token=${resetToken}`);
     return;
   }
+  const { client, from } = config;
 
   const resetUrl = `${APP_URL}/redefinir-senha/${resetToken}`;
 
@@ -253,8 +257,8 @@ export async function sendPasswordResetEmail({
     </p>
   `));
 
-  await resend.emails.send({
-    from: FROM_EMAIL,
+  await client.emails.send({
+    from,
     to: toEmail,
     subject: "Redefinição de senha — F3F Tasks",
     html,

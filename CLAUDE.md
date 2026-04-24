@@ -1,119 +1,53 @@
-# F3F Task System — Guia para Claude
+# F3F Task System
 
-Sistema interno de gestão de tarefas e produtividade da empresa F3F.
-Deploy em produção: https://f3f-task-system.vercel.app
-
----
+Sistema interno de tarefas. Deploy: https://f3f-task-system.vercel.app
 
 ## Stack
+Next.js 16 (App Router) · Prisma + Postgres (Supabase) · iron-session + bcryptjs · Resend · Tailwind v4 · shadcn/ui · Vercel
 
-- **Framework:** Next.js 16 (App Router, Server Actions)
-- **Banco de dados:** PostgreSQL via Supabase (só o banco — Auth do Supabase NÃO é usado)
-- **ORM:** Prisma
-- **Autenticação:** bcryptjs + iron-session (sessão no cookie)
-- **Email:** Resend (`src/lib/email.ts`)
-- **Storage (avatares):** Supabase Storage via `supabaseAdmin`
-- **UI:** Tailwind CSS v4 + shadcn/ui + Lucide icons
-- **Deploy:** Vercel
+## Auth — REGRA CRÍTICA
+**NUNCA usar `supabase.auth.*`.** Auth é 100% bcryptjs + iron-session.
+- Login: `prisma.user.findUnique` + `compare(senha, passwordHash)` em `src/lib/auth.ts`
+- Sessão: cookie iron-session (`SESSION_SECRET`)
+- Reset senha: token em `PasswordResetToken` (1h validade) + `sendPasswordResetEmail`
+- Convite: senha temporária + hash no banco + `sendInviteEmail`
+- Troca senha: bcrypt direto no banco
 
----
+`supabaseAdmin` (`src/lib/supabase/admin.ts`) existe SÓ para Storage de avatares.
 
-## Autenticação — IMPORTANTE
+## Email — Resend
+Tudo em `src/lib/email.ts`. Funções: `sendInviteEmail`, `sendPasswordResetEmail`, `sendTaskAssignedEmail`, `sendDueReminderEmail`.
 
-O Supabase Auth foi completamente removido. O sistema usa:
-
-1. **Login** → `prisma.user.findUnique` + `bcryptjs.compare` contra `passwordHash`
-2. **Sessão** → `iron-session` (cookie encriptado com `SESSION_SECRET`)
-3. **Logout** → `session.destroy()`
-4. **Reset de senha** → token gerado com `crypto.randomBytes`, salvo em `PasswordResetToken`, link enviado via Resend
-5. **Convite de usuário** → senha temporária gerada, hash salvo no banco, credenciais enviadas via Resend
-
-**Nunca usar** `supabase.auth.*` para login, logout, reset de senha ou convites.
-O `supabaseAdmin` existe apenas para Supabase Storage (upload de avatares).
-
----
-
-## Emails
-
-Todos os emails são enviados via **Resend** (`src/lib/email.ts`):
-
-- `sendInviteEmail` — convite de novo membro com senha temporária
-- `sendPasswordResetEmail` — link de reset de senha
-- `sendTaskAssignedEmail` — notificação de tarefa atribuída
-- `sendDueReminderEmail` — lembrete de prazo
-
-Variáveis de ambiente necessárias:
-```
-RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=F3F Tasks <noreply@dominio.com>
+Padrão obrigatório dentro de cada função (TypeScript narrowing):
+```ts
+const config = getEmailConfig();
+if (!config.ok) { console.log(...); return; }
+const { client, from } = config;
+await client.emails.send({ from, to, subject, html });
 ```
 
-Endpoint de teste: `GET /api/test-email`
+Vars: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. Teste: `GET /api/test-email`.
 
----
-
-## Estrutura de pastas relevante
-
+## Estrutura
 ```
-src/
-  lib/
-    auth.ts          — loginUser, logoutUser, requireAuth, requireRole
-    email.ts         — todas as funções de envio de email (Resend)
-    prisma.ts        — cliente Prisma singleton
-    session.ts       — configuração iron-session
-    supabase/
-      admin.ts       — supabaseAdmin (APENAS para Storage)
-      server.ts      — cliente Supabase SSR (não usar para auth)
-  app/
-    (auth)/
-      login/         — página e action de login (bcrypt)
-      esqueci-senha/ — solicitar reset (gera token + envia Resend)
-      redefinir-senha/[token]/ — validar token e salvar nova senha
-    (dashboard)/
-      equipe/        — convidar/gerenciar membros (envia email via Resend)
-      configuracoes/ — trocar senha (bcrypt, sem Supabase)
-      minha-conta/   — troca obrigatória de senha no 1º acesso
-    @modal/(.)tarefas/[id]/ — intercepting route: abre tarefa como modal
-    auth/callback/   — DESATIVADO (era para Supabase OAuth, redireciona para /login)
+src/lib/{auth,email,prisma,session}.ts
+src/lib/supabase/admin.ts          (só Storage)
+src/app/(auth)/{login,esqueci-senha,redefinir-senha/[token]}
+src/app/(dashboard)/{equipe,configuracoes,minha-conta,projetos,tarefas}
+src/app/(dashboard)/@modal/(.)tarefas/[id]   (intercepting route → modal)
+src/app/auth/callback                         (DESATIVADO, redirect /login)
 ```
 
----
+## Modelos Prisma chave
+`User` (passwordHash, mustChangePassword, isActive) · `PasswordResetToken` (token, expiresAt, usedAt) · `Task` (parentTaskId p/ subtarefa, projectId) · `Project` · `Company`
 
-## Banco de dados
+## Roles
+admin > manager > supervisor > member. Admin/manager criam tarefas; member executa.
 
-Modelos principais do Prisma:
+## Vars obrigatórias
+`DATABASE_URL` `DIRECT_URL` `NEXT_PUBLIC_SUPABASE_URL` `NEXT_PUBLIC_SUPABASE_ANON_KEY` `SUPABASE_SERVICE_ROLE_KEY` `SESSION_SECRET` `NEXT_PUBLIC_APP_URL` `RESEND_API_KEY` `RESEND_FROM_EMAIL`
 
-- `Company` — empresa/tenant
-- `User` — usuário com `passwordHash`, `mustChangePassword`, `isActive`
-- `Task` — tarefa com status, priority, assignee, dueDate, checklist, subtasks
-- `Project` — projeto agrupador de tarefas
-- `PasswordResetToken` — token de reset com `expiresAt` e `usedAt`
-- `Template` / `TemplateTask` — templates de processo
-- `Notification`, `ActivityLog` — auditoria
-
----
-
-## Variáveis de ambiente obrigatórias
-
-```
-DATABASE_URL=          # PostgreSQL Supabase (pooler)
-DIRECT_URL=            # PostgreSQL Supabase (direct, para migrations)
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY= # só para Storage
-SESSION_SECRET=        # mínimo 32 chars
-NEXT_PUBLIC_APP_URL=https://f3f-task-system.vercel.app
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=
-```
-
----
-
-## Regras de negócio importantes
-
-- Roles: `admin` > `manager` > `supervisor` > `member`
-- Admin e manager podem criar tarefas; member só executa
-- Usuário novo recebe `mustChangePassword: true` → forçado a trocar no 1º acesso
-- Tarefas podem ter subtarefas (campo `parentTaskId`)
-- Tarefas dentro de projetos abrem como **modal** via intercepting route (`@modal`)
-- `router.back()` no modal volta para o projeto caso `projectId` exista, senão volta no histórico
+## Comportamentos importantes
+- Usuário com `mustChangePassword: true` é forçado a `/minha-conta/senha`
+- Modal de tarefa: `router.push(/projetos/${projectId})` se houver projeto, senão `router.back()`
+- Antes de fazer mudanças grandes: rodar `npm run typecheck` (NÃO confie no narrowing de const de módulo — use vars locais após guard clause)
