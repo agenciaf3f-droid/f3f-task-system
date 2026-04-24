@@ -1,9 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { compare } from "bcryptjs";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { UserRole } from "@prisma/client";
 
 export async function getAuthUser() {
@@ -42,24 +42,22 @@ export async function requireRole(allowedRoles: UserRole[]) {
 }
 
 export async function loginUser(email: string, password: string) {
-  const supabase = await createSupabaseServerClient();
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.toLowerCase().trim(),
-    password,
-  });
-
-  if (error || !data.user) return { error: "Credenciais inválidas." };
-
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim(), isActive: true, deletedAt: null },
-    select: { id: true, companyId: true, email: true, name: true, role: true },
+    select: {
+      id: true,
+      companyId: true,
+      email: true,
+      name: true,
+      role: true,
+      passwordHash: true,
+    },
   });
 
-  if (!user) {
-    await supabase.auth.signOut();
-    return { error: "Credenciais inválidas." };
-  }
+  if (!user) return { error: "Credenciais inválidas." };
+
+  const passwordOk = await compare(password, user.passwordHash);
+  if (!passwordOk) return { error: "Credenciais inválidas." };
 
   const session = await getSession();
   session.userId = user.id;
@@ -78,8 +76,6 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function logoutUser() {
-  const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
   const session = await getSession();
   session.destroy();
 }

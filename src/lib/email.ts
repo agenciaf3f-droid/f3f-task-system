@@ -2,7 +2,17 @@ import { Resend } from "resend";
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "F3F Tasks <onboarding@resend.dev>";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL;
+
+function assertEmailConfig() {
+  if (!resend) {
+    return { ok: false, reason: "RESEND_API_KEY ausente" } as const;
+  }
+  if (!FROM_EMAIL) {
+    return { ok: false, reason: "RESEND_FROM_EMAIL ausente" } as const;
+  }
+  return { ok: true } as const;
+}
 
 // ─── Layout base ──────────────────────────────────────────────
 
@@ -59,8 +69,9 @@ export async function sendInviteEmail({
   invitedByName: string;
   companyName: string;
 }) {
-  if (!resend) {
-    console.log(`[DEV] Invite email → ${toEmail} | senha=${tempPassword}`);
+  const config = assertEmailConfig();
+  if (!config.ok) {
+    console.log(`[DEV] Invite email desativado (${config.reason}) → ${toEmail} | senha=${tempPassword}`);
     return;
   }
 
@@ -111,8 +122,9 @@ export async function sendTaskAssignedEmail({
   priority: string;
   assignedByName: string;
 }) {
-  if (!resend) {
-    console.log(`[DEV] Task assigned email → ${toEmail} | task=${taskTitle}`);
+  const config = assertEmailConfig();
+  if (!config.ok) {
+    console.log(`[DEV] Task assigned email desativado (${config.reason}) → ${toEmail} | task=${taskTitle}`);
     return;
   }
 
@@ -164,8 +176,9 @@ export async function sendDueReminderEmail({
   toName: string;
   tasks: { id: string; title: string; projectName: string | null; dueDate: string; isOverdue: boolean }[];
 }) {
-  if (!resend) {
-    console.log(`[DEV] Due reminder email → ${toEmail} | tasks=${tasks.length}`);
+  const config = assertEmailConfig();
+  if (!config.ok) {
+    console.log(`[DEV] Due reminder email desativado (${config.reason}) → ${toEmail} | tasks=${tasks.length}`);
     return;
   }
 
@@ -220,8 +233,9 @@ export async function sendPasswordResetEmail({
   toName: string;
   resetToken: string;
 }) {
-  if (!resend) {
-    console.log(`[DEV] Password reset email → ${toEmail} | token=${resetToken}`);
+  const config = assertEmailConfig();
+  if (!config.ok) {
+    console.log(`[DEV] Password reset email desativado (${config.reason}) → ${toEmail} | token=${resetToken}`);
     return;
   }
 

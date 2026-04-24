@@ -1,227 +1,119 @@
-# PLANNING PROMPT
+# F3F Task System — Guia para Claude
 
-Quero que você atue como um CTO de startup de tecnologia, Senior Product Manager e Arquiteto de Software SaaS.
-
-Sua missão agora é criar o planejamento completo do projeto **F3F TASK SYSTEM**.
-
-Importante:
-
-Este projeto NÃO é ERP.  
-Este projeto NÃO é sistema financeiro.  
-Este projeto NÃO precisa de módulos contábeis, vendas ou finanças.
-
-Este projeto é exclusivamente:
-
-# SISTEMA DE TAREFAS + GERENCIAMENTO INTERNO + PRODUTIVIDADE
-
-Foco total em organização operacional da empresa.
+Sistema interno de gestão de tarefas e produtividade da empresa F3F.
+Deploy em produção: https://f3f-task-system.vercel.app
 
 ---
 
-# O QUE O SISTEMA PRECISA RESOLVER
+## Stack
 
-- Organizar demandas internas
-- Delegar responsáveis
-- Controlar prazos
-- Acompanhar progresso
-- Criar processos padronizados
-- Melhorar produtividade
-- Reduzir falhas internas
-- Dar clareza para equipe
-- Escalar operação sem bagunça
-
----
-
-# REFERÊNCIAS
-
-Uma mistura entre:
-
-- Asana
-- Trello
-- ClickUp
-- Notion
-
-Porém mais simples, mais rápido e adaptado ao fluxo real da empresa.
+- **Framework:** Next.js 16 (App Router, Server Actions)
+- **Banco de dados:** PostgreSQL via Supabase (só o banco — Auth do Supabase NÃO é usado)
+- **ORM:** Prisma
+- **Autenticação:** bcryptjs + iron-session (sessão no cookie)
+- **Email:** Resend (`src/lib/email.ts`)
+- **Storage (avatares):** Supabase Storage via `supabaseAdmin`
+- **UI:** Tailwind CSS v4 + shadcn/ui + Lucide icons
+- **Deploy:** Vercel
 
 ---
 
-# SUA MISSÃO
+## Autenticação — IMPORTANTE
 
-Planejar o produto inteiro.
+O Supabase Auth foi completamente removido. O sistema usa:
 
-Não quero código agora.
+1. **Login** → `prisma.user.findUnique` + `bcryptjs.compare` contra `passwordHash`
+2. **Sessão** → `iron-session` (cookie encriptado com `SESSION_SECRET`)
+3. **Logout** → `session.destroy()`
+4. **Reset de senha** → token gerado com `crypto.randomBytes`, salvo em `PasswordResetToken`, link enviado via Resend
+5. **Convite de usuário** → senha temporária gerada, hash salvo no banco, credenciais enviadas via Resend
 
-Quero arquitetura estratégica e planejamento inteligente.
-
----
-
-# O QUE VOCÊ DEVE ENTREGAR
-
-## 1. VISÃO GERAL DO PRODUTO
-
-Explique:
-
-- O que será o sistema
-- Como funcionará no dia a dia
-- Por que será útil
-- Como aumenta produtividade
+**Nunca usar** `supabase.auth.*` para login, logout, reset de senha ou convites.
+O `supabaseAdmin` existe apenas para Supabase Storage (upload de avatares).
 
 ---
 
-## 2. MÓDULOS PRINCIPAIS
+## Emails
 
-Planeje somente módulos relevantes.
+Todos os emails são enviados via **Resend** (`src/lib/email.ts`):
 
-Exemplo:
+- `sendInviteEmail` — convite de novo membro com senha temporária
+- `sendPasswordResetEmail` — link de reset de senha
+- `sendTaskAssignedEmail` — notificação de tarefa atribuída
+- `sendDueReminderEmail` — lembrete de prazo
 
-- Login / autenticação
-- Dashboard
-- Gestão de tarefas
-- Templates de tarefas
-- Equipes
-- Responsáveis
-- Prazos
-- Progresso
-- Relatórios operacionais
-- Notificações
-- Histórico de ações
-- Configurações
+Variáveis de ambiente necessárias:
+```
+RESEND_API_KEY=re_...
+RESEND_FROM_EMAIL=F3F Tasks <noreply@dominio.com>
+```
+
+Endpoint de teste: `GET /api/test-email`
 
 ---
 
-## 3. PERFIS DE USUÁRIO
+## Estrutura de pastas relevante
 
-Defina:
-
-### Admin
-
-Controle total
-
-### Gestor
-
-Cria tarefas / acompanha equipe
-
-### Colaborador
-
-Executa tarefas
-
----
-
-## 4. MVP IDEAL
-
-Defina o que lançar primeiro.
-
-Separar:
-
-### Essencial agora
-
-### Importante depois
-
-### Futuro
+```
+src/
+  lib/
+    auth.ts          — loginUser, logoutUser, requireAuth, requireRole
+    email.ts         — todas as funções de envio de email (Resend)
+    prisma.ts        — cliente Prisma singleton
+    session.ts       — configuração iron-session
+    supabase/
+      admin.ts       — supabaseAdmin (APENAS para Storage)
+      server.ts      — cliente Supabase SSR (não usar para auth)
+  app/
+    (auth)/
+      login/         — página e action de login (bcrypt)
+      esqueci-senha/ — solicitar reset (gera token + envia Resend)
+      redefinir-senha/[token]/ — validar token e salvar nova senha
+    (dashboard)/
+      equipe/        — convidar/gerenciar membros (envia email via Resend)
+      configuracoes/ — trocar senha (bcrypt, sem Supabase)
+      minha-conta/   — troca obrigatória de senha no 1º acesso
+    @modal/(.)tarefas/[id]/ — intercepting route: abre tarefa como modal
+    auth/callback/   — DESATIVADO (era para Supabase OAuth, redireciona para /login)
+```
 
 ---
 
-## 5. ROADMAP
+## Banco de dados
 
-### Fase 1 — MVP funcional
+Modelos principais do Prisma:
 
-### Fase 2 — Melhorias operacionais
-
-### Fase 3 — Escala
-
-### Fase 4 — Produto premium completo
-
----
-
-## 6. ARQUITETURA IDEAL
-
-Sem prender stack.
-
-Defina a melhor estrutura para:
-
-- Performance
-- Escalabilidade
-- Segurança
-- Facilidade de manutenção
-- Crescimento futuro
+- `Company` — empresa/tenant
+- `User` — usuário com `passwordHash`, `mustChangePassword`, `isActive`
+- `Task` — tarefa com status, priority, assignee, dueDate, checklist, subtasks
+- `Project` — projeto agrupador de tarefas
+- `PasswordResetToken` — token de reset com `expiresAt` e `usedAt`
+- `Template` / `TemplateTask` — templates de processo
+- `Notification`, `ActivityLog` — auditoria
 
 ---
 
-## 7. BANCO DE DADOS
+## Variáveis de ambiente obrigatórias
 
-Planeje entidades principais:
-
-- users
-- roles
-- teams
-- tasks
-- templates
-- template_items
-- task_comments
-- activity_logs
-- notifications
-
-Explique lógica entre elas.
+```
+DATABASE_URL=          # PostgreSQL Supabase (pooler)
+DIRECT_URL=            # PostgreSQL Supabase (direct, para migrations)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY= # só para Storage
+SESSION_SECRET=        # mínimo 32 chars
+NEXT_PUBLIC_APP_URL=https://f3f-task-system.vercel.app
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+```
 
 ---
 
-## 8. UX / UI
+## Regras de negócio importantes
 
-Planeje:
-
-- Dashboard perfeito
-- Navegação simples
-- Fluxo rápido para criar tarefas
-- Visual premium
-- Mobile excelente
-- Poucos cliques
-
----
-
-## 9. AUTOMAÇÕES IMPORTANTES
-
-Sugira:
-
-- Tarefa atrasada alerta
-- Lembrete de prazo
-- Tarefa recorrente
-- Resumo diário
-- Cobrança automática
-- Notificação conclusão
-
----
-
-## 10. ESCALABILIDADE
-
-Como nascer pronto para:
-
-- 10 usuários
-- 100 usuários
-- 1000 usuários
-- Multiempresa no futuro
-
----
-
-## 11. ERROS A EVITAR
-
-Liste erros comuns em sistemas de tarefas ruins.
-
----
-
-## 12. RECOMENDAÇÃO FINAL
-
-Se fosse seu projeto, como construiria da forma mais inteligente possível?
-
----
-
-# FORMATO DE RESPOSTA
-
-Quero resposta profunda, estratégica e profissional.
-
-Como documento interno de empresa séria.
-
-Nada genérico.
-
-Nada superficial.
-
-Pense como CTO real.
+- Roles: `admin` > `manager` > `supervisor` > `member`
+- Admin e manager podem criar tarefas; member só executa
+- Usuário novo recebe `mustChangePassword: true` → forçado a trocar no 1º acesso
+- Tarefas podem ter subtarefas (campo `parentTaskId`)
+- Tarefas dentro de projetos abrem como **modal** via intercepting route (`@modal`)
+- `router.back()` no modal volta para o projeto caso `projectId` exista, senão volta no histórico

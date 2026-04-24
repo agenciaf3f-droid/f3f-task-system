@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { sendInviteEmail } from "@/lib/email";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -12,6 +13,11 @@ const createUserSchema = z.object({
   role: z.enum(["admin", "manager", "supervisor", "member"]),
   sectorId: z.string().uuid().optional().or(z.literal("")),
 });
+
+// Gerar senha temporária aleatória
+function generateTempPassword(): string {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
 
 export async function createUserAction(
   _prev: { error?: string; success?: boolean },
@@ -52,36 +58,41 @@ export async function createUserAction(
   if (existing) {
     await prisma.sectorMember.deleteMany({ where: { userId: existing.id } });
     await prisma.user.delete({ where: { id: existing.id } });
-    // Deletar também do Supabase Auth para poder re-convidar
-    const supabaseUsers = await supabaseAdmin.auth.admin.listUsers();
-    const supabaseUser = supabaseUsers.data.users.find((u) => u.email === emailLower);
-    if (supabaseUser) {
-      await supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
-    }
   }
+
+  // Gerar senha temporária
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hash(tempPassword, 10);
+
+  // Buscar nome da empresa
+  const company = await prisma.company.findUnique({
+    where: { id: user.companyId },
+    select: { name: true },
+  });
 
   const newUser = await prisma.user.create({
     data: {
       companyId: user.companyId,
       name: parsed.data.name,
       email: emailLower,
-      passwordHash: "supabase-auth",
+      passwordHash,
       role: parsed.data.role,
       mustChangePassword: true,
     },
   });
 
-  const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(emailLower, {
-    redirectTo: `${appUrl}/auth/callback`,
-    data: { name: parsed.data.name },
-  });
-
-  if (inviteError) {
+  // Enviar convite via Resend
+  try {
+    await sendInviteEmail({
+      toEmail: emailLower,
+      toName: parsed.data.name,
+      tempPassword,
+      invitedByName: user.name,
+      companyName: company?.name || "sua empresa",
+    });
+  } catch (error) {
     await prisma.user.delete({ where: { id: newUser.id } });
-    console.error("[invite] Supabase error:", inviteError);
-    if (inviteError.message?.includes("rate limit")) {
-      return { error: "Limite de emails atingido. Aguarde alguns minutos e tente novamente." };
-    }
+    console.error("[invite] Email error:", error);
     return { error: "Erro ao enviar convite. Tente novamente." };
   }
 
@@ -130,13 +141,6 @@ export async function deleteUserAction(targetUserId: string): Promise<{ error?: 
 
   if (target._count.assignedTasks > 0) {
     return { error: `Este membro tem ${target._count.assignedTasks} tarefa(s) ativa(s). Reatribua-as antes de excluir.` };
-  }
-
-  // Remove from Supabase Auth
-  const { data: authUser } = await supabaseAdmin.auth.admin.listUsers();
-  const supaUser = authUser.users.find((u) => u.email === target.email);
-  if (supaUser) {
-    await supabaseAdmin.auth.admin.deleteUser(supaUser.id);
   }
 
   // Reassign records with Restrict FK before hard delete

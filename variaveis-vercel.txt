@@ -1,17 +1,25 @@
-DATABASE_URL=postgresql://postgres.ssjrodoncogeluelurav:AgenciaF3f%2A@aws-1-us-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+DATABASE_URL=cole-aqui-a-connection-string-do-postgres
 
-DIRECT_URL=postgresql://postgres:AgenciaF3f%2A@db.ssjrodoncogeluelurav.supabase.co:5432/postgres
+DIRECT_URL=cole-aqui-a-direct-url-do-postgres
 
-NEXT_PUBLIC_SUPABASE_URL=https://ssjrodoncogeluelurav.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
 
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzanJvZG9uY29nZWx1ZWx1cmF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNTc2NDMsImV4cCI6MjA5MTkzMzY0M30.nRitc0EkZN7jnZQdVUCVmUzV6l9IAIvzNbKEXvJ9XQg
+NEXT_PUBLIC_SUPABASE_ANON_KEY=cole-aqui-o-anon-key
 
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzanJvZG9uY29nZWx1ZWx1cmF2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjM1NzY0MywiZXhwIjoyMDkxOTMzNjQzfQ.8-487qPDYwL2SZu-wddY65PXxjVPGceDdJ_Ankt56fA
+SUPABASE_SERVICE_ROLE_KEY=cole-aqui-a-service-role-key
 
-SESSION_SECRET=aAJWD/Y8h3r7dmITy2kgVX9sTRvtN4uvRfYlzeTD2N/jYCngsVB8XujPryjkuOnJ
+SESSION_SECRET=troque-por-um-segredo-forte-com-32-caracteres-ou-mais
 
-NEXT_PUBLIC_APP_URL=https://f3f-task-system-three.vercel.app
+NEXT_PUBLIC_APP_URL=https://f3f-task-system.vercel.app
 
 NODE_ENV=production
 
-RESEND_API_KEY=re_Q4eKSpna_2B9eqZbTe1uEhxb9Cwh6YKVV
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+RESEND_FROM_EMAIL=F3F Tasks <noreply@agenciaf3f.com.br>
+
+ENABLE_EMAIL_DEBUG_ROUTES=false
+
+EMAIL_DEBUG_TOKEN=troque-por-um-token-forte-se-for-usar-debug
+
+EMAIL_DEBUG_TO=agenciaf3f@gmail.com

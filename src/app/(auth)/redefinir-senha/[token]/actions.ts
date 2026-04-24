@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -26,19 +26,43 @@ export async function resetPasswordAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  // Validar token
+  const resetToken = await prisma.passwordResetToken.findUnique({
+    where: { token: _token },
+    include: { user: true },
+  });
 
-  if (error) return { error: "Link expirado. Solicite um novo link de redefinição." };
-
-  // Clear mustChangePassword flag if set
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user?.email) {
-    await prisma.user.updateMany({
-      where: { email: user.email },
-      data: { mustChangePassword: false },
-    });
+  if (!resetToken) {
+    return { error: "Link de reset inválido ou expirado." };
   }
+
+  // Verificar expiração
+  if (resetToken.expiresAt < new Date()) {
+    return { error: "Link expirado. Solicite um novo link de redefinição." };
+  }
+
+  // Verificar se já foi usado
+  if (resetToken.usedAt) {
+    return { error: "Este link já foi utilizado." };
+  }
+
+  // Hash da nova senha
+  const passwordHash = await hash(parsed.data.password, 10);
+
+  // Atualizar senha e marcar token como usado
+  await Promise.all([
+    prisma.user.update({
+      where: { id: resetToken.userId },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+      },
+    }),
+    prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    }),
+  ]);
 
   redirect("/login");
 }

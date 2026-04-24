@@ -4,10 +4,21 @@ import { useRouter } from "next/navigation";
 import { useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 
-export function ModalClient({ children }: { children: React.ReactNode }) {
+interface ModalClientProps {
+  children: React.ReactNode;
+  projectId?: string;
+}
+
+export function ModalClient({ children, projectId }: ModalClientProps) {
   const router = useRouter();
 
-  const onClose = useCallback(() => router.back(), [router]);
+  const onClose = useCallback(() => {
+    if (projectId) {
+      router.push(`/projetos/${projectId}`);
+    } else {
+      router.back();
+    }
+  }, [router, projectId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

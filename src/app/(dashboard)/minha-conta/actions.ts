@@ -2,19 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
+import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, requireAuth } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-
-const changeSchema = z.object({
-  newPassword: z.string().min(6, "Mínimo 6 caracteres"),
-  confirmPassword: z.string(),
-}).refine((d) => d.newPassword === d.confirmPassword, {
-  message: "As senhas não coincidem",
-  path: ["confirmPassword"],
-});
 
 export async function forceChangePasswordAction(
   _prev: { error?: string },
@@ -23,20 +14,17 @@ export async function forceChangePasswordAction(
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  const parsed = changeSchema.safeParse({
-    newPassword: formData.get("newPassword"),
-    confirmPassword: formData.get("confirmPassword"),
-  });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const newPassword = formData.get("newPassword") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
 
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.newPassword });
+  if (!newPassword || newPassword.length < 6) return { error: "Mínimo 6 caracteres." };
+  if (newPassword !== confirmPassword) return { error: "As senhas não coincidem." };
 
-  if (error) return { error: "Erro ao atualizar senha. Tente novamente." };
+  const passwordHash = await hash(newPassword, 10);
 
   await prisma.user.update({
     where: { id: user.userId },
-    data: { mustChangePassword: false },
+    data: { passwordHash, mustChangePassword: false },
   });
 
   redirect("/dashboard");
@@ -58,7 +46,6 @@ export async function updateAvatarAction(
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
 
-  // Garante que o bucket existe (ignora erro se já existir)
   await supabaseAdmin.storage.createBucket("avatars", { public: true }).catch(() => {});
 
   const { error: uploadError } = await supabaseAdmin.storage
@@ -68,7 +55,7 @@ export async function updateAvatarAction(
   if (uploadError) return { error: "Erro ao fazer upload. Tente novamente." };
 
   const { data } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
-  const avatarUrl = `${data.publicUrl}?t=${Date.now()}`; // cache bust
+  const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
 
   await prisma.user.update({
     where: { id: user.userId },

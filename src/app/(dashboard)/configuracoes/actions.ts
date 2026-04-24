@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { compare, hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Nome muito curto").max(100),
@@ -71,19 +71,23 @@ export async function changePasswordAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
-  // Verify current password via Supabase
-  const supabase = await createSupabaseServerClient();
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: parsed.data.currentPassword,
+  // Verificar senha atual no banco
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.userId },
+    select: { passwordHash: true },
   });
-  if (signInError) return { error: "Senha atual incorreta." };
 
-  // Update password via Supabase
-  const { error: updateError } = await supabase.auth.updateUser({
-    password: parsed.data.newPassword,
+  if (!dbUser) return { error: "Usuário não encontrado." };
+
+  const passwordOk = await compare(parsed.data.currentPassword, dbUser.passwordHash);
+  if (!passwordOk) return { error: "Senha atual incorreta." };
+
+  // Salvar nova senha com hash
+  const passwordHash = await hash(parsed.data.newPassword, 10);
+  await prisma.user.update({
+    where: { id: user.userId },
+    data: { passwordHash },
   });
-  if (updateError) return { error: "Erro ao atualizar senha. Tente novamente." };
 
   return { success: "Senha alterada com sucesso." };
 }

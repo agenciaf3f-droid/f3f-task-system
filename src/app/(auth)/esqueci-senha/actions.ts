@@ -1,7 +1,8 @@
 "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { sendPasswordResetEmail } from "@/lib/email";
 
 export type ForgotState = { error?: string; success?: boolean };
 
@@ -19,11 +20,24 @@ export async function forgotPasswordAction(
   // Responde sucesso mesmo se email não existir (evitar enumeração)
   if (!user) return { success: true };
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const supabase = await createSupabaseServerClient();
+  // Gerar token seguro (64 caracteres hex)
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hora
 
-  await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appUrl}/auth/callback?next=/redefinir-senha/reset`,
+  // Salvar token no banco
+  await prisma.passwordResetToken.create({
+    data: {
+      userId: user.id,
+      token,
+      expiresAt,
+    },
+  });
+
+  // Enviar email com link de reset
+  await sendPasswordResetEmail({
+    toEmail: user.email,
+    toName: user.name,
+    resetToken: token,
   });
 
   return { success: true };
