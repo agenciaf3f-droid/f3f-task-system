@@ -17,8 +17,8 @@ export function ModalClient({ children, projectId }: ModalClientProps) {
       // Se tem projeto, volta direto para ele (não depende do histórico)
       router.push(`/projetos/${projectId}`);
     } else {
-      // Se não tem projeto, volta para tarefas gerais
-      router.push("/tarefas");
+      // Se não tem projeto, volta para o histórico anterior
+      router.back();
     }
   }, [router, projectId]);
 

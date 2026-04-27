@@ -43,6 +43,12 @@ export default async function TaskModalPage({
   if (!task) notFound();
 
   const projectId = sp.projectId || task.projectId;
+
+  if (!projectId) {
+    console.error("❌ projectId MISSING - query:", sp.projectId, "task:", task.projectId);
+  } else {
+    console.log("✅ projectId OK:", projectId);
+  }
   const completedItems = task.checklistItems.filter((i) => i.isDone).length;
   const totalItems = task.checklistItems.length;
   const canEdit =
