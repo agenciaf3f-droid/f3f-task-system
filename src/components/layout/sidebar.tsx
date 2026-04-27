@@ -13,6 +13,7 @@ import {
   History,
   FolderKanban,
   Zap,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
@@ -27,6 +28,7 @@ interface NavItem {
 const MAIN_NAV: NavItem[] = [
   { label: "Dashboard",  href: "/dashboard",  icon: LayoutDashboard },
   { label: "Projetos",   href: "/projetos",   icon: FolderKanban    },
+  { label: "Calendário", href: "/calendario", icon: CalendarDays    },
   { label: "Templates",  href: "/templates",  icon: FileText        },
 ];
 

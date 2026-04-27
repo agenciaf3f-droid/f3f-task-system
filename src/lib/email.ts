@@ -94,12 +94,13 @@ export async function sendInviteEmail({
     ${primaryButton(`${APP_URL}/login`, "Acessar o sistema")}
   `));
 
-  await client.emails.send({
+  const { error } = await client.emails.send({
     from,
     to: toEmail,
     subject: `Você foi convidado para ${companyName} — F3F Tasks`,
     html,
   });
+  if (error) throw new Error(`Resend: ${error.message}`);
 }
 
 // ─── Task assigned ────────────────────────────────────────────
@@ -159,12 +160,13 @@ export async function sendTaskAssignedEmail({
     ${primaryButton(`${APP_URL}/tarefas/${taskId}`, "Ver tarefa")}
   `));
 
-  await client.emails.send({
+  const { error } = await client.emails.send({
     from,
     to: toEmail,
     subject: `Tarefa atribuída: ${taskTitle}`,
     html,
   });
+  if (error) throw new Error(`Resend: ${error.message}`);
 }
 
 // ─── Due date reminder ────────────────────────────────────────
@@ -217,12 +219,13 @@ export async function sendDueReminderEmail({
     ${primaryButton(`${APP_URL}/tarefas`, "Ver todas as tarefas")}
   `));
 
-  await client.emails.send({
+  const { error } = await client.emails.send({
     from,
     to: toEmail,
     subject: `${overdue.length > 0 ? `${overdue.length} tarefa${overdue.length !== 1 ? "s" : ""} atrasada${overdue.length !== 1 ? "s" : ""} — ` : ""}F3F Tasks`,
     html,
   });
+  if (error) throw new Error(`Resend: ${error.message}`);
 }
 
 // ─── Password reset ───────────────────────────────────────────
@@ -257,10 +260,11 @@ export async function sendPasswordResetEmail({
     </p>
   `));
 
-  await client.emails.send({
+  const { error } = await client.emails.send({
     from,
     to: toEmail,
     subject: "Redefinição de senha — F3F Tasks",
     html,
   });
+  if (error) throw new Error(`Resend: ${error.message}`);
 }

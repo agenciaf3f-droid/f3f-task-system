@@ -124,7 +124,10 @@ model User {
   activityLogs      ActivityLog[]
   permissions       Permission[]
   projects          Project[]
-  passwordResetTokens PasswordResetToken[]
+  passwordResetTokens  PasswordResetToken[]
+  calendarToken        String?               @unique @map("calendar_token") @db.VarChar(32)
+  calendarAvailability CalendarAvailability[]
+  meetings             Meeting[]
 
   @@index([companyId])
   @@index([email])
@@ -485,4 +488,41 @@ model Permission {
   @@unique([userId, resource, action])
   @@index([companyId])
   @@map("permissions")
+}
+
+// ============================================================
+// CALENDAR
+// ============================================================
+
+model CalendarAvailability {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  dayOfWeek Int      @map("day_of_week") // 0=Dom, 1=Seg, ..., 6=Sáb
+  startTime String   @map("start_time") @db.VarChar(5) // "09:00"
+  endTime   String   @map("end_time") @db.VarChar(5)   // "18:00"
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dayOfWeek])
+  @@index([userId])
+  @@map("calendar_availability")
+}
+
+model Meeting {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      String   @db.VarChar(10)  // "YYYY-MM-DD"
+  startTime String   @map("start_time") @db.VarChar(5) // "09:00"
+  endTime   String   @map("end_time") @db.VarChar(5)   // "09:30"
+  status         String   @default("confirmed") @db.VarChar(20)
+  googleEventId  String?  @map("google_event_id")
+  bookedAt       DateTime @default(now()) @map("booked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date, startTime])
+  @@index([userId, date])
+  @@map("meetings")
 }
