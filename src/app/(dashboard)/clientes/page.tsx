@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Briefcase, Mail, Phone, FolderKanban, ListTodo } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
+import { DeleteClientButton } from "./delete-client-button";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 export const metadata = { title: "Clientes" };
@@ -61,15 +62,23 @@ export default async function ClientesPage() {
             >
               <div className="h-1.5 w-full" style={{ backgroundColor: client.color ?? "#6366f1" }} />
 
-              <div className="absolute top-3 right-3 z-10">
+              <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
                 <EditClientDialog client={client} />
+                {user.role === "admin" && (
+                  <DeleteClientButton
+                    clientId={client.id}
+                    clientName={client.name}
+                    projectCount={client._count.projects}
+                    taskCount={client.activeTasks}
+                  />
+                )}
               </div>
 
               <Link
                 href={`/projetos?clientId=${client.id}`}
                 className="p-5 flex flex-col gap-3 flex-1"
               >
-                <div className="flex items-center gap-3 pr-8">
+                <div className="flex items-center gap-3 pr-16">
                   <UserAvatar
                     name={client.name}
                     src={client.avatarUrl}

@@ -136,10 +136,30 @@ export async function removeClientAvatarAction(clientId: string): Promise<{ erro
 
 export async function deleteClientAction(clientId: string) {
   const user = await requireAuth();
-  await prisma.client.updateMany({
-    where: { id: clientId, companyId: user.companyId },
-    data: { deletedAt: new Date() },
+  const now = new Date();
+
+  const projects = await prisma.project.findMany({
+    where: { clientId, companyId: user.companyId, deletedAt: null },
+    select: { id: true },
   });
+  const projectIds = projects.map((p) => p.id);
+
+  await prisma.$transaction([
+    prisma.task.updateMany({
+      where: { projectId: { in: projectIds }, deletedAt: null },
+      data: { deletedAt: now },
+    }),
+    prisma.project.updateMany({
+      where: { id: { in: projectIds } },
+      data: { deletedAt: now },
+    }),
+    prisma.client.updateMany({
+      where: { id: clientId, companyId: user.companyId },
+      data: { deletedAt: now },
+    }),
+  ]);
+
+  revalidatePath("/clientes");
   revalidatePath("/projetos");
 }
 

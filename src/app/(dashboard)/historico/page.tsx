@@ -4,14 +4,14 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Activity, User, FileText, MessageSquare, CheckSquare, Trash2 } from "lucide-react";
 
-const ACTION_LABELS: Record<string, { label: string; color: string }> = {
-  "task.created":        { label: "Tarefa criada",          color: "text-green-600"  },
-  "task.status_changed": { label: "Status alterado",        color: "text-blue-600"   },
-  "task.deleted":        { label: "Tarefa excluída",        color: "text-red-600"    },
-  "task.commented":      { label: "Comentário adicionado",  color: "text-blue-600" },
-  "task.updated":        { label: "Tarefa atualizada",      color: "text-amber-600"  },
-  "template.created":    { label: "Template criado",        color: "text-green-600"  },
-  "template.activated":  { label: "Template ativado",       color: "text-blue-600"   },
+const STATIC_LABELS: Record<string, { label: string; color: string }> = {
+  "task.created":        { label: "Criou tarefa",            color: "text-green-600"  },
+  "task.deleted":        { label: "Excluiu tarefa",          color: "text-red-600"    },
+  "task.commented":      { label: "Comentou na tarefa",      color: "text-blue-600"   },
+  "task.updated":        { label: "Atualizou tarefa",        color: "text-amber-600"  },
+  "project.created":     { label: "Criou projeto",           color: "text-green-600"  },
+  "template.created":    { label: "Criou template",          color: "text-green-600"  },
+  "template.activated":  { label: "Ativou template",         color: "text-blue-600"   },
 };
 
 const ACTION_ICONS: Record<string, React.ElementType> = {
@@ -20,19 +20,33 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   "task.deleted":        Trash2,
   "task.commented":      MessageSquare,
   "task.updated":        FileText,
+  "project.created":     FileText,
   "template.created":    FileText,
   "template.activated":  FileText,
 };
 
-function formatActionDetail(action: string, log: { oldValue: unknown; newValue: unknown }) {
+const STATUS_TRANSITION_LABELS: Record<string, { label: string; color: string }> = {
+  done:         { label: "Concluiu tarefa",  color: "text-green-600"   },
+  in_progress:  { label: "Iniciou tarefa",   color: "text-blue-600"    },
+  todo:         { label: "Reabriu tarefa",   color: "text-neutral-600" },
+  blocked:      { label: "Bloqueou tarefa",  color: "text-red-600"     },
+  cancelled:    { label: "Cancelou tarefa",  color: "text-neutral-500" },
+  review:       { label: "Enviou para revisão", color: "text-amber-600" },
+};
+
+function getActionMeta(action: string, log: { oldValue: unknown; newValue: unknown }) {
   if (action === "task.status_changed") {
-    const o = log.oldValue as { status?: string } | null;
     const n = log.newValue as { status?: string } | null;
-    if (o?.status && n?.status) return `${o.status} → ${n.status}`;
+    if (n?.status && STATUS_TRANSITION_LABELS[n.status]) return STATUS_TRANSITION_LABELS[n.status];
+    return { label: "Status alterado", color: "text-blue-600" };
   }
-  if (action === "task.created") {
-    const n = log.newValue as { title?: string } | null;
-    return n?.title ?? null;
+  return STATIC_LABELS[action] ?? { label: action, color: "text-neutral-600" };
+}
+
+function formatActionDetail(action: string, log: { oldValue: unknown; newValue: unknown }) {
+  if (action === "task.created" || action === "project.created" || action === "template.created") {
+    const n = log.newValue as { title?: string; name?: string } | null;
+    return n?.title ?? n?.name ?? null;
   }
   if (action === "task.deleted") {
     const o = log.oldValue as { title?: string } | null;
@@ -72,7 +86,7 @@ export default async function HistoricoPage() {
           <div className="absolute left-5 top-0 bottom-0 w-px bg-neutral-100" />
           <div className="flex flex-col gap-0">
             {logs.map((log) => {
-              const meta = ACTION_LABELS[log.action] ?? { label: log.action, color: "text-neutral-600" };
+              const meta = getActionMeta(log.action, log);
               const Icon = ACTION_ICONS[log.action] ?? Activity;
               const detail = formatActionDetail(log.action, log);
 
