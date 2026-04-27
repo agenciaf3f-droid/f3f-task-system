@@ -15,11 +15,14 @@ import Link from "next/link";
 
 export default async function TaskModalPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ projectId?: string }>;
 }) {
   const user = await requireAuth();
   const { id } = await params;
+  const sp = await searchParams;
 
   const task = await prisma.task.findFirst({
     where: { id, companyId: user.companyId, deletedAt: null },
@@ -39,6 +42,7 @@ export default async function TaskModalPage({
 
   if (!task) notFound();
 
+  const projectId = sp.projectId || task.projectId;
   const completedItems = task.checklistItems.filter((i) => i.isDone).length;
   const totalItems = task.checklistItems.length;
   const canEdit =
@@ -48,7 +52,7 @@ export default async function TaskModalPage({
     task.createdById === user.userId;
 
   return (
-    <ModalClient projectId={task.projectId || undefined}>
+    <ModalClient projectId={projectId || undefined}>
       {/* Header card */}
       <div className="bg-white border border-neutral-200 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4 mb-4">

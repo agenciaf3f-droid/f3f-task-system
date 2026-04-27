@@ -48,9 +48,10 @@ type UserLite = { id: string; name: string };
 interface TaskListProps {
   tasks: Task[];
   users: UserLite[];
+  projectId: string;
 }
 
-export function TaskList({ tasks, users }: TaskListProps) {
+export function TaskList({ tasks, users, projectId }: TaskListProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   function toggleCollapse(id: string) {
@@ -102,7 +103,7 @@ export function TaskList({ tasks, users }: TaskListProps) {
                 <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
                 {/* Title — clique abre modal via intercepting route */}
-                <Link href={`/tarefas/${task.id}`} className="flex-1 min-w-0 px-1 py-1">
+                <Link href={`/tarefas/${task.id}?projectId=${projectId}`} className="flex-1 min-w-0 px-1 py-1">
                   <span className={`text-sm font-medium block truncate ${
                     task.status === "done" ? "line-through text-neutral-400" : "text-neutral-800 hover:text-blue-700"
                   } transition-colors`}>
@@ -143,7 +144,7 @@ export function TaskList({ tasks, users }: TaskListProps) {
                       <div key={sub.id} className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
                         <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                        <Link href={`/tarefas/${sub.id}`} className="flex-1 min-w-0 px-1 py-0.5">
+                        <Link href={`/tarefas/${sub.id}?projectId=${projectId}`} className="flex-1 min-w-0 px-1 py-0.5">
                           <span className={`text-xs block truncate ${
                             sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700 hover:text-blue-700"
                           } transition-colors`}>

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unsealData } from "iron-session";
 import type { SessionData } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/favicon.ico", "/_next", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/favicon.ico", "/_next", "/api/auth", "/api/test-email"];
 
 const sessionSecret = process.env.SESSION_SECRET!;
 const COOKIE_NAME = "f3f_session";

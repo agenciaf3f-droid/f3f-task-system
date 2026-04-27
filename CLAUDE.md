@@ -1,53 +1,65 @@
-# F3F Task System
+# CLAUDE.md
 
-Sistema interno de tarefas. Deploy: https://f3f-task-system.vercel.app
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-## Stack
-Next.js 16 (App Router) · Prisma + Postgres (Supabase) · iron-session + bcryptjs · Resend · Tailwind v4 · shadcn/ui · Vercel
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-## Auth — REGRA CRÍTICA
-**NUNCA usar `supabase.auth.*`.** Auth é 100% bcryptjs + iron-session.
-- Login: `prisma.user.findUnique` + `compare(senha, passwordHash)` em `src/lib/auth.ts`
-- Sessão: cookie iron-session (`SESSION_SECRET`)
-- Reset senha: token em `PasswordResetToken` (1h validade) + `sendPasswordResetEmail`
-- Convite: senha temporária + hash no banco + `sendInviteEmail`
-- Troca senha: bcrypt direto no banco
+## 1. Think Before Coding
 
-`supabaseAdmin` (`src/lib/supabase/admin.ts`) existe SÓ para Storage de avatares.
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-## Email — Resend
-Tudo em `src/lib/email.ts`. Funções: `sendInviteEmail`, `sendPasswordResetEmail`, `sendTaskAssignedEmail`, `sendDueReminderEmail`.
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-Padrão obrigatório dentro de cada função (TypeScript narrowing):
-```ts
-const config = getEmailConfig();
-if (!config.ok) { console.log(...); return; }
-const { client, from } = config;
-await client.emails.send({ from, to, subject, html });
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-Vars: `RESEND_API_KEY`, `RESEND_FROM_EMAIL`. Teste: `GET /api/test-email`.
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## Estrutura
-```
-src/lib/{auth,email,prisma,session}.ts
-src/lib/supabase/admin.ts          (só Storage)
-src/app/(auth)/{login,esqueci-senha,redefinir-senha/[token]}
-src/app/(dashboard)/{equipe,configuracoes,minha-conta,projetos,tarefas}
-src/app/(dashboard)/@modal/(.)tarefas/[id]   (intercepting route → modal)
-src/app/auth/callback                         (DESATIVADO, redirect /login)
-```
+---
 
-## Modelos Prisma chave
-`User` (passwordHash, mustChangePassword, isActive) · `PasswordResetToken` (token, expiresAt, usedAt) · `Task` (parentTaskId p/ subtarefa, projectId) · `Project` · `Company`
-
-## Roles
-admin > manager > supervisor > member. Admin/manager criam tarefas; member executa.
-
-## Vars obrigatórias
-`DATABASE_URL` `DIRECT_URL` `NEXT_PUBLIC_SUPABASE_URL` `NEXT_PUBLIC_SUPABASE_ANON_KEY` `SUPABASE_SERVICE_ROLE_KEY` `SESSION_SECRET` `NEXT_PUBLIC_APP_URL` `RESEND_API_KEY` `RESEND_FROM_EMAIL`
-
-## Comportamentos importantes
-- Usuário com `mustChangePassword: true` é forçado a `/minha-conta/senha`
-- Modal de tarefa: `router.push(/projetos/${projectId})` se houver projeto, senão `router.back()`
-- Antes de fazer mudanças grandes: rodar `npm run typecheck` (NÃO confie no narrowing de const de módulo — use vars locais após guard clause)
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

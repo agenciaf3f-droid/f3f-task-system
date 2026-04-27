@@ -14,9 +14,11 @@ export function ModalClient({ children, projectId }: ModalClientProps) {
 
   const onClose = useCallback(() => {
     if (projectId) {
+      // Se tem projeto, volta direto para ele (não depende do histórico)
       router.push(`/projetos/${projectId}`);
     } else {
-      router.back();
+      // Se não tem projeto, volta para tarefas gerais
+      router.push("/tarefas");
     }
   }, [router, projectId]);
 

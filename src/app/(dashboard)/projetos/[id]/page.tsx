@@ -242,7 +242,7 @@ export default async function ProjetoDetailPage({
           </div>
 
           {/* Task list — client component com drawer, collapse e colunas alinhadas */}
-          <TaskList tasks={sortedTasks} users={users} />
+          <TaskList tasks={sortedTasks} users={users} projectId={id} />
         </div>
       )}
 

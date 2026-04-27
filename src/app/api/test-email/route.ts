@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   }
 
   const debugToken = process.env.EMAIL_DEBUG_TOKEN;
-  if (debugToken) {
+  if (debugToken && process.env.NODE_ENV === "production") {
     const url = new URL(request.url);
     const providedToken = url.searchParams.get("token");
     if (providedToken !== debugToken) {
