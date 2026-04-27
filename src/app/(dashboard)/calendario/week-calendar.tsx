@@ -130,7 +130,7 @@ export function WeekCalendar({
   const availableDays = new Set(availability.map((a) => a.dayOfWeek));
 
   return (
-    <div className="-mx-8 py-2">
+    <div className="py-2">
       {/* Header */}
       <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
         <div className="flex items-center gap-4">
