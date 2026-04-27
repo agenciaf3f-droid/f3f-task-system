@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { CheckSquare, AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [state, action, isPending] = useActionState<LoginState, FormData>(loginAction, {});
@@ -17,9 +17,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center">
-              <CheckSquare className="w-5 h-5 text-white" strokeWidth={2} />
-            </div>
+            <img src="/logo.png" alt="F3F" className="w-10 h-10 object-contain" />
             <span className="text-xl font-semibold tracking-tight text-neutral-900">
               F3F Tasks
             </span>

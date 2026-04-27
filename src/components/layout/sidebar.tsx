@@ -12,7 +12,6 @@ import {
   LogOut,
   History,
   FolderKanban,
-  Zap,
   CalendarDays,
   Briefcase,
 } from "lucide-react";
@@ -86,9 +85,7 @@ export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarPr
     <aside className="fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-[#05091c] text-white">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-white/6 shrink-0">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-lg shadow-blue-600/40">
-          <Zap className="w-4 h-4 text-white" strokeWidth={2.5} />
-        </div>
+        <img src="/logo.png" alt="F3F" className="w-9 h-9 object-contain shrink-0" />
         <div>
           <span className="font-extrabold text-sm tracking-tight text-white">F3F Tasks</span>
           <p className="text-[10px] text-slate-500 leading-none mt-0.5 font-medium">Workspace</p>

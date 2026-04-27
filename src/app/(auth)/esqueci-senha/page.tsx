@@ -6,7 +6,7 @@ import { forgotPasswordAction, type ForgotState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckSquare, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
+import { AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [state, action, isPending] = useActionState<ForgotState, FormData>(forgotPasswordAction, {});
@@ -16,9 +16,7 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-9 h-9 rounded-lg bg-neutral-900 flex items-center justify-center">
-              <CheckSquare className="w-5 h-5 text-white" strokeWidth={2} />
-            </div>
+            <img src="/logo.png" alt="F3F" className="w-10 h-10 object-contain" />
             <span className="text-xl font-semibold tracking-tight text-neutral-900">F3F Tasks</span>
           </div>
           <p className="text-sm text-neutral-500">Recuperação de senha</p>

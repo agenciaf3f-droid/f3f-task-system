@@ -13,6 +13,7 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: { default: "F3F Task System", template: "%s | F3F Task System" },
   description: "Sistema de gestão de tarefas e processos internos",
+  icons: { icon: "/logo.png", shortcut: "/logo.png", apple: "/logo.png" },
 };
 
 export default function RootLayout({
