@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 
 interface Client { id: string; name: string; color: string | null }
-interface Template { id: string; name: string; category: string | null; _count: { templateTasks: number } }
+interface Template { id: string; name: string; category: string | null; description: string | null; _count: { templateTasks: number } }
 
 export function NewProjectForm({ clients, templates }: { clients: Client[]; templates: Template[] }) {
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
@@ -20,6 +20,16 @@ export function NewProjectForm({ clients, templates }: { clients: Client[]; temp
   const [clientId, setClientId] = useState(clients[0]?.id ?? "__new__");
   const [showNewClient, setShowNewClient] = useState(clients.length === 0);
   const [templateId, setTemplateId] = useState("__none__");
+  const [description, setDescription] = useState("");
+  const [descriptionTouched, setDescriptionTouched] = useState(false);
+
+  function handleTemplateChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.target.value;
+    setTemplateId(next);
+    if (descriptionTouched) return;
+    const tpl = templates.find((t) => t.id === next);
+    setDescription(tpl?.description?.trim() ?? "");
+  }
 
   function handleClientChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
@@ -96,6 +106,8 @@ export function NewProjectForm({ clients, templates }: { clients: Client[]; temp
             name="description"
             placeholder="Detalhes sobre o projeto..."
             rows={3}
+            value={description}
+            onChange={(e) => { setDescription(e.target.value); setDescriptionTouched(true); }}
             disabled={isPending}
             className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
           />
@@ -110,7 +122,7 @@ export function NewProjectForm({ clients, templates }: { clients: Client[]; temp
             <select
               id="templateId"
               value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
+              onChange={handleTemplateChange}
               disabled={isPending}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >

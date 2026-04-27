@@ -14,7 +14,7 @@ export default async function NovoProjetoPage() {
     prisma.template.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, category: true, _count: { select: { templateTasks: true } } },
+      select: { id: true, name: true, category: true, description: true, _count: { select: { templateTasks: true } } },
     }),
   ]);
 

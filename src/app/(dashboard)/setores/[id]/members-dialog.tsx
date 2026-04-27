@@ -22,6 +22,10 @@ interface MembersDialogProps {
   members: Member[];
   availableUsers: User[];
   emptyTrigger?: boolean;
+  canManage?: boolean;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }
 
 function getAvatarColor(name: string) {
@@ -38,8 +42,14 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-export function MembersDialog({ sectorId, sectorName, sectorColor, members, availableUsers, emptyTrigger = false }: MembersDialogProps) {
-  const [open, setOpen] = useState(false);
+export function MembersDialog({ sectorId, sectorName, sectorColor, members, availableUsers, emptyTrigger = false, canManage = true, controlledOpen, onControlledOpenChange, hideTrigger = false }: MembersDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (isControlled) onControlledOpenChange?.(next);
+    else setInternalOpen(next);
+  };
   const [selectedUserId, setSelectedUserId] = useState("");
   const [isPending, startTransition] = useTransition();
   const [currentMembers, setCurrentMembers] = useState(members);
@@ -71,17 +81,19 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
-          emptyTrigger
-            ? "text-white bg-blue-600 hover:bg-blue-700"
-            : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100"
-        }`}
-      >
-        <UserPlus className="w-3.5 h-3.5" />
-        {emptyTrigger ? "Adicionar membros" : "Membros"}
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={() => setOpen(true)}
+          className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors ${
+            emptyTrigger
+              ? "text-white bg-blue-600 hover:bg-blue-700"
+              : "text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100"
+          }`}
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          {emptyTrigger ? "Adicionar membros" : "Membros"}
+        </button>
+      )}
 
       {open && (
         <>
@@ -114,7 +126,7 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
             </div>
 
             {/* Add member section */}
-            {nonMembers.length > 0 && (
+            {canManage && nonMembers.length > 0 && (
               <div className="px-6 pb-4 shrink-0 border-b border-neutral-100">
                 <p className="text-xs font-semibold text-neutral-500 uppercase tracking-widest mb-2">Adicionar membro</p>
                 <div className="flex gap-2">
@@ -177,14 +189,16 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
                         <p className="text-sm font-semibold text-neutral-900 truncate">{m.user.name}</p>
                         <p className="text-xs text-neutral-400 truncate">{m.user.email}</p>
                       </div>
-                      <button
-                        onClick={() => handleRemove(m.userId)}
-                        disabled={isPending}
-                        title="Remover do setor"
-                        className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
-                      >
-                        <UserX className="w-3.5 h-3.5" />
-                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => handleRemove(m.userId)}
+                          disabled={isPending}
+                          title="Remover do setor"
+                          className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
