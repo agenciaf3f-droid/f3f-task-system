@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { pickColor } from "@/lib/color";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { ProjectStatus } from "@prisma/client";
 
 // ─── Client ───────────────────────────────────────────────────
@@ -77,6 +78,60 @@ export async function updateClientAction(
   revalidatePath("/clientes");
   revalidatePath("/projetos");
   return { success: true };
+}
+
+export async function updateClientAvatarAction(
+  clientId: string,
+  formData: FormData,
+): Promise<{ error?: string; avatarUrl?: string }> {
+  const user = await requireAuth();
+
+  const idParsed = z.string().uuid().safeParse(clientId);
+  if (!idParsed.success) return { error: "Cliente inválido." };
+
+  const owned = await prisma.client.findFirst({
+    where: { id: clientId, companyId: user.companyId },
+    select: { id: true },
+  });
+  if (!owned) return { error: "Cliente não encontrado." };
+
+  const file = formData.get("avatar") as File | null;
+  if (!file || file.size === 0) return { error: "Selecione uma imagem." };
+  if (file.size > 3 * 1024 * 1024) return { error: "Imagem deve ter no máximo 3MB." };
+  if (!file.type.startsWith("image/")) return { error: "Arquivo deve ser uma imagem." };
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `clients/${clientId}.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  await supabaseAdmin.storage.createBucket("avatars", { public: true }).catch(() => {});
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from("avatars")
+    .upload(path, buffer, { contentType: file.type, upsert: true });
+  if (uploadError) return { error: "Erro ao fazer upload." };
+
+  const { data } = supabaseAdmin.storage.from("avatars").getPublicUrl(path);
+  const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
+
+  await prisma.client.update({
+    where: { id: clientId },
+    data: { avatarUrl: data.publicUrl },
+  });
+
+  revalidatePath("/clientes");
+  revalidatePath("/projetos");
+  return { avatarUrl };
+}
+
+export async function removeClientAvatarAction(clientId: string): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  await prisma.client.updateMany({
+    where: { id: clientId, companyId: user.companyId },
+    data: { avatarUrl: null },
+  });
+  revalidatePath("/clientes");
+  revalidatePath("/projetos");
+  return {};
 }
 
 export async function deleteClientAction(clientId: string) {

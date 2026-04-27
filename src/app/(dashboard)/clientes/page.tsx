@@ -3,12 +3,9 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Briefcase, Mail, Phone, FolderKanban, ListTodo } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 export const metadata = { title: "Clientes" };
-
-function getInitials(name: string) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-}
 
 export default async function ClientesPage() {
   const user = await requireAuth();
@@ -73,12 +70,12 @@ export default async function ClientesPage() {
                 className="p-5 flex flex-col gap-3 flex-1"
               >
                 <div className="flex items-center gap-3 pr-8">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm"
-                    style={{ backgroundColor: client.color ?? "#6366f1" }}
-                  >
-                    {getInitials(client.name)}
-                  </div>
+                  <UserAvatar
+                    name={client.name}
+                    src={client.avatarUrl}
+                    size={40}
+                    bgColor={client.color}
+                  />
                   <h3 className="font-bold text-neutral-900 text-sm leading-tight truncate">{client.name}</h3>
                 </div>
 

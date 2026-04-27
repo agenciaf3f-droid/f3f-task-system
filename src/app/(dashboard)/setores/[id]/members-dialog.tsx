@@ -3,16 +3,18 @@
 import { useTransition, useState } from "react";
 import { Users, X, UserPlus, Loader2, UserX } from "lucide-react";
 import { addSectorMemberAction, removeSectorMemberAction } from "../actions";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface Member {
   userId: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; avatarUrl: string | null };
 }
 
 interface User {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
 }
 
 interface MembersDialogProps {
@@ -66,7 +68,7 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
       await addSectorMemberAction(sectorId, selectedUserId);
       setCurrentMembers((prev) => [
         ...prev,
-        { userId: toAdd.id, user: { id: toAdd.id, name: toAdd.name, email: toAdd.email } },
+        { userId: toAdd.id, user: { id: toAdd.id, name: toAdd.name, email: toAdd.email, avatarUrl: toAdd.avatarUrl } },
       ]);
       setSelectedUserId("");
     });
@@ -179,12 +181,7 @@ export function MembersDialog({ sectorId, sectorName, sectorColor, members, avai
                       key={m.userId}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-neutral-50 transition-colors group"
                     >
-                      <div
-                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                        style={{ backgroundColor: getAvatarColor(m.user.name) }}
-                      >
-                        {getInitials(m.user.name)}
-                      </div>
+                      <UserAvatar name={m.user.name} src={m.user.avatarUrl} size={36} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-neutral-900 truncate">{m.user.name}</p>
                         <p className="text-xs text-neutral-400 truncate">{m.user.email}</p>

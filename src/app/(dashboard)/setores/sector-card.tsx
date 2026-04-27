@@ -4,16 +4,18 @@ import { useState, useTransition } from "react";
 import { ListTodo, Crown, Trash2 } from "lucide-react";
 import { MembersDialog } from "./[id]/members-dialog";
 import { deleteSectorAction } from "./actions";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface Member {
   userId: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; avatarUrl: string | null };
 }
 
 interface User {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
 }
 
 interface SectorCardProps {
@@ -32,16 +34,6 @@ interface SectorCardProps {
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-}
-
-function getAvatarColor(name: string) {
-  const colors = [
-    "#6366f1","#f59e0b","#10b981","#ec4899","#3b82f6",
-    "#ef4444","#8b5cf6","#06b6d4","#84cc16","#f97316",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
 }
 
 export function SectorCard({ sector, allUsers, canManage, canDelete = false }: SectorCardProps & { canDelete?: boolean }) {
@@ -120,16 +112,13 @@ export function SectorCard({ sector, allUsers, canManage, canDelete = false }: S
                 {visibleMembers.map((m, i) => (
                   <div
                     key={m.userId}
-                    title={m.user.name}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm"
                     style={{
-                      backgroundColor: getAvatarColor(m.user.name),
                       marginLeft: i > 0 ? "-8px" : "0",
                       zIndex: visibleMembers.length - i,
                       position: "relative",
                     }}
                   >
-                    {m.user.name.charAt(0).toUpperCase()}
+                    <UserAvatar name={m.user.name} src={m.user.avatarUrl} size={28} ring />
                   </div>
                 ))}
                 {extraCount > 0 && (

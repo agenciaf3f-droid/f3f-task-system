@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
 import { DeleteUserButton } from "./delete-user-button";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -85,9 +86,7 @@ export default async function EquipePage() {
                 key={u.id}
                 className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3"
               >
-                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-sm font-semibold text-amber-700 shrink-0">
-                  {initials(u.name)}
-                </div>
+                <UserAvatar name={u.name} src={u.avatarUrl} size={40} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-neutral-900">{u.name}</p>
                   <p className="text-xs text-neutral-500 truncate">{u.email}</p>
@@ -124,9 +123,7 @@ export default async function EquipePage() {
             key={u.id}
             className="flex items-center gap-4 bg-white border border-neutral-200 rounded-lg px-4 py-3"
           >
-            <div className="w-10 h-10 rounded-full bg-neutral-200 flex items-center justify-center text-sm font-semibold text-neutral-700 shrink-0">
-              {initials(u.name)}
-            </div>
+            <UserAvatar name={u.name} src={u.avatarUrl} size={40} />
 
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-neutral-900">{u.name}</p>
@@ -176,9 +173,7 @@ export default async function EquipePage() {
                 key={u.id}
                 className="flex items-center gap-4 bg-neutral-50 border border-neutral-100 rounded-lg px-4 py-3 opacity-60"
               >
-                <div className="w-8 h-8 rounded-full bg-neutral-200 flex items-center justify-center text-xs font-semibold text-neutral-500 shrink-0">
-                  {initials(u.name)}
-                </div>
+                <UserAvatar name={u.name} src={u.avatarUrl} size={32} className="opacity-70" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-neutral-600">{u.name}</p>
                   <p className="text-xs text-neutral-400">{u.email}</p>

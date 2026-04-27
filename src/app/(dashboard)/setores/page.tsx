@@ -14,7 +14,7 @@ export default async function SetoresPage() {
       include: {
         manager: { select: { name: true } },
         members: {
-          include: { user: { select: { id: true, name: true, email: true } } },
+          include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
         },
         _count: {
           select: {
@@ -26,7 +26,7 @@ export default async function SetoresPage() {
     prisma.user.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, avatarUrl: true },
     }),
   ]);
 
