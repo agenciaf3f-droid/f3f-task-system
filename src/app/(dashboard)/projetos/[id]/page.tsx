@@ -7,10 +7,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
 import { TaskList } from "./task-list";
-
-function getInitials(name: string) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-}
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 type SortBy = "dueDate" | "assignee" | "default";
 
@@ -30,20 +27,20 @@ export default async function ProjetoDetailPage({
     prisma.project.findFirst({
       where: { id, companyId: user.companyId, deletedAt: null },
       include: {
-        client: { select: { id: true, name: true, color: true } },
+        client: { select: { id: true, name: true, color: true, avatarUrl: true } },
         createdBy: { select: { name: true } },
         tasks: {
           where: { deletedAt: null, parentTaskId: null },
           orderBy: { createdAt: "asc" },
           include: {
-            assignee: { select: { id: true, name: true } },
+            assignee: { select: { id: true, name: true, avatarUrl: true } },
             sector: { select: { name: true, color: true } },
             _count: { select: { checklistItems: true, comments: true } },
             subtasks: {
               where: { deletedAt: null },
               orderBy: { createdAt: "asc" as const },
               include: {
-                assignee: { select: { id: true, name: true } },
+                assignee: { select: { id: true, name: true, avatarUrl: true } },
               },
             },
           },
@@ -58,7 +55,7 @@ export default async function ProjetoDetailPage({
     prisma.user.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, avatarUrl: true },
     }),
   ]);
 
@@ -110,10 +107,10 @@ export default async function ProjetoDetailPage({
   });
 
   // Membros com tarefas no projeto
-  const memberMap = new Map<string, { name: string; total: number; done: number }>();
+  const memberMap = new Map<string, { name: string; avatarUrl: string | null; total: number; done: number }>();
   for (const task of activeTasks) {
     if (!task.assignee) continue;
-    const entry = memberMap.get(task.assignee.id) ?? { name: task.assignee.name, total: 0, done: 0 };
+    const entry = memberMap.get(task.assignee.id) ?? { name: task.assignee.name, avatarUrl: task.assignee.avatarUrl, total: 0, done: 0 };
     entry.total++;
     if (task.status === "done") entry.done++;
     memberMap.set(task.assignee.id, entry);
@@ -137,12 +134,7 @@ export default async function ProjetoDetailPage({
       <div className="bg-white border border-neutral-200 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-              style={{ backgroundColor: project.client.color ?? "#6366f1" }}
-            >
-              {getInitials(project.client.name)}
-            </div>
+            <UserAvatar name={project.client.name} src={project.client.avatarUrl} size={40} bgColor={project.client.color} />
             <div className="min-w-0">
               <p className="text-xs text-neutral-400 font-medium">{project.client.name}</p>
               <h1 className="text-xl font-semibold text-neutral-900 leading-tight truncate">{project.name}</h1>
@@ -255,9 +247,7 @@ export default async function ProjetoDetailPage({
           <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100">
             {members.map((member) => (
               <div key={member.id} className="flex items-center gap-4 px-5 py-4">
-                <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-sm font-bold flex items-center justify-center shrink-0">
-                  {getInitials(member.name)}
-                </div>
+                <UserAvatar name={member.name} src={member.avatarUrl} size={32} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-medium text-neutral-800">{member.name}</span>

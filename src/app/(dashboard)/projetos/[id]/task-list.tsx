@@ -20,7 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "text-neutral-400 bg-neutral-50 border-neutral-200",
 };
 
-type Assignee = { id: string; name: string } | null;
+type Assignee = { id: string; name: string; avatarUrl: string | null } | null;
 
 type Subtask = {
   id: string;
@@ -43,7 +43,7 @@ type Task = {
   subtasks: Subtask[];
 };
 
-type UserLite = { id: string; name: string };
+type UserLite = { id: string; name: string; avatarUrl: string | null };
 
 interface TaskListProps {
   tasks: Task[];

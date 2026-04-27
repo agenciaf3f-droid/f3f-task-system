@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Clock, User } from "lucide-react";
 import { updateTaskAssigneeAction, updateTaskDueDateAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boolean }) {
   const [isPending, startTransition] = useTransition();
@@ -34,11 +35,11 @@ export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boole
   );
 }
 
-interface UserLite { id: string; name: string }
+interface UserLite { id: string; name: string; avatarUrl: string | null }
 
 interface TaskInlineAssigneeProps {
   taskId: string;
-  assignee: { id: string; name: string } | null;
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
   users: UserLite[];
 }
 
@@ -51,8 +52,6 @@ export function TaskInlineAssignee({ taskId, assignee, users }: TaskInlineAssign
     startTransition(() => updateTaskAssigneeAction(taskId, userId || null));
   }
 
-  const assigneeName = assignee?.name;
-
   return (
     <div className="relative">
       <button
@@ -60,12 +59,10 @@ export function TaskInlineAssignee({ taskId, assignee, users }: TaskInlineAssign
         disabled={isPending}
         className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors text-xs max-w-[140px] disabled:opacity-40"
       >
-        {assigneeName ? (
+        {assignee ? (
           <>
-            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center shrink-0">
-              {assigneeName.charAt(0).toUpperCase()}
-            </span>
-            <span className="text-neutral-700 truncate">{assigneeName.split(" ")[0]}</span>
+            <UserAvatar name={assignee.name} src={assignee.avatarUrl} size={16} />
+            <span className="text-neutral-700 truncate">{assignee.name.split(" ")[0]}</span>
           </>
         ) : (
           <>
@@ -93,9 +90,7 @@ export function TaskInlineAssignee({ taskId, assignee, users }: TaskInlineAssign
                   u.id === assignee?.id ? "font-semibold text-neutral-900" : "text-neutral-700"
                 }`}
               >
-                <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center shrink-0">
-                  {u.name.charAt(0)}
-                </span>
+                <UserAvatar name={u.name} src={u.avatarUrl} size={20} />
                 {u.name.split(" ")[0]}
               </button>
             ))}

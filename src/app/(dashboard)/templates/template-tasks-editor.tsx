@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { Plus, X, ChevronDown, ChevronRight, GripVertical, Flag, User, Clock } from "lucide-react";
+import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface Sector { id: string; name: string }
-interface User { id: string; name: string }
+interface User { id: string; name: string; avatarUrl?: string | null }
 interface Subtask { id: string; title: string }
 export interface TaskRow {
   id: string;
@@ -114,7 +115,8 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
         {tasks.map((task, i) => {
           const isExpanded = expandedTasks.has(task.id);
           const prio = PRIORITY_META[task.priority] ?? PRIORITY_META.medium;
-          const assigneeName = users.find((u) => u.id === task.assigneeId)?.name;
+          const assigneeUser = users.find((u) => u.id === task.assigneeId);
+          const assigneeName = assigneeUser?.name;
           const hasSub = task.subtasks.length > 0;
 
           return (
@@ -193,12 +195,10 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                   {/* Assignee chip */}
                   {users.length > 0 ? (
                     <label className="relative flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors cursor-pointer text-xs max-w-[140px]">
-                      {assigneeName ? (
+                      {assigneeUser ? (
                         <>
-                          <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 text-[9px] font-bold flex items-center justify-center shrink-0">
-                            {assigneeName.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="text-neutral-700 truncate">{assigneeName.split(" ")[0]}</span>
+                          <UserAvatar name={assigneeUser.name} src={assigneeUser.avatarUrl ?? null} size={16} />
+                          <span className="text-neutral-700 truncate">{assigneeUser.name.split(" ")[0]}</span>
                         </>
                       ) : (
                         <>
