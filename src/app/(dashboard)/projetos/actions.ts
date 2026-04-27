@@ -46,6 +46,39 @@ export async function createClientAction(
   return {};
 }
 
+export async function updateClientAction(
+  _prev: { error?: string; success?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await requireAuth();
+  const clientId = formData.get("clientId") as string;
+
+  const idParsed = z.string().uuid().safeParse(clientId);
+  if (!idParsed.success) return { error: "Cliente inválido." };
+
+  const parsed = clientSchema.safeParse({
+    name: formData.get("name"),
+    color: formData.get("color"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  await prisma.client.updateMany({
+    where: { id: clientId, companyId: user.companyId },
+    data: {
+      name: parsed.data.name,
+      color: parsed.data.color || pickColor(parsed.data.name),
+      email: parsed.data.email || null,
+      phone: parsed.data.phone || null,
+    },
+  });
+
+  revalidatePath("/clientes");
+  revalidatePath("/projetos");
+  return { success: true };
+}
+
 export async function deleteClientAction(clientId: string) {
   const user = await requireAuth();
   await prisma.client.updateMany({

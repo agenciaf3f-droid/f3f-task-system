@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Briefcase, Mail, Phone, FolderKanban } from "lucide-react";
+import { Briefcase, Mail, Phone, FolderKanban, ListTodo } from "lucide-react";
+import { EditClientDialog } from "./edit-client-dialog";
 
 export const metadata = { title: "Clientes" };
 
@@ -19,8 +20,23 @@ export default async function ClientesPage() {
       _count: {
         select: { projects: { where: { deletedAt: null } } },
       },
+      projects: {
+        where: { deletedAt: null },
+        select: {
+          _count: {
+            select: {
+              tasks: { where: { status: { notIn: ["done", "cancelled"] }, deletedAt: null } },
+            },
+          },
+        },
+      },
     },
   });
+
+  const clientsWithTaskCount = clients.map((c) => ({
+    ...c,
+    activeTasks: c.projects.reduce((sum, p) => sum + p._count.tasks, 0),
+  }));
 
   return (
     <div className="flex flex-col gap-8">
@@ -41,15 +57,22 @@ export default async function ClientesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {clients.map((client) => (
-            <Link
+          {clientsWithTaskCount.map((client) => (
+            <div
               key={client.id}
-              href={`/projetos?clientId=${client.id}`}
-              className="bg-white border border-neutral-200 rounded-2xl overflow-hidden hover:border-neutral-300 hover:shadow-md transition-all flex flex-col"
+              className="relative bg-white border border-neutral-200 rounded-2xl overflow-hidden hover:border-neutral-300 hover:shadow-md transition-all flex flex-col"
             >
               <div className="h-1.5 w-full" style={{ backgroundColor: client.color ?? "#6366f1" }} />
-              <div className="p-5 flex flex-col gap-3 flex-1">
-                <div className="flex items-center gap-3">
+
+              <div className="absolute top-3 right-3 z-10">
+                <EditClientDialog client={client} />
+              </div>
+
+              <Link
+                href={`/projetos?clientId=${client.id}`}
+                className="p-5 flex flex-col gap-3 flex-1"
+              >
+                <div className="flex items-center gap-3 pr-8">
                   <div
                     className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-sm"
                     style={{ backgroundColor: client.color ?? "#6366f1" }}
@@ -76,12 +99,18 @@ export default async function ClientesPage() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-1.5 text-xs text-neutral-500 mt-auto pt-3 border-t border-neutral-100">
-                  <FolderKanban className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>{client._count.projects} projeto{client._count.projects !== 1 ? "s" : ""}</span>
+                <div className="flex items-center gap-4 text-xs text-neutral-500 mt-auto pt-3 border-t border-neutral-100">
+                  <div className="flex items-center gap-1.5">
+                    <FolderKanban className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>{client._count.projects} projeto{client._count.projects !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <ListTodo className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>{client.activeTasks} tarefa{client.activeTasks !== 1 ? "s" : ""} ativa{client.activeTasks !== 1 ? "s" : ""}</span>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}
