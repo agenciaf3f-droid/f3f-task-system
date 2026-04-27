@@ -34,8 +34,8 @@ export async function GET(
     return NextResponse.json({ error: "date inválida" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { calendarToken: token },
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
     select: { id: true, isActive: true },
   });
 

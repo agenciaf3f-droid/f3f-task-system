@@ -10,8 +10,8 @@ export default async function AgendarPage({
 }) {
   const { token } = await params;
 
-  const user = await prisma.user.findUnique({
-    where: { calendarToken: token },
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
     select: {
       id: true,
       name: true,

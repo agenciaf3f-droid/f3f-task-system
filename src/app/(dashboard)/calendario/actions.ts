@@ -53,6 +53,34 @@ export async function cancelMeetingAction(meetingId: string) {
   revalidatePath("/calendario");
 }
 
+export async function updateCalendarSlugAction(slug: string): Promise<{ error?: string; success?: true }> {
+  const user = await requireAuth();
+  const trimmed = slug.trim().toLowerCase();
+
+  if (!trimmed) {
+    await prisma.user.update({ where: { id: user.userId }, data: { calendarSlug: null } });
+    revalidatePath("/calendario");
+    return { success: true };
+  }
+
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(trimmed)) {
+    return { error: "Use apenas letras minúsculas, números e hífen (3 a 60 caracteres)." };
+  }
+
+  const taken = await prisma.user.findFirst({
+    where: { calendarSlug: trimmed, NOT: { id: user.userId } },
+    select: { id: true },
+  });
+  if (taken) return { error: "Este link já está em uso por outro membro." };
+
+  await prisma.user.update({
+    where: { id: user.userId },
+    data: { calendarSlug: trimmed },
+  });
+  revalidatePath("/calendario");
+  return { success: true };
+}
+
 export async function getOrCreateCalendarToken(userId: string): Promise<string> {
   const existing = await prisma.user.findUnique({
     where: { id: userId },

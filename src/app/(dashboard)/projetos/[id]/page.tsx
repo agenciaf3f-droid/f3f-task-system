@@ -128,9 +128,9 @@ export default async function ProjetoDetailPage({
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl">
-      <Link href="/projetos" className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
+      <Link href={`/projetos?clientId=${project.client.id}`} className="inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
         <ArrowLeft className="w-4 h-4" />
-        Voltar aos projetos
+        Voltar para {project.client.name}
       </Link>
 
       {/* Project header */}

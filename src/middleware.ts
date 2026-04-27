@@ -10,8 +10,12 @@ const COOKIE_NAME = "f3f_session";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const passThrough = () => NextResponse.next({ request: { headers: requestHeaders } });
+
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
-  if (isPublic) return NextResponse.next();
+  if (isPublic) return passThrough();
 
   const cookie = request.cookies.get(COOKIE_NAME)?.value;
   if (!cookie) {
@@ -31,7 +35,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return passThrough();
 }
 
 export const config = {

@@ -240,6 +240,13 @@ export async function applyTemplateToProjectAction(
   if (!project) return { error: "Projeto não encontrado." };
   if (!template) return { error: "Template não encontrado." };
 
+  if (!project.description?.trim() && template.description?.trim()) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { description: template.description.trim() },
+    });
+  }
+
   const start = startDate ? new Date(startDate) : new Date();
   const resolvedAssignee = assigneeId || null;
 

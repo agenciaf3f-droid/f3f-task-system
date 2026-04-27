@@ -7,9 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
-import { sendTaskAssignedEmail } from "@/lib/email";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 
 const taskSchema = z.object({
@@ -83,18 +80,6 @@ export async function createTaskAction(
       createdBy: user.name,
     };
     dispatchWebhook(user.companyId, "task.assigned", webhookPayload);
-    if (assignee?.email) {
-      sendTaskAssignedEmail({
-        toEmail: assignee.email,
-        toName: assignee.name ?? "",
-        taskId: task.id,
-        taskTitle: title,
-        projectName: project?.name ?? null,
-        dueDate: dueDate ? format(new Date(dueDate), "dd/MM/yyyy", { locale: ptBR }) : null,
-        priority,
-        assignedByName: user.name,
-      }).catch((err) => console.error("[email] Task assigned error:", err));
-    }
   }
 
   revalidatePath("/dashboard");
@@ -269,27 +254,6 @@ export async function updateTaskAssigneeAction(taskId: string, assigneeId: strin
     data: { assigneeId: assigneeId || null },
   });
 
-  // Notificar novo responsável se for diferente do autor da ação
-  if (assigneeId && assigneeId !== user.userId) {
-    const [assignee, project] = await Promise.all([
-      prisma.user.findUnique({ where: { id: assigneeId }, select: { name: true, email: true } }),
-      task.projectId ? prisma.project.findUnique({ where: { id: task.projectId }, select: { name: true } }) : null,
-    ]);
-    if (assignee?.email) {
-      sendTaskAssignedEmail({
-        toEmail: assignee.email,
-        toName: assignee.name ?? "",
-        taskId,
-        taskTitle: task.title,
-        projectName: project?.name ?? null,
-        dueDate: task.dueDate ? format(task.dueDate, "dd/MM/yyyy", { locale: ptBR }) : null,
-        priority: "medium",
-        assignedByName: user.name,
-      }).catch((err) => console.error("[email] Assignee update error:", err));
-    }
-  }
-
-  
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
 

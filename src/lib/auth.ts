@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { compare } from "bcryptjs";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -26,7 +27,10 @@ export async function requireAuth() {
     where: { id: user.userId },
     select: { mustChangePassword: true, avatarUrl: true, role: true },
   });
-  if (dbUser?.mustChangePassword) redirect("/minha-conta/senha");
+  if (dbUser?.mustChangePassword) {
+    const pathname = (await headers()).get("x-pathname") ?? "";
+    if (!pathname.startsWith("/minha-conta/senha")) redirect("/minha-conta/senha");
+  }
 
   return {
     ...user,

@@ -126,6 +126,7 @@ model User {
   projects          Project[]
   passwordResetTokens  PasswordResetToken[]
   calendarToken        String?               @unique @map("calendar_token") @db.VarChar(32)
+  calendarSlug         String?               @unique @map("calendar_slug") @db.VarChar(60)
   calendarAvailability CalendarAvailability[]
   meetings             Meeting[]
 

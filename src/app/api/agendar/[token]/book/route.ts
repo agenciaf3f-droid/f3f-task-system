@@ -32,8 +32,8 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "startTime inválido" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { calendarToken: token },
+  const user = await prisma.user.findFirst({
+    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
     select: { id: true, name: true, isActive: true },
   });
 
