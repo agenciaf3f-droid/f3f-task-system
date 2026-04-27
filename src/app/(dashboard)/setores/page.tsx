@@ -72,6 +72,7 @@ export default async function SetoresPage() {
               sector={sector}
               allUsers={allUsers}
               canManage={canManage}
+              canDelete={user.role === "admin"}
             />
           ))}
         </div>

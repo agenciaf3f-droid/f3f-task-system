@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { ListTodo, Crown } from "lucide-react";
+import { useState, useTransition } from "react";
+import { ListTodo, Crown, Trash2 } from "lucide-react";
 import { MembersDialog } from "./[id]/members-dialog";
+import { deleteSectorAction } from "./actions";
 
 interface Member {
   userId: string;
@@ -43,20 +44,39 @@ function getAvatarColor(name: string) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function SectorCard({ sector, allUsers, canManage }: SectorCardProps) {
+export function SectorCard({ sector, allUsers, canManage, canDelete = false }: SectorCardProps & { canDelete?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [isDeleting, startDelete] = useTransition();
   const visibleMembers = sector.members.slice(0, 4);
   const extraCount = Math.max(0, sector.members.length - 4);
   const color = sector.color ?? "#6366f1";
+
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!confirm(`Excluir o setor "${sector.name}"? As tarefas associadas continuarão existindo.`)) return;
+    startDelete(() => deleteSectorAction(sector.id));
+  }
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-left bg-white border border-neutral-200 rounded-2xl overflow-hidden hover:border-neutral-300 hover:shadow-md transition-all flex flex-col cursor-pointer"
+        className="group relative text-left bg-white border border-neutral-200 rounded-2xl overflow-hidden hover:border-neutral-300 hover:shadow-md transition-all flex flex-col cursor-pointer"
       >
         <div className="h-1.5 w-full" style={{ backgroundColor: color }} />
+
+        {canDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            title="Excluir setor"
+            className="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         <div className="p-5 flex flex-col gap-4 flex-1">
           <div className="flex items-start justify-between gap-3">
