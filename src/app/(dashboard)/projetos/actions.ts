@@ -276,6 +276,11 @@ export async function updateProjectAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId: user.companyId },
+    select: { clientId: true },
+  });
+
   await prisma.project.updateMany({
     where: { id: projectId, companyId: user.companyId },
     data: {
@@ -287,7 +292,7 @@ export async function updateProjectAction(
 
   revalidatePath(`/projetos/${projectId}`);
   revalidatePath("/projetos");
-  redirect(`/projetos/${projectId}`);
+  redirect(project?.clientId ? `/projetos?clientId=${project.clientId}` : "/projetos");
 }
 
 export async function updateProjectStatusAction(

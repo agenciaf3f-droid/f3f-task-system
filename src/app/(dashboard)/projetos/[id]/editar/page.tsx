@@ -18,6 +18,7 @@ export default async function EditarProjetoPage({
       name: true,
       description: true,
       status: true,
+      clientId: true,
       client: { select: { name: true, color: true } },
     },
   });

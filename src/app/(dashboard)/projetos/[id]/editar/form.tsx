@@ -15,6 +15,7 @@ interface Project {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  clientId: string;
   client: { name: string; color: string | null };
 }
 
@@ -36,7 +37,7 @@ export function EditProjectForm({ project }: { project: Project }) {
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href={`/projetos/${project.id}`}
+          href={`/projetos?clientId=${project.clientId}`}
           className="text-neutral-500 hover:text-neutral-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -101,7 +102,7 @@ export function EditProjectForm({ project }: { project: Project }) {
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Salvar alterações
           </Button>
-          <LinkButton variant="outline" href={`/projetos/${project.id}`}>
+          <LinkButton variant="outline" href={`/projetos?clientId=${project.clientId}`}>
             Cancelar
           </LinkButton>
         </div>

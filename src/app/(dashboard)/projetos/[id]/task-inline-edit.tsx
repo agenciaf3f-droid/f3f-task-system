@@ -112,9 +112,11 @@ export function TaskInlineDueDate({ taskId, dueDate, isOverdue, isDueToday }: Ta
   const [editing, setEditing] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
+  const currentVal = dueDate ? format(dueDate, "yyyy-MM-dd") : "";
+
+  function commit(val: string) {
     setEditing(false);
+    if (val === currentVal) return;
     startTransition(() => updateTaskDueDateAction(taskId, val || null));
   }
 
@@ -123,11 +125,11 @@ export function TaskInlineDueDate({ taskId, dueDate, isOverdue, isDueToday }: Ta
       <input
         type="date"
         autoFocus
-        defaultValue={dueDate ? format(dueDate, "yyyy-MM-dd") : ""}
-        onChange={handleChange}
-        onBlur={() => setEditing(false)}
+        defaultValue={currentVal}
+        onChange={(e) => commit(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
         className="text-xs border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none w-32"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onClick={(e) => e.stopPropagation()}
       />
     );
   }
