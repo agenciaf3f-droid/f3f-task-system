@@ -17,43 +17,10 @@ export default async function ProjetosPage({
   const sp = await searchParams;
   const clientId = sp?.clientId;
 
-  const canManage = user.role === "admin" || user.role === "manager" || user.role === "supervisor";
-
-  // Supervisor: busca todos os membros dos seus setores
-  let sectorUserIds: string[] | null = null;
-  if (user.role === "supervisor") {
-    const mySectos = await prisma.sectorMember.findMany({
-      where: { userId: user.userId },
-      select: { sectorId: true },
-    });
-    const sectorIds = mySectos.map((s) => s.sectorId);
-    if (sectorIds.length > 0) {
-      const members = await prisma.sectorMember.findMany({
-        where: { sectorId: { in: sectorIds } },
-        select: { userId: true },
-      });
-      sectorUserIds = members.map((m) => m.userId);
-    } else {
-      sectorUserIds = [user.userId];
-    }
-  }
-
   const projectWhere = {
     companyId: user.companyId,
     deletedAt: null,
     ...(clientId ? { clientId } : {}),
-    ...(user.role === "member" && {
-      OR: [
-        { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
-        { createdById: user.userId },
-      ],
-    }),
-    ...(user.role === "supervisor" && sectorUserIds && {
-      OR: [
-        { tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } } },
-        { createdById: user.userId },
-      ],
-    }),
   };
 
   // —— VISÃO DE PROJETOS DE UM CLIENTE ESPECÍFICO ——
@@ -162,17 +129,15 @@ export default async function ProjetosPage({
                           </p>
                         )}
                       </div>
-                      {canManage && (
-                        <LinkButton
-                          href={`/projetos/${project.id}/editar`}
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0 h-7 px-2 text-xs"
-                        >
-                          <Pencil className="w-3 h-3 mr-1" />
-                          Editar
-                        </LinkButton>
-                      )}
+                      <LinkButton
+                        href={`/projetos/${project.id}/editar`}
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 h-7 px-2 text-xs"
+                      >
+                        <Pencil className="w-3 h-3 mr-1" />
+                        Editar
+                      </LinkButton>
                     </div>
 
                     <div className="flex items-center gap-3 text-xs text-neutral-500 flex-wrap">
@@ -256,22 +221,16 @@ export default async function ProjetosPage({
   }
 
   // —— VISÃO DE CLIENTES (padrão) ——
+  // Todos os usuários só veem clientes que têm projetos com tarefas suas (ou que ele criou).
+  // Para acessar todos os projetos de um cliente, navegar via /clientes → projeto.
   const allProjects = await prisma.project.findMany({
     where: {
       companyId: user.companyId,
       deletedAt: null,
-      ...(user.role === "member" && {
-        OR: [
-          { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
-          { createdById: user.userId },
-        ],
-      }),
-      ...(user.role === "supervisor" && sectorUserIds && {
-        OR: [
-          { tasks: { some: { assigneeId: { in: sectorUserIds }, deletedAt: null } } },
-          { createdById: user.userId },
-        ],
-      }),
+      OR: [
+        { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
+        { createdById: user.userId },
+      ],
     },
     select: {
       id: true,

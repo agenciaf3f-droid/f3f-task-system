@@ -9,25 +9,18 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
-const PRESET_COLORS = [
-  "#6366f1","#f59e0b","#10b981","#ec4899","#3b82f6",
-  "#ef4444","#8b5cf6","#06b6d4","#84cc16","#f97316",
-];
-
 interface EditClientDialogProps {
   client: {
     id: string;
     name: string;
-    email: string | null;
-    phone: string | null;
     color: string | null;
     avatarUrl: string | null;
+    description: string | null;
   };
 }
 
 export function EditClientDialog({ client }: EditClientDialogProps) {
   const [open, setOpen] = useState(false);
-  const [color, setColor] = useState(client.color ?? "#6366f1");
   const [avatarUrl, setAvatarUrl] = useState(client.avatarUrl);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [uploading, startUpload] = useTransition();
@@ -80,11 +73,10 @@ export function EditClientDialog({ client }: EditClientDialogProps) {
           </DialogHeader>
           <form action={action} className="flex flex-col gap-4 mt-2">
             <input type="hidden" name="clientId" value={client.id} />
-            <input type="hidden" name="color" value={color} />
 
             <div className="flex flex-col items-center gap-3 pb-2">
               <div className="relative">
-                <UserAvatar name={client.name} src={avatarUrl} size={72} bgColor={color} />
+                <UserAvatar name={client.name} src={avatarUrl} size={72} bgColor={client.color} />
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -121,28 +113,16 @@ export function EditClientDialog({ client }: EditClientDialogProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">E-mail (opcional)</Label>
-              <Input id="email" name="email" type="email" defaultValue={client.email ?? ""} disabled={isPending} />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="phone">Telefone (opcional)</Label>
-              <Input id="phone" name="phone" defaultValue={client.phone ?? ""} disabled={isPending} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Cor</Label>
-              <div className="flex gap-2 flex-wrap">
-                {PRESET_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    className={`w-7 h-7 rounded-full transition-all ${color === c ? "ring-2 ring-offset-2 ring-neutral-900" : "hover:scale-110"}`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
+              <Label htmlFor="description">Plano / Descrição</Label>
+              <textarea
+                id="description"
+                name="description"
+                defaultValue={client.description ?? ""}
+                disabled={isPending}
+                rows={3}
+                placeholder="Ex: Plano Pro, contrato mensal..."
+                className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 resize-none"
+              />
             </div>
 
             {state.error && (

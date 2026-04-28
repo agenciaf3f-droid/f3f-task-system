@@ -19,9 +19,11 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
 export function ProjectActions({
   projectId,
   currentStatus,
+  canDelete = true,
 }: {
   projectId: string;
   currentStatus: ProjectStatus;
+  canDelete?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -36,7 +38,7 @@ export function ProjectActions({
 
   function handleDelete() {
     setShowMenu(false);
-    if (!confirm("Tem certeza que deseja arquivar este projeto?")) return;
+    if (!confirm("Excluir este projeto? Essa ação não pode ser desfeita.")) return;
     startTransition(async () => {
       await deleteProjectAction(projectId);
     });
@@ -82,15 +84,17 @@ export function ProjectActions({
                   {opt.value === currentStatus && <span className="ml-2 text-neutral-400">✓</span>}
                 </button>
               ))}
-              <div className="border-t border-neutral-100 mt-1 pt-1">
-                <button
-                  onClick={handleDelete}
-                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Arquivar
-                </button>
-              </div>
+              {canDelete && (
+                <div className="border-t border-neutral-100 mt-1 pt-1">
+                  <button
+                    onClick={handleDelete}
+                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Excluir
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}

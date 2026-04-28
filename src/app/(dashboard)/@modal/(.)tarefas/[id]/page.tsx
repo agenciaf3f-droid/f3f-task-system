@@ -13,6 +13,8 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ModalClient } from "./modal-client";
 import Link from "next/link";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function TaskModalPage({
   params,
   searchParams,
@@ -23,6 +25,9 @@ export default async function TaskModalPage({
   const user = await requireAuth();
   const { id } = await params;
   const sp = await searchParams;
+
+  // Rotas estáticas como /tarefas/nova caem aqui — não renderiza modal, deixa o children mostrar a página real.
+  if (!UUID_RE.test(id)) return null;
 
   const task = await prisma.task.findFirst({
     where: { id, companyId: user.companyId, deletedAt: null },

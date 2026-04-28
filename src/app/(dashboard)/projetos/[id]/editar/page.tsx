@@ -11,8 +11,6 @@ export default async function EditarProjetoPage({
   const user = await requireAuth();
   const { id } = await params;
 
-  if (user.role !== "admin" && user.role !== "manager" && user.role !== "supervisor") notFound();
-
   const project = await prisma.project.findFirst({
     where: { id, companyId: user.companyId, deletedAt: null },
     select: {

@@ -147,12 +147,10 @@ export default async function ProjetoDetailPage({
                 Concluído
               </span>
             )}
-            {canManage && templates.length > 0 && (
+            {templates.length > 0 && (
               <ApplyTemplateDialog projectId={project.id} templates={templates} users={users} />
             )}
-            {canManage && (
-              <ProjectActions projectId={project.id} currentStatus={project.status} />
-            )}
+            <ProjectActions projectId={project.id} currentStatus={project.status} canDelete={canManage} />
             <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               Nova tarefa
@@ -195,7 +193,7 @@ export default async function ProjetoDetailPage({
           </LinkButton>
         </div>
       ) : (
-        <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-neutral-200 rounded-2xl">
           {/* Header — mesmo layout do template editor */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
             <div>

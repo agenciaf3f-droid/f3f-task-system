@@ -294,8 +294,9 @@ model Client {
   color     String?   @db.VarChar(7)
   email     String?   @db.VarChar(255)
   phone     String?   @db.VarChar(50)
-  avatarUrl String?   @map("avatar_url")
-  createdAt DateTime  @default(now()) @map("created_at")
+  avatarUrl   String?   @map("avatar_url")
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 

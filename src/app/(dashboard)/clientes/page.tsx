@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Briefcase, Mail, Phone, FolderKanban, ListTodo } from "lucide-react";
+import { Briefcase, FolderKanban, ListTodo } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
 import { DeleteClientButton } from "./delete-client-button";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -88,22 +88,9 @@ export default async function ClientesPage() {
                   <h3 className="font-bold text-neutral-900 text-sm leading-tight truncate">{client.name}</h3>
                 </div>
 
-                {(client.email || client.phone) && (
-                  <div className="flex flex-col gap-1 text-xs text-neutral-500">
-                    {client.email && (
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Mail className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                        <span className="truncate">{client.email}</span>
-                      </div>
-                    )}
-                    {client.phone && (
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                        <span>{client.phone}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <p className="text-xs text-neutral-500 line-clamp-2 min-h-[2.5rem]">
+                  {client.description || <span className="text-neutral-300 italic">Sem descrição</span>}
+                </p>
 
                 <div className="flex items-center gap-4 text-xs text-neutral-500 mt-auto pt-3 border-t border-neutral-100">
                   <div className="flex items-center gap-1.5">

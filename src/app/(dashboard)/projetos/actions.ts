@@ -14,9 +14,7 @@ import type { ProjectStatus } from "@prisma/client";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Nome do cliente obrigatório").max(255),
-  color: z.string().optional().or(z.literal("")),
-  email: z.string().email("E-mail inválido").optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
+  description: z.string().optional().or(z.literal("")),
 });
 
 export async function createClientAction(
@@ -27,9 +25,7 @@ export async function createClientAction(
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
-    color: formData.get("color"),
-    email: formData.get("email"),
-    phone: formData.get("phone"),
+    description: formData.get("description"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -37,9 +33,8 @@ export async function createClientAction(
     data: {
       companyId: user.companyId,
       name: parsed.data.name,
-      color: parsed.data.color || pickColor(parsed.data.name),
-      email: parsed.data.email || null,
-      phone: parsed.data.phone || null,
+      color: pickColor(parsed.data.name),
+      description: parsed.data.description || null,
     },
   });
 
@@ -59,9 +54,7 @@ export async function updateClientAction(
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
-    color: formData.get("color"),
-    email: formData.get("email"),
-    phone: formData.get("phone"),
+    description: formData.get("description"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -69,9 +62,7 @@ export async function updateClientAction(
     where: { id: clientId, companyId: user.companyId },
     data: {
       name: parsed.data.name,
-      color: parsed.data.color || pickColor(parsed.data.name),
-      email: parsed.data.email || null,
-      phone: parsed.data.phone || null,
+      description: parsed.data.description || null,
     },
   });
 
@@ -314,6 +305,9 @@ export async function updateProjectStatusAction(
 
 export async function deleteProjectAction(projectId: string) {
   const user = await requireAuth();
+  if (user.role !== "admin" && user.role !== "manager" && user.role !== "supervisor") {
+    throw new Error("Sem permissão para excluir projetos.");
+  }
   await prisma.project.updateMany({
     where: { id: projectId, companyId: user.companyId },
     data: { deletedAt: new Date() },
