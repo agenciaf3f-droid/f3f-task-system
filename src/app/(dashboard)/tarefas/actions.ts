@@ -51,7 +51,7 @@ export async function createTaskAction(
       sectorId: sectorId || null,
       projectId: projectId || null,
       createdById: user.userId,
-      dueDate: dueDate ? new Date(dueDate) : null,
+      dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null,
     },
   });
 
@@ -208,7 +208,7 @@ export async function updateTaskAction(
       priority: priority as TaskPriority,
       assigneeId: assigneeId || null,
       sectorId: sectorId || null,
-      dueDate: dueDate ? new Date(dueDate) : null,
+      dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null,
     },
   });
 
@@ -266,7 +266,7 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
   if (!task) return;
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
-    data: { dueDate: dueDate ? new Date(dueDate) : null },
+    data: { dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null },
   });
   
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
