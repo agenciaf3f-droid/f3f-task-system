@@ -81,9 +81,11 @@ export async function updateCalendarSlugAction(slug: string): Promise<{ error?: 
   return { success: true };
 }
 
-export async function getOrCreateCalendarToken(userId: string): Promise<string> {
+export async function getOrCreateCalendarToken(): Promise<string> {
+  const user = await requireAuth();
+
   const existing = await prisma.user.findUnique({
-    where: { id: userId },
+    where: { id: user.userId },
     select: { calendarToken: true },
   });
 
@@ -91,7 +93,7 @@ export async function getOrCreateCalendarToken(userId: string): Promise<string> 
 
   const token = randomBytes(16).toString("hex");
   await prisma.user.update({
-    where: { id: userId },
+    where: { id: user.userId },
     data: { calendarToken: token },
   });
 

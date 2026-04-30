@@ -1,10 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react";
 import { isBefore, isToday } from "date-fns";
 import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate } from "./task-inline-edit";
+import { addSubtaskAction } from "@/app/(dashboard)/tarefas/actions";
+
+function AddSubtaskInline({ parentTaskId }: { parentTaskId: string }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  function submit() {
+    const t = title.trim();
+    if (!t) { setEditing(false); return; }
+    startTransition(async () => {
+      await addSubtaskAction(parentTaskId, t);
+      setTitle("");
+      setEditing(false);
+    });
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-600 transition-colors px-1 py-0.5 self-start"
+      >
+        <Plus className="w-3 h-3" />
+        Adicionar subtarefa
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); submit(); }
+          if (e.key === "Escape") { setTitle(""); setEditing(false); }
+        }}
+        onBlur={submit}
+        disabled={isPending}
+        placeholder="Título da subtarefa..."
+        className="flex-1 text-xs border border-blue-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-50"
+      />
+      {isPending && <Loader2 className="w-3 h-3 animate-spin text-neutral-400" />}
+    </div>
+  );
+}
 
 const STATUS_LABELS: Record<string, string> = {
   todo: "A fazer",
@@ -134,7 +188,7 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                 </div>
               </div>
 
-              {/* Subtarefas retráteis */}
+              {/* Subtarefas retráteis + botão de adicionar */}
               {hasSub && !isCollapsed && (
                 <div className="pl-[72px] pr-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-neutral-50">
                   {activeSubtasks.map((sub) => {
@@ -174,6 +228,12 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                       </div>
                     );
                   })}
+                  <AddSubtaskInline parentTaskId={task.id} />
+                </div>
+              )}
+              {!hasSub && (
+                <div className="pl-[72px] pr-4 pb-2 pt-0.5">
+                  <AddSubtaskInline parentTaskId={task.id} />
                 </div>
               )}
             </div>

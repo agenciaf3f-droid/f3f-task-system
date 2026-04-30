@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Briefcase, FolderKanban, ListTodo } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
 import { DeleteClientButton } from "./delete-client-button";
+import { NewClientDialog } from "./new-client-dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 export const metadata = { title: "Clientes" };
@@ -38,11 +39,14 @@ export default async function ClientesPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Clientes</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">
-          {clients.length} cliente{clients.length !== 1 ? "s" : ""} ativo{clients.length !== 1 ? "s" : ""}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Clientes</h1>
+          <p className="text-sm text-neutral-500 mt-0.5">
+            {clients.length} cliente{clients.length !== 1 ? "s" : ""} ativo{clients.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <NewClientDialog />
       </div>
 
       {clients.length === 0 ? (
@@ -51,7 +55,7 @@ export default async function ClientesPage() {
             <Briefcase className="w-6 h-6 text-neutral-400" />
           </div>
           <p className="text-sm font-semibold text-neutral-600">Nenhum cliente cadastrado</p>
-          <p className="text-xs text-neutral-400 mt-1">Crie um projeto para adicionar clientes</p>
+          <p className="text-xs text-neutral-400 mt-1">Clique em &quot;Novo cliente&quot; para começar</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

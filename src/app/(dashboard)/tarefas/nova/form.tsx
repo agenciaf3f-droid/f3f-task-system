@@ -8,6 +8,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, AlertCircle, FolderOpen } from "lucide-react";
+import { RecurrencePicker } from "@/components/tasks/recurrence-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
@@ -133,6 +134,11 @@ export function NewTaskForm({
             <Label htmlFor="dueDate">Prazo</Label>
             <Input id="dueDate" name="dueDate" type="datetime-local" disabled={isPending} />
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label>Repetição</Label>
+          <RecurrencePicker disabled={isPending} />
         </div>
 
         {state.error && (

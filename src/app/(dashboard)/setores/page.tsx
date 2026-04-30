@@ -31,6 +31,8 @@ export default async function SetoresPage() {
   ]);
 
   const canManage = user.role === "admin" || user.role === "manager";
+  const canRename =
+    user.role === "admin" || user.role === "manager" || user.role === "supervisor";
 
   const managersForCreate = await prisma.user.findMany({
     where: {
@@ -73,6 +75,7 @@ export default async function SetoresPage() {
               allUsers={allUsers}
               canManage={canManage}
               canDelete={user.role === "admin"}
+              canRename={canRename}
             />
           ))}
         </div>

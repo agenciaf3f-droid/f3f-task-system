@@ -18,9 +18,9 @@ const clientSchema = z.object({
 });
 
 export async function createClientAction(
-  _prev: { error?: string },
+  _prev: { error?: string; success?: boolean },
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; success?: boolean }> {
   const user = await requireAuth();
 
   const parsed = clientSchema.safeParse({
@@ -39,7 +39,8 @@ export async function createClientAction(
   });
 
   revalidatePath("/projetos");
-  return {};
+  revalidatePath("/clientes");
+  return { success: true };
 }
 
 export async function updateClientAction(

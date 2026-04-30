@@ -9,6 +9,30 @@ import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 
+// datetime-local já vem com hora; date-only ("yyyy-MM-dd") seria parseado como UTC midnight
+// e mostraria o dia anterior em fusos negativos. Forçamos meio-dia local nesse caso.
+function parseDateInput(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  return new Date(s.includes("T") ? s : s + "T12:00:00");
+}
+
+const recurrenceRuleSchema = z.object({
+  freq: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  interval: z.number().int().min(1).max(999),
+  byWeekday: z.array(z.number().int().min(0).max(6)).optional(),
+  monthDay: z.number().int().min(1).max(31).optional(),
+});
+
+function parseRecurrenceRule(raw: FormDataEntryValue | null): unknown {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const parsed = recurrenceRuleSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 const taskSchema = z.object({
   title: z.string().min(1, "Título obrigatório").max(500),
   description: z.string().optional(),
@@ -51,7 +75,7 @@ export async function createTaskAction(
       sectorId: sectorId || null,
       projectId: projectId || null,
       createdById: user.userId,
-      dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null,
+      dueDate: parseDateInput(dueDate),
     },
   });
 
@@ -208,7 +232,7 @@ export async function updateTaskAction(
       priority: priority as TaskPriority,
       assigneeId: assigneeId || null,
       sectorId: sectorId || null,
-      dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null,
+      dueDate: parseDateInput(dueDate),
     },
   });
 
@@ -266,14 +290,52 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
   if (!task) return;
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
-    data: { dueDate: dueDate ? new Date(dueDate + "T12:00:00") : null },
+    data: { dueDate: parseDateInput(dueDate) },
   });
   
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
 
+export async function addSubtaskAction(
+  parentTaskId: string,
+  title: string,
+): Promise<{ error?: string; id?: string }> {
+  const user = await requireAuth();
+  const trimmed = title.trim();
+  if (!trimmed) return { error: "Título obrigatório." };
+
+  const parent = await prisma.task.findFirst({
+    where: { id: parentTaskId, companyId: user.companyId, deletedAt: null },
+    select: { id: true, projectId: true, sectorId: true },
+  });
+  if (!parent) return { error: "Tarefa pai não encontrada." };
+
+  const sub = await prisma.task.create({
+    data: {
+      companyId: user.companyId,
+      title: trimmed,
+      priority: "medium",
+      parentTaskId: parent.id,
+      projectId: parent.projectId,
+      sectorId: parent.sectorId,
+      createdById: user.userId,
+    },
+    select: { id: true },
+  });
+
+  if (parent.projectId) revalidatePath(`/projetos/${parent.projectId}`);
+  return { id: sub.id };
+}
+
 export async function addChecklistItemAction(taskId: string, title: string) {
   const user = await requireAuth();
+
+  const owned = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!owned) return null;
+
   const count = await prisma.taskChecklistItem.count({ where: { taskId } });
   const item = await prisma.taskChecklistItem.create({
     data: { taskId, title, position: count },
@@ -289,6 +351,13 @@ export async function toggleChecklistItemAction(
   isDone: boolean,
 ) {
   const user = await requireAuth();
+
+  const item = await prisma.taskChecklistItem.findFirst({
+    where: { id: itemId, task: { companyId: user.companyId } },
+    select: { id: true },
+  });
+  if (!item) return;
+
   await prisma.taskChecklistItem.update({
     where: { id: itemId },
     data: {
@@ -323,26 +392,25 @@ export async function addCommentAction(taskId: string, content: string) {
     where: { id: taskId, companyId: user.companyId },
     select: { assigneeId: true, createdById: true, title: true },
   });
+  if (!task) return;
 
   await prisma.taskComment.create({
     data: { taskId, userId: user.userId, content: content.trim() },
   });
 
-  if (task) {
-    await logActivity({
-      companyId: user.companyId,
-      userId: user.userId,
-      action: "task.commented",
-      resourceType: "task",
-      resourceId: taskId,
-    });
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.commented",
+    resourceType: "task",
+    resourceId: taskId,
+  });
 
-    dispatchWebhook(user.companyId, "task.commented", {
-      taskId,
-      taskTitle: task.title,
-      commentBy: user.name,
-    });
-  }
+  dispatchWebhook(user.companyId, "task.commented", {
+    taskId,
+    taskTitle: task.title,
+    commentBy: user.name,
+  });
 
   revalidatePath(`/tarefas/${taskId}`);
 }

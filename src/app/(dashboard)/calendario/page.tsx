@@ -47,7 +47,7 @@ export default async function CalendarioPage({
       where: { userId: user.userId },
       orderBy: { dayOfWeek: "asc" },
     }),
-    getOrCreateCalendarToken(user.userId),
+    getOrCreateCalendarToken(),
     prisma.user.findUnique({ where: { id: user.userId }, select: { calendarSlug: true } }),
   ]);
 

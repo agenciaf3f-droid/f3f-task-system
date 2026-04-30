@@ -22,6 +22,7 @@ export default async function EditarTaskPage({
         assigneeId: true,
         sectorId: true,
         dueDate: true,
+        recurrenceRule: true,
         createdById: true,
       },
     }),

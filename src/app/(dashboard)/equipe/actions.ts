@@ -40,21 +40,22 @@ export async function createUserAction(
 
   const existing = await prisma.user.findUnique({
     where: { email: emailLower },
-    select: { id: true, mustChangePassword: true, lastLoginAt: true },
+    select: { id: true, mustChangePassword: true, lastLoginAt: true, companyId: true },
   });
 
-  // Bloquear apenas se o usuário já ativou a conta (já fez login)
-  if (existing && existing.lastLoginAt !== null) {
-    return { error: "E-mail já pertence a um membro ativo." };
+  if (existing) {
+    // Bloquear se já ativou a conta (em qualquer empresa)
+    if (existing.lastLoginAt !== null) {
+      return { error: "E-mail já pertence a um membro ativo." };
+    }
+    // E-mail é único globalmente, mas só podemos reciclar registro
+    // pendente que pertença à MESMA empresa do convidador.
+    if (existing.companyId !== user.companyId) {
+      return { error: "E-mail já está em uso em outra organização." };
+    }
   }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : "http://localhost:3000");
-
-  // Se existia mas nunca ativou, limpar o registro antigo para re-convidar
+  // Se existia na mesma empresa e nunca ativou, limpar registro antigo para re-convidar
   if (existing) {
     await prisma.sectorMember.deleteMany({ where: { userId: existing.id } });
     await prisma.user.delete({ where: { id: existing.id } });

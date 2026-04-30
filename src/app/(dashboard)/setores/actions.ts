@@ -41,6 +41,30 @@ export async function createSectorAction(
   return { success: true };
 }
 
+export async function renameSectorAction(
+  sectorId: string,
+  name: string,
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await requireRole(["admin", "manager", "supervisor"]);
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Nome obrigatório." };
+  if (trimmed.length > 255) return { error: "Nome muito longo." };
+
+  const sector = await prisma.sector.findFirst({
+    where: { id: sectorId, companyId: user.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!sector) return { error: "Setor não encontrado." };
+
+  await prisma.sector.update({
+    where: { id: sectorId, companyId: user.companyId },
+    data: { name: trimmed },
+  });
+
+  revalidatePath("/setores");
+  return { success: true };
+}
+
 export async function deleteSectorAction(sectorId: string) {
   const user = await requireRole(["admin"]);
   await prisma.sector.update({
@@ -53,10 +77,18 @@ export async function deleteSectorAction(sectorId: string) {
 export async function addSectorMemberAction(sectorId: string, userId: string) {
   const user = await requireRole(["admin", "manager"]);
 
-  const sector = await prisma.sector.findFirst({
-    where: { id: sectorId, companyId: user.companyId },
-  });
+  const [sector, target] = await Promise.all([
+    prisma.sector.findFirst({
+      where: { id: sectorId, companyId: user.companyId },
+      select: { id: true },
+    }),
+    prisma.user.findFirst({
+      where: { id: userId, companyId: user.companyId, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
   if (!sector) return { error: "Setor não encontrado." };
+  if (!target) return { error: "Usuário não encontrado." };
 
   await prisma.sectorMember.upsert({
     where: { sectorId_userId: { sectorId, userId } },

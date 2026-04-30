@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import type { TaskPriority } from "@prisma/client";
+import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
@@ -22,6 +23,7 @@ interface Task {
   assigneeId: string | null;
   sectorId: string | null;
   dueDate: Date | null;
+  recurrenceRule: unknown;
 }
 
 export function EditTaskForm({
@@ -149,6 +151,14 @@ export function EditTaskForm({
               disabled={isPending}
             />
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label>Repetição</Label>
+          <RecurrencePicker
+            disabled={isPending}
+            defaultValue={task.recurrenceRule as RecurrenceRule | null}
+          />
         </div>
 
         {state.error && (

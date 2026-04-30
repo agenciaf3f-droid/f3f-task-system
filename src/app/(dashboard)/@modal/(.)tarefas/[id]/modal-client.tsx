@@ -13,12 +13,14 @@ export function ModalClient({ children, projectId }: ModalClientProps) {
   const router = useRouter();
 
   const onClose = useCallback(() => {
-    if (projectId) {
-      // Se tem projeto, volta direto para ele (não depende do histórico)
-      router.push(`/projetos/${projectId}`);
-    } else {
-      // Se não tem projeto, volta para o histórico anterior
+    // router.back() é o jeito confiável de desmontar o slot @modal interceptado.
+    // Se não houver histórico (acesso direto via URL), cai no fallback.
+    if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
+    } else if (projectId) {
+      router.replace(`/projetos/${projectId}`);
+    } else {
+      router.replace("/dashboard");
     }
   }, [router, projectId]);
 

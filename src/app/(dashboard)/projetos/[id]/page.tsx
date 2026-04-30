@@ -4,7 +4,6 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { buttonVariants } from "@/components/ui/button";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
 import { TaskList } from "./task-list";
@@ -152,10 +151,10 @@ export default async function ProjetoDetailPage({
               <ApplyTemplateDialog projectId={project.id} templates={templates} users={users} />
             )}
             <ProjectActions projectId={project.id} currentStatus={project.status} canDelete={canManage} />
-            <a href={`/tarefas/nova?projectId=${project.id}`} className={buttonVariants({ size: "sm" })}>
+            <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               Nova tarefa
-            </a>
+            </LinkButton>
           </div>
         </div>
 
@@ -188,10 +187,10 @@ export default async function ProjetoDetailPage({
           <FolderOpen className="w-10 h-10 mb-3 opacity-30" />
           <p className="text-sm font-medium">Nenhuma tarefa neste projeto</p>
           <p className="text-xs mt-1 mb-5 opacity-70">Adicione tarefas ou aplique um template para começar</p>
-          <a href={`/tarefas/nova?projectId=${project.id}`} className={buttonVariants({ size: "sm" })}>
+          <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
             <Plus className="w-4 h-4 mr-2" />
             Adicionar tarefa
-          </a>
+          </LinkButton>
         </div>
       ) : (
         <div className="bg-white border border-neutral-200 rounded-2xl">

@@ -183,6 +183,8 @@ model Task {
   projectId    String?      @map("project_id") @db.Uuid
   templateId   String?      @map("template_id") @db.Uuid
   parentTaskId String?      @map("parent_task_id") @db.Uuid
+  recurrenceRule     Json?    @map("recurrence_rule")
+  recurrenceParentId String?  @map("recurrence_parent_id") @db.Uuid
   title        String       @db.VarChar(500)
   description  String?
   status       TaskStatus   @default(todo)
@@ -204,6 +206,8 @@ model Task {
   template       Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
   parentTask     Task?               @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   subtasks       Task[]              @relation("TaskSubtasks")
+  recurrenceParent    Task?          @relation("TaskRecurrence", fields: [recurrenceParentId], references: [id], onDelete: SetNull)
+  recurrenceOccurrences Task[]       @relation("TaskRecurrence")
   assignee       User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdBy      User                @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   watchers       TaskWatcher[]
