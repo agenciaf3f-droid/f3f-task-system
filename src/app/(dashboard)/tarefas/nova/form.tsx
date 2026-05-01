@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, AlertCircle, FolderOpen } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2 } from "lucide-react";
 import { RecurrencePicker } from "@/components/tasks/recurrence-picker";
 
 interface Sector { id: string; name: string }
@@ -18,15 +18,30 @@ export function NewTaskForm({
   sectors,
   users,
   project,
+  keepOpenAfterCreate = false,
 }: {
   sectors: Sector[];
   users: User[];
   project: Project | null;
+  keepOpenAfterCreate?: boolean;
 }) {
-  const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
-    createTaskAction,
-    {},
-  );
+  const [state, action, isPending] = useActionState<
+    { error?: string; success?: boolean },
+    FormData
+  >(createTaskAction, {});
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const [justCreated, setJustCreated] = useState(false);
+
+  useEffect(() => {
+    if (state.success && keepOpenAfterCreate) {
+      formRef.current?.reset();
+      setJustCreated(true);
+      formRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
+      const t = setTimeout(() => setJustCreated(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [state.success, keepOpenAfterCreate]);
 
   const backHref = project ? `/projetos/${project.id}` : "/tarefas";
 
@@ -47,9 +62,10 @@ export function NewTaskForm({
         </div>
       </div>
 
-      <form action={action} className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5">
+      <form ref={formRef} action={action} className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5">
         {/* Hidden projectId */}
         {project && <input type="hidden" name="projectId" value={project.id} />}
+        {keepOpenAfterCreate && <input type="hidden" name="keepOpen" value="1" />}
 
         {/* Title */}
         <div className="flex flex-col gap-1.5">
@@ -148,12 +164,21 @@ export function NewTaskForm({
           </div>
         )}
 
+        {justCreated && (
+          <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            Tarefa criada. Pronto para a próxima.
+          </div>
+        )}
+
         <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Criar tarefa
           </Button>
-          <LinkButton variant="outline" href={backHref}>Cancelar</LinkButton>
+          <LinkButton variant="outline" href={backHref}>
+            {keepOpenAfterCreate ? "Fechar" : "Cancelar"}
+          </LinkButton>
         </div>
       </form>
     </div>

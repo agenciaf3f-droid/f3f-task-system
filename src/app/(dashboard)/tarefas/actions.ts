@@ -44,10 +44,13 @@ const taskSchema = z.object({
 });
 
 export async function createTaskAction(
-  _prev: { error?: string },
+  _prev: { error?: string; success?: boolean },
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; success?: boolean }> {
   const user = await requireAuth();
+
+  // Quando keepOpen=1 (modal "criar várias"), retornamos { success } em vez de redirect
+  const keepOpen = formData.get("keepOpen") === "1";
 
   const parsed = taskSchema.safeParse({
     title: formData.get("title"),
@@ -107,10 +110,11 @@ export async function createTaskAction(
   }
 
   revalidatePath("/dashboard");
-  if (projectId) {
-    revalidatePath(`/projetos/${projectId}`);
-    redirect(`/projetos/${projectId}`);
-  }
+  if (projectId) revalidatePath(`/projetos/${projectId}`);
+
+  if (keepOpen) return { success: true };
+
+  if (projectId) redirect(`/projetos/${projectId}`);
   redirect("/dashboard");
 }
 
@@ -279,6 +283,32 @@ export async function updateTaskAssigneeAction(taskId: string, assigneeId: strin
   });
 
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+}
+
+export async function updateTaskTitleAction(
+  taskId: string,
+  title: string,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  const trimmed = title.trim();
+  if (!trimmed) return { error: "Título obrigatório." };
+  if (trimmed.length > 500) return { error: "Título muito longo." };
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    select: { projectId: true, title: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+  if (task.title === trimmed) return {};
+
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { title: trimmed },
+  });
+
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
 }
 
 export async function updateTaskDueDateAction(taskId: string, dueDate: string | null) {

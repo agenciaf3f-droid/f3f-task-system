@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
-import Link from "next/link";
 import { ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react";
 import { isBefore, isToday } from "date-fns";
-import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate } from "./task-inline-edit";
+import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate, TaskInlineTitle } from "./task-inline-edit";
 import { addSubtaskAction } from "@/app/(dashboard)/tarefas/actions";
 
 function AddSubtaskInline({ parentTaskId }: { parentTaskId: string }) {
@@ -129,9 +128,9 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
           const isCollapsed = collapsedIds.has(task.id);
 
           return (
-            <div key={task.id} className="group">
+            <div key={task.id}>
               {/* Main row */}
-              <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
+              <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
                 {/* Index */}
                 <div className="w-6 shrink-0 text-xs text-neutral-300 font-medium text-center select-none">
                   {idx + 1}
@@ -156,14 +155,13 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                 {/* Checkbox */}
                 <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
-                {/* Title — clique abre modal via intercepting route */}
-                <Link href={`/tarefas/${task.id}?projectId=${projectId}`} className="flex-1 min-w-0 px-1 py-1">
-                  <span className={`text-sm font-medium block truncate ${
-                    task.status === "done" ? "line-through text-neutral-400" : "text-neutral-800 hover:text-blue-700"
-                  } transition-colors`}>
-                    {task.title || <span className="text-neutral-300">Sem título</span>}
-                  </span>
-                </Link>
+                {/* Title — clique abre modal via intercepting route, lápis renomeia inline */}
+                <TaskInlineTitle
+                  taskId={task.id}
+                  title={task.title}
+                  href={`/tarefas/${task.id}?projectId=${projectId}`}
+                  isDone={task.status === "done"}
+                />
 
                 {/* Colunas fixas: Responsável | Data | Status */}
                 <div className="flex items-center shrink-0">
@@ -195,16 +193,16 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                     const subOverdue = sub.dueDate && isBefore(sub.dueDate, new Date()) && sub.status !== "done";
                     const subToday = sub.dueDate && isToday(sub.dueDate);
                     return (
-                      <div key={sub.id} className="flex items-center gap-2">
+                      <div key={sub.id} className="flex items-center gap-2 group">
                         <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
                         <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                        <Link href={`/tarefas/${sub.id}?projectId=${projectId}`} className="flex-1 min-w-0 px-1 py-0.5">
-                          <span className={`text-xs block truncate ${
-                            sub.status === "done" ? "line-through text-neutral-400" : "text-neutral-700 hover:text-blue-700"
-                          } transition-colors`}>
-                            {sub.title}
-                          </span>
-                        </Link>
+                        <TaskInlineTitle
+                          taskId={sub.id}
+                          title={sub.title}
+                          href={`/tarefas/${sub.id}?projectId=${projectId}`}
+                          isDone={sub.status === "done"}
+                          size="sm"
+                        />
                         <div className="flex items-center shrink-0">
                           <div className="w-32 flex justify-end">
                             <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />

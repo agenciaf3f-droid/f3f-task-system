@@ -32,7 +32,7 @@ export default async function NovaTaskModalPage({
 
   return (
     <ModalClient projectId={project?.id}>
-      <NewTaskForm sectors={sectors} users={users} project={project ?? null} />
+      <NewTaskForm sectors={sectors} users={users} project={project ?? null} keepOpenAfterCreate />
     </ModalClient>
   );
 }

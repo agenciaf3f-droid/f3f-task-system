@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition, useEffect, useRef } from "react";
+import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, User, Search } from "lucide-react";
-import { updateTaskAssigneeAction, updateTaskDueDateAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
+import { Clock, User, Search, Pencil, Loader2 } from "lucide-react";
+import { updateTaskAssigneeAction, updateTaskDueDateAction, updateTaskStatusAction, updateTaskTitleAction } from "@/app/(dashboard)/tarefas/actions";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boolean }) {
@@ -32,6 +33,102 @@ export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boole
         </svg>
       )}
     </button>
+  );
+}
+
+interface TaskInlineTitleProps {
+  taskId: string;
+  title: string;
+  href: string;
+  isDone: boolean;
+  size?: "sm" | "md";
+}
+
+export function TaskInlineTitle({ taskId, title, href, isDone, size = "md" }: TaskInlineTitleProps) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  const [isPending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  // Mantém estado em sync se o título mudar via outra fonte (ex.: refresh)
+  useEffect(() => { if (!editing) setValue(title); }, [title, editing]);
+
+  function startEdit(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setValue(title);
+    setEditing(true);
+  }
+
+  function commit() {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === title) {
+      setEditing(false);
+      setValue(title);
+      return;
+    }
+    startTransition(async () => {
+      const res = await updateTaskTitleAction(taskId, trimmed);
+      if (res?.error) {
+        alert(res.error);
+        setValue(title);
+      }
+      setEditing(false);
+    });
+  }
+
+  const textCls = size === "sm"
+    ? `text-xs block truncate ${isDone ? "line-through text-neutral-400" : "text-neutral-700 hover:text-blue-700"} transition-colors`
+    : `text-sm font-medium block truncate ${isDone ? "line-through text-neutral-400" : "text-neutral-800 hover:text-blue-700"} transition-colors`;
+
+  if (editing) {
+    return (
+      <div className="flex-1 min-w-0 px-1 py-1 flex items-center gap-2">
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") { setEditing(false); setValue(title); }
+          }}
+          onBlur={commit}
+          disabled={isPending}
+          maxLength={500}
+          className={`flex-1 min-w-0 bg-white border border-blue-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+            size === "sm" ? "text-xs" : "text-sm font-medium"
+          }`}
+        />
+        {isPending && <Loader2 className="w-3 h-3 animate-spin text-neutral-400 shrink-0" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-w-0 px-1 py-1 flex items-center gap-1.5">
+      <Link href={href} className="flex-1 min-w-0">
+        <span className={textCls}>
+          {title || <span className="text-neutral-300">Sem título</span>}
+        </span>
+      </Link>
+      <button
+        type="button"
+        onClick={startEdit}
+        title="Renomear"
+        className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 flex items-center justify-center rounded text-neutral-300 hover:text-blue-600 hover:bg-blue-50 shrink-0"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+    </div>
   );
 }
 
