@@ -15,6 +15,7 @@ import {
   CalendarDays,
   Briefcase,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@prisma/client";
 
@@ -131,13 +132,16 @@ export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarPr
             <p className="text-xs font-semibold text-white truncate">{userName}</p>
             <p className="text-[11px] text-slate-500 truncate">{userEmail}</p>
           </div>
-          <button
-            onClick={handleLogout}
-            title="Sair"
-            className="w-7 h-7 flex items-center justify-center text-slate-600 hover:text-white hover:bg-white/10 rounded-md transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle className="w-7 h-7 flex items-center justify-center text-slate-600 hover:text-white hover:bg-white/10 rounded-md transition-colors" />
+            <button
+              onClick={handleLogout}
+              title="Sair"
+              className="w-7 h-7 flex items-center justify-center text-slate-600 hover:text-white hover:bg-white/10 rounded-md transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </Link>
       </div>
     </aside>
