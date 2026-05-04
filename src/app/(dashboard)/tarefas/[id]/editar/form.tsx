@@ -30,10 +30,12 @@ export function EditTaskForm({
   task,
   sectors,
   users,
+  returnTo,
 }: {
   task: Task;
   sectors: Sector[];
   users: User[];
+  returnTo?: string;
 }) {
   const boundAction = updateTaskAction.bind(null, task.id);
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
@@ -45,11 +47,13 @@ export function EditTaskForm({
     ? format(new Date(task.dueDate), "yyyy-MM-dd'T'HH:mm")
     : "";
 
+  const backHref = returnTo ?? `/tarefas/${task.id}`;
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
         <Link
-          href={`/tarefas/${task.id}`}
+          href={backHref}
           className="text-neutral-500 hover:text-neutral-900 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -58,6 +62,7 @@ export function EditTaskForm({
       </div>
 
       <form action={action} className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5">
+        {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
         {/* Title */}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="title">
@@ -173,7 +178,7 @@ export function EditTaskForm({
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Salvar alterações
           </Button>
-          <LinkButton variant="outline" href={`/tarefas/${task.id}`}>
+          <LinkButton variant="outline" href={backHref}>
             Cancelar
           </LinkButton>
         </div>

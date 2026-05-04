@@ -7,21 +7,26 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ProjectActions } from "./project-actions";
 import { ApplyTemplateDialog } from "./apply-template-dialog";
 import { TaskList } from "./task-list";
+import { KanbanView } from "./kanban-view";
+import { CalendarView } from "./calendar-view";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { LayoutList, Kanban, CalendarDays } from "lucide-react";
 
 type SortBy = "dueDate" | "assignee" | "default";
+type ViewMode = "list" | "kanban" | "calendar";
 
 export default async function ProjetoDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sortBy?: string }>;
+  searchParams: Promise<{ sortBy?: string; view?: string }>;
 }) {
   const user = await requireAuth();
   const { id } = await params;
   const sp = await searchParams;
   const sortBy = (sp.sortBy as SortBy) ?? "default";
+  const view = (["kanban", "calendar"].includes(sp.view ?? "") ? sp.view : "list") as ViewMode;
 
   const [project, templates, users] = await Promise.all([
     prisma.project.findFirst({
@@ -181,7 +186,7 @@ export default async function ProjetoDetailPage({
         </div>
       </div>
 
-      {/* Tasks — espelho 1:1 do editor de template */}
+      {/* Tasks */}
       {sortedTasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl">
           <FolderOpen className="w-10 h-10 mb-3 opacity-30" />
@@ -193,46 +198,84 @@ export default async function ProjetoDetailPage({
           </LinkButton>
         </div>
       ) : (
-        <div className="bg-white border border-neutral-200 rounded-2xl">
-          {/* Header — mesmo layout do template editor */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100">
+        <div className={view === "kanban" ? "" : "bg-white border border-neutral-200 rounded-2xl"}>
+          {/* Header */}
+          <div className={`flex items-center justify-between px-5 py-4 ${view === "list" ? "border-b border-neutral-100" : ""}`}>
             <div>
               <h2 className="text-sm font-semibold text-neutral-800">Tarefas do projeto</h2>
               <p className="text-xs text-neutral-400 mt-0.5">
-                {activeTasks.length} tarefa{activeTasks.length !== 1 ? "s" : ""} · {doneTasks.length} concluída{doneTasks.length !== 1 ? "s" : ""} · clique para abrir
+                {activeTasks.length} tarefa{activeTasks.length !== 1 ? "s" : ""} · {doneTasks.length} concluída{doneTasks.length !== 1 ? "s" : ""}
+                {view === "list" && " · clique para abrir"}
               </p>
             </div>
-            <div className="flex items-center">
-              <div className="w-32 flex justify-end">
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
                 <Link
-                  href={sortLink("assignee")}
-                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
-                    sortBy === "assignee" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                  href={`/projetos/${id}?sortBy=${sortBy}&view=list`}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                    view === "list" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"
                   }`}
+                  title="Visão lista"
                 >
-                  <ArrowUpDown className="w-3 h-3" />
-                  Responsável
+                  <LayoutList className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href={`/projetos/${id}?sortBy=${sortBy}&view=kanban`}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                    view === "kanban" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"
+                  }`}
+                  title="Visão kanban"
+                >
+                  <Kanban className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href={`/projetos/${id}?sortBy=${sortBy}&view=calendar`}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${
+                    view === "calendar" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"
+                  }`}
+                  title="Visão calendário"
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
                 </Link>
               </div>
-              <div className="w-24 flex justify-end">
-                <Link
-                  href={sortLink("dueDate")}
-                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
-                    sortBy === "dueDate" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
-                  }`}
-                >
-                  <ArrowUpDown className="w-3 h-3" />
-                  Data
-                </Link>
-              </div>
-              <div className="w-28 flex justify-end pr-1">
-                <span className="text-xs text-neutral-400 font-medium">Status</span>
-              </div>
+
+              {/* Sort buttons — só na list view */}
+              {view === "list" && (
+                <>
+                  <Link
+                    href={sortLink("assignee")}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+                      sortBy === "assignee" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                    }`}
+                  >
+                    <ArrowUpDown className="w-3 h-3" />
+                    Responsável
+                  </Link>
+                  <Link
+                    href={sortLink("dueDate")}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md border transition-colors ${
+                      sortBy === "dueDate" ? "bg-neutral-900 text-white border-neutral-900" : "text-neutral-500 border-neutral-200 hover:border-neutral-400"
+                    }`}
+                  >
+                    <ArrowUpDown className="w-3 h-3" />
+                    Data
+                  </Link>
+                  <span className="text-xs text-neutral-400 font-medium px-1">Status</span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Task list — client component com drawer, collapse e colunas alinhadas */}
-          <TaskList tasks={sortedTasks} users={users} projectId={id} />
+          {view === "kanban" ? (
+            <KanbanView tasks={sortedTasks} />
+          ) : view === "calendar" ? (
+            <div className="p-4">
+              <CalendarView tasks={sortedTasks} />
+            </div>
+          ) : (
+            <TaskList tasks={sortedTasks} users={users} projectId={id} />
+          )}
         </div>
       )}
 

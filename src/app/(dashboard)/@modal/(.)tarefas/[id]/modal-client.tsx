@@ -9,20 +9,14 @@ interface ModalClientProps {
   projectId?: string;
 }
 
-export function ModalClient({ children, projectId }: ModalClientProps) {
+export function ModalClient({ children }: ModalClientProps) {
   const router = useRouter();
 
   const onClose = useCallback(() => {
-    // router.back() é o jeito confiável de desmontar o slot @modal interceptado.
-    // Se não houver histórico (acesso direto via URL), cai no fallback.
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back();
-    } else if (projectId) {
-      router.replace(`/projetos/${projectId}`);
-    } else {
-      router.replace("/dashboard");
-    }
-  }, [router, projectId]);
+    // ModalClient só monta via soft nav (intercepting route) — sempre há history para voltar.
+    // Fallback por segurança caso router.back() não resolva (ex: deep link externo).
+    router.back();
+  }, [router]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

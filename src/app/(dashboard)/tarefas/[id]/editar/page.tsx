@@ -5,11 +5,15 @@ import { EditTaskForm } from "./form";
 
 export default async function EditarTaskPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
   const user = await requireAuth();
   const { id } = await params;
+  const sp = await searchParams;
+  const returnTo = typeof sp.returnTo === "string" && sp.returnTo.startsWith("/") ? sp.returnTo : undefined;
 
   const [task, sectors, users] = await Promise.all([
     prisma.task.findFirst({
@@ -48,5 +52,5 @@ export default async function EditarTaskPage({
 
   if (!canEdit) notFound();
 
-  return <EditTaskForm task={task} sectors={sectors} users={users} />;
+  return <EditTaskForm task={task} sectors={sectors} users={users} returnTo={returnTo} />;
 }

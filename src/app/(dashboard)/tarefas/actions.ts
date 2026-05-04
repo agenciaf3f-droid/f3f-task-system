@@ -8,6 +8,7 @@ import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
+import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 
 // datetime-local já vem com hora; date-only ("yyyy-MM-dd") seria parseado como UTC midnight
 // e mostraria o dia anterior em fusos negativos. Forçamos meio-dia local nesse caso.
@@ -23,7 +24,7 @@ const recurrenceRuleSchema = z.object({
   monthDay: z.number().int().min(1).max(31).optional(),
 });
 
-function parseRecurrenceRule(raw: FormDataEntryValue | null): unknown {
+function parseRecurrenceRuleFromForm(raw: FormDataEntryValue | null): unknown {
   if (typeof raw !== "string" || !raw) return null;
   try {
     const parsed = recurrenceRuleSchema.safeParse(JSON.parse(raw));
@@ -68,6 +69,8 @@ export async function createTaskAction(
 
   const { title, description, priority, assigneeId, sectorId, projectId, dueDate } = parsed.data;
 
+  const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
+
   const task = await prisma.task.create({
     data: {
       companyId: user.companyId,
@@ -79,6 +82,7 @@ export async function createTaskAction(
       projectId: projectId || null,
       createdById: user.userId,
       dueDate: parseDateInput(dueDate),
+      recurrenceRule: recurrenceRule ?? undefined,
     },
   });
 
@@ -123,7 +127,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, companyId: user.companyId },
-    select: { status: true, assigneeId: true, title: true, projectId: true },
+    select: { status: true, assigneeId: true, title: true, projectId: true, sectorId: true, dueDate: true, recurrenceRule: true, description: true, priority: true, createdById: true },
   });
   if (!old) return;
 
@@ -151,9 +155,31 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
       taskTitle: old.title,
       completedBy: user.name,
     });
+
+    // Cria próxima ocorrência se tarefa é recorrente
+    const rule = parseRecurrenceRuleFromDb(old.recurrenceRule);
+    if (rule) {
+      const baseDate = old.dueDate ?? new Date();
+      const nextDue = computeNextOccurrence(rule, baseDate);
+      await prisma.task.create({
+        data: {
+          companyId: user.companyId,
+          title: old.title,
+          description: old.description,
+          priority: old.priority,
+          assigneeId: old.assigneeId,
+          sectorId: old.sectorId,
+          projectId: old.projectId,
+          createdById: old.createdById,
+          recurrenceRule: old.recurrenceRule ?? undefined,
+          recurrenceParentId: taskId,
+          dueDate: nextDue,
+        },
+      });
+      if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
+    }
   }
 
-  
   revalidatePath(`/tarefas/${taskId}`);
   revalidatePath("/dashboard");
   if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
@@ -228,6 +254,8 @@ export async function updateTaskAction(
   });
   if (!old) return { error: "Tarefa não encontrada." };
 
+  const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
+
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
     data: {
@@ -237,6 +265,7 @@ export async function updateTaskAction(
       assigneeId: assigneeId || null,
       sectorId: sectorId || null,
       dueDate: parseDateInput(dueDate),
+      recurrenceRule: recurrenceRule ?? undefined,
     },
   });
 
@@ -266,7 +295,11 @@ export async function updateTaskAction(
   }
 
   revalidatePath(`/tarefas/${taskId}`);
-  
+
+  const returnTo = formData.get("returnTo");
+  if (typeof returnTo === "string" && returnTo.startsWith("/")) {
+    redirect(returnTo);
+  }
   redirect(`/tarefas/${taskId}`);
 }
 
@@ -414,6 +447,8 @@ async function recalcProgress(taskId: string, companyId: string) {
   });
 }
 
+const MENTION_RE = /@\[([^\]]+)\]\(([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
+
 export async function addCommentAction(taskId: string, content: string) {
   const user = await requireAuth();
   if (!content.trim()) return;
@@ -424,9 +459,38 @@ export async function addCommentAction(taskId: string, content: string) {
   });
   if (!task) return;
 
-  await prisma.taskComment.create({
+  const comment = await prisma.taskComment.create({
     data: { taskId, userId: user.userId, content: content.trim() },
   });
+
+  // Parse @mentions and create notifications
+  const mentionedIds = new Set<string>();
+  let m: RegExpExecArray | null;
+  const re = new RegExp(MENTION_RE.source, "gi");
+  while ((m = re.exec(content)) !== null) {
+    const [, , mentionedUserId] = m;
+    if (mentionedUserId !== user.userId && !mentionedIds.has(mentionedUserId)) {
+      mentionedIds.add(mentionedUserId);
+      // Verify user belongs to same company before notifying
+      const target = await prisma.user.findFirst({
+        where: { id: mentionedUserId, companyId: user.companyId, isActive: true },
+        select: { id: true },
+      });
+      if (target) {
+        await prisma.notification.create({
+          data: {
+            companyId: user.companyId,
+            userId: mentionedUserId,
+            type: "mention",
+            title: `${user.name.split(" ")[0]} mencionou você`,
+            body: `Em "${task.title}": ${content.replace(MENTION_RE, "@$1").slice(0, 120)}`,
+            resourceType: "task",
+            resourceId: taskId,
+          },
+        });
+      }
+    }
+  }
 
   await logActivity({
     companyId: user.companyId,
@@ -434,6 +498,7 @@ export async function addCommentAction(taskId: string, content: string) {
     action: "task.commented",
     resourceType: "task",
     resourceId: taskId,
+    newValue: { commentId: comment.id },
   });
 
   dispatchWebhook(user.companyId, "task.commented", {
@@ -486,4 +551,54 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
     checklistItems: task.checklistItems.map((i) => ({ id: i.id, title: i.title, isDone: i.isDone })),
     commentsCount: task._count.comments,
   };
+}
+
+export async function fetchProjectsForMoveAction(): Promise<{ id: string; name: string }[]> {
+  const user = await requireAuth();
+  return prisma.project.findMany({
+    where: { companyId: user.companyId, deletedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
+export async function moveTaskToProjectAction(
+  taskId: string,
+  projectId: string | null,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    select: { projectId: true, title: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  if (projectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, companyId: user.companyId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!project) return { error: "Projeto não encontrado." };
+  }
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { projectId: projectId || null },
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.updated",
+    resourceType: "task",
+    resourceId: taskId,
+    newValue: { projectId },
+  });
+
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  if (projectId) revalidatePath(`/projetos/${projectId}`);
+  revalidatePath("/dashboard");
+  return {};
 }

@@ -113,6 +113,8 @@ model User {
   managedSectors    Sector[]            @relation("SectorManager")
   sectorMemberships SectorMember[]
   assignedTasks     Task[]              @relation("TaskAssignee")
+  taskAssignments   TaskAssignee[]      @relation("TaskAssignees")
+  taskAssignmentsGiven TaskAssignee[]   @relation("TaskAssigneeAssignedBy")
   createdTasks      Task[]              @relation("TaskCreatedBy")
   watchedTasks      TaskWatcher[]
   checklistDone     TaskChecklistItem[] @relation("ChecklistDoneBy")
@@ -210,6 +212,9 @@ model Task {
   recurrenceOccurrences Task[]       @relation("TaskRecurrence")
   assignee       User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   createdBy      User                @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignees      TaskAssignee[]
+  blockedBy      TaskDependency[] @relation("BlockedTask")
+  blocking       TaskDependency[] @relation("BlockingTask")
   watchers       TaskWatcher[]
   checklistItems TaskChecklistItem[]
   comments       TaskComment[]
@@ -223,6 +228,36 @@ model Task {
   @@index([dueDate])
   @@index([templateId])
   @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId       String   @map("task_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  assignedAt   DateTime @default(now()) @map("assigned_at")
+  assignedById String   @map("assigned_by_id") @db.Uuid
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User @relation("TaskAssignees", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User @relation("TaskAssigneeAssignedBy", fields: [assignedById], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([taskId])
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+model TaskDependency {
+  taskId       String   @map("task_id") @db.Uuid
+  blocksTaskId String   @map("blocks_task_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  task       Task @relation("BlockingTask", fields: [taskId], references: [id], onDelete: Cascade)
+  blocksTask Task @relation("BlockedTask", fields: [blocksTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, blocksTaskId])
+  @@index([taskId])
+  @@index([blocksTaskId])
+  @@map("task_dependencies")
 }
 
 model TaskWatcher {

@@ -1,13 +1,17 @@
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Calendar, User, Building2, Pencil, FolderKanban } from "lucide-react";
+import { Calendar, Building2, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge, PriorityBadge } from "@/components/tasks/task-badges";
 import { TaskActions } from "@/app/(dashboard)/tarefas/[id]/task-actions";
+import { MoveTaskButton } from "@/app/(dashboard)/tarefas/[id]/move-task-button";
 import { ChecklistSection } from "@/app/(dashboard)/tarefas/[id]/checklist-section";
 import { CommentsSection } from "@/app/(dashboard)/tarefas/[id]/comments-section";
+import { AttachmentsSection } from "@/app/(dashboard)/tarefas/[id]/attachments-section";
+import { AssigneesSection } from "@/app/(dashboard)/tarefas/[id]/assignees-section";
+import { DependenciesSection } from "@/app/(dashboard)/tarefas/[id]/dependencies-section";
 import { ProgressSlider } from "@/app/(dashboard)/tarefas/[id]/progress-slider";
 import { LinkButton } from "@/components/ui/link-button";
 import { ModalClient } from "./modal-client";
@@ -29,31 +33,55 @@ export default async function TaskModalPage({
   // Rotas estáticas como /tarefas/nova caem aqui — não renderiza modal, deixa o children mostrar a página real.
   if (!UUID_RE.test(id)) return null;
 
-  const task = await prisma.task.findFirst({
-    where: { id, companyId: user.companyId, deletedAt: null },
-    include: {
-      assignee: { select: { id: true, name: true } },
-      sector: { select: { name: true, color: true } },
-      project: { select: { id: true, name: true } },
-      createdBy: { select: { name: true } },
-      checklistItems: { orderBy: { position: "asc" } },
-      comments: {
-        where: { deletedAt: null },
-        orderBy: { createdAt: "asc" },
-        include: { user: { select: { name: true } } },
+  const [task, allUsers] = await Promise.all([
+    prisma.task.findFirst({
+      where: { id, companyId: user.companyId, deletedAt: null },
+      include: {
+        assignee: { select: { id: true, name: true } },
+        assignees: {
+          include: { user: { select: { id: true, name: true, avatarUrl: true } } },
+        },
+        blockedBy: {
+          include: { task: { select: { id: true, title: true, status: true } } },
+        },
+        sector: { select: { name: true, color: true } },
+        project: { select: { id: true, name: true } },
+        createdBy: { select: { name: true } },
+        checklistItems: { orderBy: { position: "asc" } },
+        comments: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: "asc" },
+          include: { user: { select: { name: true } } },
+        },
+        attachments: {
+          orderBy: { createdAt: "asc" },
+          include: { user: { select: { name: true } } },
+        },
       },
-    },
-  });
+    }),
+    prisma.user.findMany({
+      where: { companyId: user.companyId, isActive: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (!task) notFound();
 
   const projectId = sp.projectId || task.projectId;
 
-  if (!projectId) {
-    console.error("❌ projectId MISSING - query:", sp.projectId, "task:", task.projectId);
-  } else {
-    console.log("✅ projectId OK:", projectId);
-  }
+  // Candidatas para dependências: tarefas do mesmo projeto (ou company se sem projeto)
+  const allTasks = await prisma.task.findMany({
+    where: {
+      companyId: user.companyId,
+      deletedAt: null,
+      id: { not: id },
+      ...(task.projectId ? { projectId: task.projectId } : {}),
+    },
+    select: { id: true, title: true, status: true },
+    orderBy: { title: "asc" },
+    take: 100,
+  });
   const completedItems = task.checklistItems.filter((i) => i.isDone).length;
   const totalItems = task.checklistItems.length;
   const canEdit =
@@ -72,10 +100,17 @@ export default async function TaskModalPage({
           </h1>
           <div className="flex items-center gap-2 shrink-0">
             {canEdit && (
-              <LinkButton href={`/tarefas/${task.id}/editar`} variant="outline" size="sm">
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Editar
-              </LinkButton>
+              <>
+                <LinkButton
+                  href={`/tarefas/${task.id}/editar?returnTo=${encodeURIComponent(projectId ? `/projetos/${projectId}` : "/dashboard")}`}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                  Editar
+                </LinkButton>
+                <MoveTaskButton taskId={task.id} currentProjectId={task.project?.id ?? null} />
+              </>
             )}
             <TaskActions
               taskId={task.id}
@@ -102,12 +137,18 @@ export default async function TaskModalPage({
               </Link>
             </div>
           )}
-          {task.assignee && (
-            <div className="flex items-center gap-2 text-neutral-600">
-              <User className="w-4 h-4 text-neutral-400 shrink-0" />
-              <span>{task.assignee.name}</span>
-            </div>
-          )}
+          <div className="col-span-2">
+            <AssigneesSection
+              taskId={task.id}
+              initialAssignees={task.assignees.map((a) => ({
+                userId: a.user.id,
+                name: a.user.name,
+                avatarUrl: a.user.avatarUrl,
+              }))}
+              allUsers={allUsers}
+              canEdit={canEdit}
+            />
+          </div>
           {task.sector && (
             <div className="flex items-center gap-2 text-neutral-600">
               <Building2 className="w-4 h-4 text-neutral-400 shrink-0" />
@@ -155,8 +196,19 @@ export default async function TaskModalPage({
       {/* Checklist */}
       <ChecklistSection taskId={task.id} items={task.checklistItems} />
 
+      {/* Dependencies */}
+      <DependenciesSection
+        taskId={task.id}
+        initialBlockedBy={task.blockedBy.map((d) => d.task)}
+        allTasks={allTasks}
+        canEdit={canEdit}
+      />
+
+      {/* Attachments */}
+      <AttachmentsSection taskId={task.id} initialAttachments={task.attachments} canEdit={canEdit} />
+
       {/* Comments */}
-      <CommentsSection taskId={task.id} comments={task.comments} currentUserName={user.name} />
+      <CommentsSection taskId={task.id} comments={task.comments} currentUserName={user.name} users={allUsers} />
     </ModalClient>
   );
 }
