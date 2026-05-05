@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTaskStatusAction, deleteTaskAction } from "../actions";
+import { updateTaskStatusAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { STATUS_CONFIG } from "@/components/tasks/task-badges";
-import { Trash2, ChevronDown, Loader2 } from "lucide-react";
+import { Trash2, ChevronDown, Loader2, Copy, Archive } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 
 const STATUS_ORDER: TaskStatus[] = [
@@ -38,6 +38,21 @@ export function TaskActions({
     if (!confirm("Tem certeza? A tarefa será arquivada.")) return;
     startTransition(async () => {
       await deleteTaskAction(taskId);
+    });
+  }
+
+  function handleDuplicate() {
+    startTransition(async () => {
+      const res = await duplicateTaskAction(taskId);
+      if (res.newTaskId) router.push(`/tarefas/${res.newTaskId}`);
+    });
+  }
+
+  function handleArchive() {
+    if (!confirm("Arquivar tarefa? Ela será ocultada das views padrão.")) return;
+    startTransition(async () => {
+      await archiveTaskAction(taskId);
+      router.back();
     });
   }
 
@@ -88,6 +103,30 @@ export function TaskActions({
         )}
       </div>
 
+      {/* Duplicate */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="w-8 h-8 text-neutral-400 hover:text-blue-600 hover:bg-blue-50"
+        onClick={handleDuplicate}
+        disabled={isPending}
+        title="Duplicar tarefa"
+      >
+        <Copy className="w-4 h-4" />
+      </Button>
+
+      {/* Archive */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="w-8 h-8 text-neutral-400 hover:text-amber-600 hover:bg-amber-50"
+        onClick={handleArchive}
+        disabled={isPending}
+        title="Arquivar tarefa"
+      >
+        <Archive className="w-4 h-4" />
+      </Button>
+
       {/* Delete */}
       <Button
         variant="ghost"
@@ -95,7 +134,7 @@ export function TaskActions({
         className="w-8 h-8 text-neutral-400 hover:text-red-600 hover:bg-red-50"
         onClick={handleDelete}
         disabled={isPending}
-        title="Arquivar tarefa"
+        title="Excluir tarefa"
       >
         <Trash2 className="w-4 h-4" />
       </Button>

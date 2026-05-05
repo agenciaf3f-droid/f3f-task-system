@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { projectVisibilityFilter } from "@/lib/task-visibility";
 import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, ArrowLeft } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProjectClientList } from "./project-client-list";
@@ -19,9 +20,9 @@ export default async function ProjetosPage({
   const clientId = sp?.clientId;
 
   const projectWhere = {
-    companyId: user.companyId,
     deletedAt: null,
     ...(clientId ? { clientId } : {}),
+    AND: projectVisibilityFilter(user),
   };
 
   // —— VISÃO DE PROJETOS DE UM CLIENTE ESPECÍFICO ——
@@ -222,16 +223,12 @@ export default async function ProjetosPage({
   }
 
   // —— VISÃO DE CLIENTES (padrão) ——
-  // Todos os usuários só veem clientes que têm projetos com tarefas suas (ou que ele criou).
-  // Para acessar todos os projetos de um cliente, navegar via /clientes → projeto.
+  // admin/manager/supervisor: todos os projetos da company.
+  // member: projetos onde tem relação (assignee/multi/criador/watcher) com alguma task, ou criou o projeto.
   const allProjects = await prisma.project.findMany({
     where: {
-      companyId: user.companyId,
       deletedAt: null,
-      OR: [
-        { tasks: { some: { assigneeId: user.userId, deletedAt: null } } },
-        { createdById: user.userId },
-      ],
+      AND: projectVisibilityFilter(user),
     },
     select: {
       id: true,

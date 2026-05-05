@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
-import { ChevronDown, ChevronRight, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Loader2, CheckSquare, X, CheckCircle2, UserCheck, Trash2 } from "lucide-react";
 import { isBefore, isToday } from "date-fns";
 import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate, TaskInlineTitle } from "./task-inline-edit";
-import { addSubtaskAction } from "@/app/(dashboard)/tarefas/actions";
+import { addSubtaskAction, bulkUpdateTaskStatusAction, bulkAssignAction, bulkDeleteAction } from "@/app/(dashboard)/tarefas/actions";
+import type { TaskStatus } from "@prisma/client";
 
 function AddSubtaskInline({ parentTaskId }: { parentTaskId: string }) {
   const [editing, setEditing] = useState(false);
@@ -104,8 +105,113 @@ interface TaskListProps {
   projectId: string;
 }
 
+function BulkToolbar({
+  selected,
+  users,
+  onClear,
+}: {
+  selected: string[];
+  users: UserLite[];
+  onClear: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [showAssign, setShowAssign] = useState(false);
+
+  function markDone() {
+    startTransition(async () => {
+      await bulkUpdateTaskStatusAction(selected, "done" as TaskStatus);
+      onClear();
+    });
+  }
+
+  function assign(userId: string) {
+    setShowAssign(false);
+    startTransition(async () => {
+      await bulkAssignAction(selected, userId);
+      onClear();
+    });
+  }
+
+  function remove() {
+    if (!confirm(`Excluir ${selected.length} tarefa(s)?`)) return;
+    startTransition(async () => {
+      await bulkDeleteAction(selected);
+      onClear();
+    });
+  }
+
+  return (
+    <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2.5 bg-blue-600 text-white text-sm rounded-t-xl">
+      <CheckSquare className="w-4 h-4 shrink-0" />
+      <span className="font-medium">{selected.length} selecionada{selected.length !== 1 ? "s" : ""}</span>
+
+      <div className="flex items-center gap-1.5 ml-auto">
+        {/* Mark done */}
+        <button
+          onClick={markDone}
+          disabled={isPending}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors text-xs font-medium"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          Marcar done
+        </button>
+
+        {/* Assign */}
+        <div className="relative">
+          <button
+            onClick={() => setShowAssign((v) => !v)}
+            disabled={isPending}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors text-xs font-medium"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            Atribuir
+          </button>
+          {showAssign && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowAssign(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white border border-neutral-200 rounded-lg shadow-lg py-1 w-48 max-h-56 overflow-y-auto">
+                {users.map((u) => (
+                  <button
+                    key={u.id}
+                    onMouseDown={() => assign(u.id)}
+                    className="w-full text-left px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors truncate"
+                  >
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Delete */}
+        <button
+          onClick={remove}
+          disabled={isPending}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/80 hover:bg-red-500 transition-colors text-xs font-medium"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Excluir
+        </button>
+
+        {/* Clear */}
+        <button
+          onClick={onClear}
+          className="ml-1 p-1 rounded hover:bg-white/20 transition-colors"
+          title="Limpar seleção"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin absolute right-3" />}
+    </div>
+  );
+}
+
 export function TaskList({ tasks, users, projectId }: TaskListProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggleCollapse(id: string) {
     setCollapsedIds((prev) => {
@@ -115,20 +221,63 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
     });
   }
 
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === visible.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(visible.map((t) => t.id)));
+    }
+  }
+
   const visible = tasks.filter((t) => t.status !== "cancelled");
+  const allSelected = visible.length > 0 && selected.size === visible.length;
 
   return (
     <>
+      {selected.size > 0 && (
+        <BulkToolbar
+          selected={[...selected]}
+          users={users}
+          onClear={() => setSelected(new Set())}
+        />
+      )}
       <div className="divide-y divide-neutral-100">
+        {/* Header row */}
+        <div className="flex items-center gap-2 px-4 py-2 bg-neutral-50/80 border-b border-neutral-100">
+          <div className="w-6 shrink-0" />
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            className="w-3.5 h-3.5 rounded border-neutral-300 accent-blue-600 cursor-pointer shrink-0"
+            title="Selecionar todas"
+          />
+          <span className="flex-1 text-[11px] font-semibold text-neutral-400 uppercase tracking-wide pl-9">Tarefa</span>
+          <div className="flex items-center shrink-0">
+            <div className="w-32 text-right text-[11px] font-semibold text-neutral-400 uppercase tracking-wide pr-2">Responsável</div>
+            <div className="w-24 text-right text-[11px] font-semibold text-neutral-400 uppercase tracking-wide pr-2">Data</div>
+            <div className="w-28 text-right text-[11px] font-semibold text-neutral-400 uppercase tracking-wide pr-1">Status</div>
+          </div>
+        </div>
+
         {visible.map((task, idx) => {
           const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
           const isDueToday = task.dueDate && isToday(task.dueDate);
           const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
           const hasSub = activeSubtasks.length > 0;
           const isCollapsed = collapsedIds.has(task.id);
+          const isSelected = selected.has(task.id);
 
           return (
-            <div key={task.id}>
+            <div key={task.id} className={isSelected ? "bg-blue-50/60" : ""}>
               {/* Main row */}
               <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
                 {/* Index */}
@@ -136,7 +285,15 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                   {idx + 1}
                 </div>
 
-                {/* Chevron — retrátil se tiver subtarefas */}
+                {/* Selection checkbox */}
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleSelect(task.id)}
+                  className="w-3.5 h-3.5 rounded border-neutral-300 accent-blue-600 cursor-pointer shrink-0"
+                />
+
+                {/* Chevron */}
                 <button
                   onClick={() => hasSub && toggleCollapse(task.id)}
                   className={`shrink-0 transition-colors ${
@@ -152,10 +309,10 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                     : <ChevronRight className="w-4 h-4" />}
                 </button>
 
-                {/* Checkbox */}
+                {/* Checkbox de status */}
                 <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
 
-                {/* Title — clique abre modal via intercepting route, lápis renomeia inline */}
+                {/* Title */}
                 <TaskInlineTitle
                   taskId={task.id}
                   title={task.title}
@@ -163,7 +320,7 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                   isDone={task.status === "done"}
                 />
 
-                {/* Colunas fixas: Responsável | Data | Status */}
+                {/* Colunas fixas */}
                 <div className="flex items-center shrink-0">
                   <div className="w-32 flex justify-end">
                     <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
@@ -186,9 +343,9 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                 </div>
               </div>
 
-              {/* Subtarefas retráteis + botão de adicionar */}
+              {/* Subtarefas */}
               {hasSub && !isCollapsed && (
-                <div className="pl-[72px] pr-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-neutral-50">
+                <div className="pl-[84px] pr-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-neutral-50">
                   {activeSubtasks.map((sub) => {
                     const subOverdue = sub.dueDate && isBefore(sub.dueDate, new Date()) && sub.status !== "done";
                     const subToday = sub.dueDate && isToday(sub.dueDate);
@@ -230,7 +387,7 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
                 </div>
               )}
               {!hasSub && (
-                <div className="pl-[72px] pr-4 pb-2 pt-0.5">
+                <div className="pl-[84px] pr-4 pb-2 pt-0.5">
                   <AddSubtaskInline parentTaskId={task.id} />
                 </div>
               )}

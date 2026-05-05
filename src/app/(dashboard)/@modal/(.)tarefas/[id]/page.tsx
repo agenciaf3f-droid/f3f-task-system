@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { Calendar, Building2, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -35,7 +36,7 @@ export default async function TaskModalPage({
 
   const [task, allUsers] = await Promise.all([
     prisma.task.findFirst({
-      where: { id, companyId: user.companyId, deletedAt: null },
+      where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
       include: {
         assignee: { select: { id: true, name: true } },
         assignees: {
@@ -70,13 +71,13 @@ export default async function TaskModalPage({
 
   const projectId = sp.projectId || task.projectId;
 
-  // Candidatas para dependências: tarefas do mesmo projeto (ou company se sem projeto)
+  // Candidatas para dependências: tarefas do mesmo projeto (ou company se sem projeto), filtradas por visibilidade
   const allTasks = await prisma.task.findMany({
     where: {
-      companyId: user.companyId,
       deletedAt: null,
       id: { not: id },
       ...(task.projectId ? { projectId: task.projectId } : {}),
+      AND: taskVisibilityFilter(user),
     },
     select: { id: true, title: true, status: true },
     orderBy: { title: "asc" },

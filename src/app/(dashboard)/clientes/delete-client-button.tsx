@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { deleteClientAction } from "../projetos/actions";
 
 export function DeleteClientButton({
@@ -25,7 +26,11 @@ export function DeleteClientButton({
       : `\n\nIsto também excluirá ${projectCount} projeto${projectCount !== 1 ? "s" : ""}` +
         (taskCount > 0 ? ` e ${taskCount} tarefa${taskCount !== 1 ? "s" : ""}` : "") + ".";
     if (!confirm(`Excluir "${clientName}"?${summary}`)) return;
-    startTransition(() => deleteClientAction(clientId));
+    startTransition(async () => {
+      const res = await deleteClientAction(clientId);
+      if (res?.error) toast.error(res.error);
+      else toast.success("Cliente excluído.");
+    });
   }
 
   return (

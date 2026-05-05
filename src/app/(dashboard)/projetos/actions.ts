@@ -128,6 +128,7 @@ export async function removeClientAvatarAction(clientId: string): Promise<{ erro
 
 export async function deleteClientAction(clientId: string) {
   const user = await requireAuth();
+  if (user.role === "member") return { error: "Sem permissão." };
   const now = new Date();
 
   const projects = await prisma.project.findMany({

@@ -2,6 +2,7 @@
 
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { revalidatePath } from "next/cache";
 
 export async function addTaskAssigneeAction(
@@ -11,7 +12,7 @@ export async function addTaskAssigneeAction(
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };
@@ -39,7 +40,7 @@ export async function removeTaskAssigneeAction(
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };

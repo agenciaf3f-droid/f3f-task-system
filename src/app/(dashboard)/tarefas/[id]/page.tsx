@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { ArrowLeft, Calendar, User, Building2, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -21,7 +22,7 @@ export default async function TaskDetailPage({
   const { id } = await params;
 
   const task = await prisma.task.findFirst({
-    where: { id, companyId: user.companyId, deletedAt: null },
+    where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
     include: {
       assignee: { select: { id: true, name: true } },
       sector: { select: { name: true, color: true } },

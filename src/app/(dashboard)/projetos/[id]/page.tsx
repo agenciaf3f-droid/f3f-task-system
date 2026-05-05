@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { projectVisibilityFilter } from "@/lib/task-visibility";
 import { ArrowLeft, Plus, CheckCircle2, FolderOpen, ArrowUpDown } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProjectActions } from "./project-actions";
@@ -30,12 +31,12 @@ export default async function ProjetoDetailPage({
 
   const [project, templates, users] = await Promise.all([
     prisma.project.findFirst({
-      where: { id, companyId: user.companyId, deletedAt: null },
+      where: { id, deletedAt: null, AND: projectVisibilityFilter(user) },
       include: {
         client: { select: { id: true, name: true, color: true, avatarUrl: true } },
         createdBy: { select: { name: true } },
         tasks: {
-          where: { deletedAt: null, parentTaskId: null },
+          where: { deletedAt: null, archivedAt: null, parentTaskId: null },
           orderBy: { createdAt: "asc" },
           include: {
             assignee: { select: { id: true, name: true, avatarUrl: true } },

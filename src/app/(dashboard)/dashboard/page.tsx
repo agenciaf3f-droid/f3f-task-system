@@ -12,10 +12,20 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
 
+  // "Minhas tarefas" = onde sou assignee primário ou multi-assignee.
+  // Não inclui creator/watcher pra evitar poluir o dashboard de admins/managers que criam muito.
+  const myTasksOR: Prisma.TaskWhereInput = {
+    OR: [
+      { assigneeId: userId },
+      { assignees: { some: { userId } } },
+    ],
+  };
+
   const taskWhere: Prisma.TaskWhereInput = {
     companyId,
-    assigneeId: userId,
     deletedAt: null,
+    archivedAt: null,
+    AND: myTasksOR,
     ...(statusFilter
       ? { status: statusFilter as TaskStatus }
       : { status: { notIn: ["done", "cancelled"] as TaskStatus[] } }),
@@ -33,18 +43,18 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
       },
     }),
     prisma.task.count({
-      where: { companyId, assigneeId: userId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, AND: myTasksOR },
     }),
     prisma.task.count({
-      where: { companyId, assigneeId: userId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, AND: myTasksOR },
     }),
     prisma.task.count({
-      where: { companyId, assigneeId: userId, status: "done", completedAt: { gte: todayStart }, deletedAt: null },
+      where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: myTasksOR },
     }),
     prisma.project.findMany({
       where: {
         companyId, deletedAt: null, status: "active",
-        tasks: { some: { assigneeId: userId, deletedAt: null } },
+        tasks: { some: { deletedAt: null, ...myTasksOR } },
       },
       orderBy: { updatedAt: "desc" },
       take: 4,

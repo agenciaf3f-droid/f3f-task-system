@@ -2,6 +2,7 @@
 
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { revalidatePath } from "next/cache";
 
 // BFS: verifica se `from` pode alcançar `target` pelas edges de bloqueio (taskId → blocksTaskId)
@@ -30,9 +31,10 @@ export async function addDependencyAction(
 
   if (taskId === blockedByTaskId) return { error: "Uma tarefa não pode depender de si mesma." };
 
+  const visFilter = taskVisibilityFilter(user);
   const [task, blocker] = await Promise.all([
-    prisma.task.findFirst({ where: { id: taskId, companyId: user.companyId, deletedAt: null }, select: { id: true } }),
-    prisma.task.findFirst({ where: { id: blockedByTaskId, companyId: user.companyId, deletedAt: null }, select: { id: true } }),
+    prisma.task.findFirst({ where: { id: taskId, deletedAt: null, AND: visFilter }, select: { id: true } }),
+    prisma.task.findFirst({ where: { id: blockedByTaskId, deletedAt: null, AND: visFilter }, select: { id: true } }),
   ]);
   if (!task || !blocker) return { error: "Tarefa não encontrada." };
 
@@ -59,7 +61,7 @@ export async function removeDependencyAction(
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };

@@ -11,7 +11,10 @@ async function TopBarLoader({ userName, userId, userAvatar }: { userName: string
     getUnreadCount(userId),
     prisma.task.findMany({
       where: {
-        assigneeId: userId,
+        OR: [
+          { assigneeId: userId },
+          { assignees: { some: { userId } } },
+        ],
         status: { notIn: ["done", "cancelled"] },
         deletedAt: null,
         dueDate: { lte: new Date(Date.now() + 48 * 60 * 60 * 1000) },

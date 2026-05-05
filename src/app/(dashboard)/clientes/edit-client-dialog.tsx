@@ -51,9 +51,11 @@ export function EditClientDialog({ client }: EditClientDialogProps) {
     });
   }
 
+  // Dep precisa ser `state` (não `state.success`) — cada submit gera nova ref de state,
+  // mas state.success continua === true, então useEffect não re-dispara no 2º submit.
   useEffect(() => {
     if (state.success) setOpen(false);
-  }, [state.success]);
+  }, [state]);
 
   return (
     <>

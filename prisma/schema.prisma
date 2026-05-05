@@ -201,6 +201,7 @@ model Task {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
   deletedAt    DateTime?    @map("deleted_at")
+  archivedAt   DateTime?    @map("archived_at")
 
   company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sector         Sector?             @relation(fields: [sectorId], references: [id], onDelete: SetNull)

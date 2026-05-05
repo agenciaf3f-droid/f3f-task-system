@@ -3,6 +3,7 @@
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { revalidatePath } from "next/cache";
 
 const BUCKET = "task-attachments";
@@ -25,7 +26,7 @@ export async function uploadAttachmentAction(
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };
@@ -66,7 +67,7 @@ export async function deleteAttachmentAction(
   const user = await requireAuth();
 
   const attachment = await prisma.taskAttachment.findFirst({
-    where: { id: attachmentId, task: { companyId: user.companyId } },
+    where: { id: attachmentId, task: taskVisibilityFilter(user) },
     select: { fileUrl: true, taskId: true },
   });
   if (!attachment) return { error: "Anexo não encontrado." };
@@ -84,7 +85,7 @@ export async function getAttachmentSignedUrlAction(
   const user = await requireAuth();
 
   const attachment = await prisma.taskAttachment.findFirst({
-    where: { id: attachmentId, task: { companyId: user.companyId } },
+    where: { id: attachmentId, task: taskVisibilityFilter(user) },
     select: { fileUrl: true },
   });
   if (!attachment) return { error: "Anexo não encontrado." };

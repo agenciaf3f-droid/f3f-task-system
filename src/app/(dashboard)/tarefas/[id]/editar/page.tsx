@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { EditTaskForm } from "./form";
 
 export default async function EditarTaskPage({
@@ -17,7 +18,7 @@ export default async function EditarTaskPage({
 
   const [task, sectors, users] = await Promise.all([
     prisma.task.findFirst({
-      where: { id, companyId: user.companyId, deletedAt: null },
+      where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
       select: {
         id: true,
         title: true,

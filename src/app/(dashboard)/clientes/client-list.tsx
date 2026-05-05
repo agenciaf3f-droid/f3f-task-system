@@ -69,7 +69,7 @@ export function ClientList({
 
               <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
                 <EditClientDialog client={client} />
-                {userRole === "admin" && (
+                {userRole !== "member" && (
                   <DeleteClientButton
                     clientId={client.id}
                     clientName={client.name}

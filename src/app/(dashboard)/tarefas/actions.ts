@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
+import { taskVisibilityFilter, projectVisibilityFilter } from "@/lib/task-visibility";
 
 // datetime-local já vem com hora; date-only ("yyyy-MM-dd") seria parseado como UTC midnight
 // e mostraria o dia anterior em fusos negativos. Forçamos meio-dia local nesse caso.
@@ -126,7 +127,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
   const user = await requireAuth();
 
   const old = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { status: true, assigneeId: true, title: true, projectId: true, sectorId: true, dueDate: true, recurrenceRule: true, description: true, priority: true, createdById: true },
   });
   if (!old) return;
@@ -187,6 +188,11 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
 
 export async function updateTaskProgressAction(taskId: string, progress: number) {
   const user = await requireAuth();
+  const allowed = await prisma.task.findFirst({
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
+    select: { id: true },
+  });
+  if (!allowed) return;
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
     data: { progress: Math.max(0, Math.min(100, progress)) },
@@ -198,9 +204,10 @@ export async function deleteTaskAction(taskId: string) {
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { title: true, projectId: true },
   });
+  if (!task) return;
 
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
@@ -249,7 +256,7 @@ export async function updateTaskAction(
   const { title, description, priority, assigneeId, sectorId, dueDate } = parsed.data;
 
   const old = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { assigneeId: true, title: true },
   });
   if (!old) return { error: "Tarefa não encontrada." };
@@ -306,7 +313,7 @@ export async function updateTaskAction(
 export async function updateTaskAssigneeAction(taskId: string, assigneeId: string | null) {
   const user = await requireAuth();
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { title: true, projectId: true, dueDate: true },
   });
   if (!task) return;
@@ -328,7 +335,7 @@ export async function updateTaskTitleAction(
   if (trimmed.length > 500) return { error: "Título muito longo." };
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { projectId: true, title: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };
@@ -347,7 +354,7 @@ export async function updateTaskTitleAction(
 export async function updateTaskDueDateAction(taskId: string, dueDate: string | null) {
   const user = await requireAuth();
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { projectId: true },
   });
   if (!task) return;
@@ -368,7 +375,7 @@ export async function addSubtaskAction(
   if (!trimmed) return { error: "Título obrigatório." };
 
   const parent = await prisma.task.findFirst({
-    where: { id: parentTaskId, companyId: user.companyId, deletedAt: null },
+    where: { id: parentTaskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true, projectId: true, sectorId: true },
   });
   if (!parent) return { error: "Tarefa pai não encontrada." };
@@ -394,7 +401,7 @@ export async function addChecklistItemAction(taskId: string, title: string) {
   const user = await requireAuth();
 
   const owned = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!owned) return null;
@@ -416,7 +423,7 @@ export async function toggleChecklistItemAction(
   const user = await requireAuth();
 
   const item = await prisma.taskChecklistItem.findFirst({
-    where: { id: itemId, task: { companyId: user.companyId } },
+    where: { id: itemId, task: taskVisibilityFilter(user) },
     select: { id: true },
   });
   if (!item) return;
@@ -454,7 +461,7 @@ export async function addCommentAction(taskId: string, content: string) {
   if (!content.trim()) return;
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId },
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { assigneeId: true, createdById: true, title: true },
   });
   if (!task) return;
@@ -524,7 +531,7 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
 } | null> {
   const user = await requireAuth();
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: {
       id: true,
       title: true,
@@ -556,7 +563,7 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
 export async function fetchProjectsForMoveAction(): Promise<{ id: string; name: string }[]> {
   const user = await requireAuth();
   return prisma.project.findMany({
-    where: { companyId: user.companyId, deletedAt: null },
+    where: { deletedAt: null, AND: projectVisibilityFilter(user) },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
@@ -569,14 +576,14 @@ export async function moveTaskToProjectAction(
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
-    where: { id: taskId, companyId: user.companyId, deletedAt: null },
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: { projectId: true, title: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };
 
   if (projectId) {
     const project = await prisma.project.findFirst({
-      where: { id: projectId, companyId: user.companyId, deletedAt: null },
+      where: { id: projectId, deletedAt: null, AND: projectVisibilityFilter(user) },
       select: { id: true },
     });
     if (!project) return { error: "Projeto não encontrado." };
@@ -600,5 +607,171 @@ export async function moveTaskToProjectAction(
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
   if (projectId) revalidatePath(`/projetos/${projectId}`);
   revalidatePath("/dashboard");
+  return {};
+}
+
+export async function duplicateTaskAction(taskId: string): Promise<{ error?: string; newTaskId?: string }> {
+  const user = await requireAuth();
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: {
+      title: true, description: true, priority: true, assigneeId: true,
+      sectorId: true, projectId: true, dueDate: true,
+      checklistItems: { select: { title: true, position: true } },
+      subtasks: {
+        where: { deletedAt: null },
+        select: { title: true, description: true, priority: true, assigneeId: true, dueDate: true, sectorId: true },
+      },
+    },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  const copy = await prisma.task.create({
+    data: {
+      companyId: user.companyId,
+      title: `${task.title} (cópia)`,
+      description: task.description,
+      priority: task.priority,
+      assigneeId: task.assigneeId,
+      sectorId: task.sectorId,
+      projectId: task.projectId,
+      dueDate: task.dueDate,
+      createdById: user.userId,
+      checklistItems: {
+        create: task.checklistItems.map((ci) => ({ title: ci.title, position: ci.position })),
+      },
+    },
+    select: { id: true },
+  });
+
+  for (const sub of task.subtasks) {
+    await prisma.task.create({
+      data: {
+        companyId: user.companyId,
+        title: sub.title,
+        description: sub.description,
+        priority: sub.priority,
+        assigneeId: sub.assigneeId,
+        dueDate: sub.dueDate,
+        projectId: task.projectId,
+        sectorId: task.sectorId,
+        parentTaskId: copy.id,
+        createdById: user.userId,
+      },
+    });
+  }
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.created",
+    resourceType: "task",
+    resourceId: copy.id,
+    newValue: { title: `${task.title} (cópia)`, duplicatedFrom: taskId },
+  });
+
+  revalidatePath("/dashboard");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return { newTaskId: copy.id };
+}
+
+export async function archiveTaskAction(taskId: string): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: { title: true, projectId: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { archivedAt: new Date() },
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.updated",
+    resourceType: "task",
+    resourceId: taskId,
+    newValue: { archived: true },
+  });
+
+  revalidatePath("/dashboard");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
+}
+
+export async function bulkUpdateTaskStatusAction(
+  taskIds: string[],
+  status: TaskStatus,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (!taskIds.length) return {};
+
+  const owned = await prisma.task.findMany({
+    where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: { id: true },
+  });
+  const safeIds = owned.map((t) => t.id);
+
+  await prisma.task.updateMany({
+    where: { id: { in: safeIds } },
+    data: { status, completedAt: status === "done" ? new Date() : null },
+  });
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function bulkAssignAction(
+  taskIds: string[],
+  assigneeId: string,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (!taskIds.length) return {};
+
+  const [owned, assignee] = await Promise.all([
+    prisma.task.findMany({
+      where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
+      select: { id: true },
+    }),
+    prisma.user.findFirst({
+      where: { id: assigneeId, companyId: user.companyId },
+      select: { id: true },
+    }),
+  ]);
+  if (!assignee) return { error: "Usuário não encontrado." };
+
+  const safeIds = owned.map((t) => t.id);
+  await prisma.task.updateMany({
+    where: { id: { in: safeIds } },
+    data: { assigneeId },
+  });
+
+  revalidatePath("/dashboard");
+  return {};
+}
+
+export async function bulkDeleteAction(taskIds: string[]): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (!taskIds.length) return {};
+
+  const owned = await prisma.task.findMany({
+    where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: { id: true, projectId: true },
+  });
+  const safeIds = owned.map((t) => t.id);
+  const projectIds = [...new Set(owned.map((t) => t.projectId).filter(Boolean) as string[])];
+
+  await prisma.task.updateMany({
+    where: { id: { in: safeIds } },
+    data: { deletedAt: new Date() },
+  });
+
+  revalidatePath("/dashboard");
+  for (const pid of projectIds) revalidatePath(`/projetos/${pid}`);
   return {};
 }

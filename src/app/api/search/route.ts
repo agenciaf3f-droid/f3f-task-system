@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 
 export async function GET(req: NextRequest) {
   const user = await getAuthUser();
@@ -11,9 +12,9 @@ export async function GET(req: NextRequest) {
 
   const tasks = await prisma.task.findMany({
     where: {
-      companyId: user.companyId,
       deletedAt: null,
       title: { contains: q, mode: "insensitive" },
+      AND: taskVisibilityFilter(user),
     },
     select: { id: true, title: true, status: true },
     take: 10,

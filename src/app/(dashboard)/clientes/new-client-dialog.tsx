@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useActionState, useEffect } from "react";
 import { createClientAction } from "@/app/(dashboard)/projetos/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,12 @@ export function NewClientDialog() {
     FormData
   >(createClientAction, {});
 
-  if (state.success && open) setOpen(false);
+  // Fecha o dialog só quando UM novo state.success chega (cada submit produz nova ref de state).
+  // setState durante render deixava state.success "grudado" e o dialog fechava instantaneamente
+  // ao reabrir após o primeiro sucesso.
+  useEffect(() => {
+    if (state.success) setOpen(false);
+  }, [state]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
