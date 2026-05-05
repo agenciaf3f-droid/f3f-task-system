@@ -2,8 +2,14 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NewProjectForm } from "./form";
 
-export default async function NovoProjetoPage() {
+export default async function NovoProjetoPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ clientId?: string }>;
+}) {
   const user = await requireAuth();
+  const sp = await searchParams;
+  const defaultClientId = sp?.clientId;
 
   const [clients, templates] = await Promise.all([
     prisma.client.findMany({
@@ -18,5 +24,5 @@ export default async function NovoProjetoPage() {
     }),
   ]);
 
-  return <NewProjectForm clients={clients} templates={templates} />;
+  return <NewProjectForm clients={clients} templates={templates} defaultClientId={defaultClientId} />;
 }

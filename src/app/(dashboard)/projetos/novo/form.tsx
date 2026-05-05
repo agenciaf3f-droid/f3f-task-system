@@ -12,12 +12,15 @@ import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 interface Client { id: string; name: string; color: string | null }
 interface Template { id: string; name: string; category: string | null; description: string | null; _count: { templateTasks: number } }
 
-export function NewProjectForm({ clients, templates }: { clients: Client[]; templates: Template[] }) {
+export function NewProjectForm({ clients, templates, defaultClientId }: { clients: Client[]; templates: Template[]; defaultClientId?: string }) {
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
     createProjectAction,
     {},
   );
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "__new__");
+  const initialClientId = (defaultClientId && clients.find((c) => c.id === defaultClientId))
+    ? defaultClientId
+    : (clients[0]?.id ?? "__new__");
+  const [clientId, setClientId] = useState(initialClientId);
   const [showNewClient, setShowNewClient] = useState(clients.length === 0);
   const [templateId, setTemplateId] = useState("__none__");
   const [description, setDescription] = useState("");

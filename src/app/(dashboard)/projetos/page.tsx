@@ -90,7 +90,7 @@ export default async function ProjetosPage({
                 </p>
               </div>
             </div>
-            <LinkButton href="/projetos/novo">
+            <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
               <Plus className="w-4 h-4 mr-2" />
               Novo projeto
             </LinkButton>
