@@ -323,96 +323,109 @@ export async function deleteProjectAction(projectId: string) {
   redirect("/projetos");
 }
 
+export async function applyTemplatesToProjectAction(
+  projectId: string,
+  templateIds: string[],
+  assigneeId: string,
+  startDate: string,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+
+  if (!templateIds.length) return { error: "Selecione ao menos um template." };
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, companyId: user.companyId, deletedAt: null },
+  });
+  if (!project) return { error: "Projeto não encontrado." };
+
+  const templates = await prisma.template.findMany({
+    where: { id: { in: templateIds }, companyId: user.companyId, isActive: true },
+    include: {
+      templateTasks: {
+        orderBy: { position: "asc" },
+        include: { checklistItems: { orderBy: { position: "asc" } } },
+      },
+    },
+  });
+
+  if (!templates.length) return { error: "Nenhum template válido encontrado." };
+
+  const start = startDate ? new Date(startDate) : new Date();
+  const resolvedAssignee = assigneeId || null;
+
+  for (const template of templates) {
+    if (!project.description?.trim() && template.description?.trim()) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { description: template.description.trim() },
+      });
+    }
+
+    for (let tIdx = 0; tIdx < template.templateTasks.length; tIdx++) {
+      const tt = template.templateTasks[tIdx];
+      const dueDate = tt.daysToComplete
+        ? new Date(start.getTime() + tt.daysToComplete * 86400000)
+        : null;
+
+      const parentTask = await prisma.task.create({
+        data: {
+          companyId: user.companyId,
+          projectId,
+          templateId: template.id,
+          sectorId: template.sectorId,
+          title: tt.title,
+          description: tt.description,
+          priority: tt.priority,
+          assigneeId: resolvedAssignee,
+          createdById: user.userId,
+          dueDate,
+          metadata: { templatePosition: tIdx },
+        },
+      });
+
+      for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
+        const ci = tt.checklistItems[cIdx];
+        if (!ci.title?.trim()) continue;
+        await prisma.task.create({
+          data: {
+            companyId: user.companyId,
+            projectId,
+            parentTaskId: parentTask.id,
+            title: ci.title.trim(),
+            priority: tt.priority,
+            assigneeId: resolvedAssignee,
+            createdById: user.userId,
+            metadata: { templatePosition: cIdx },
+          },
+        });
+      }
+    }
+
+    await prisma.template.update({
+      where: { id: template.id },
+      data: { useCount: { increment: 1 } },
+    });
+
+    await logActivity({
+      companyId: user.companyId,
+      userId: user.userId,
+      action: "project.template_applied",
+      resourceType: "project",
+      resourceId: projectId,
+      newValue: { templateName: template.name, tasksCreated: template.templateTasks.length },
+    });
+  }
+
+  revalidatePath(`/projetos/${projectId}`);
+  return {};
+}
+
+/** @deprecated use applyTemplatesToProjectAction */
 export async function applyTemplateToProjectAction(
   projectId: string,
   templateId: string,
   assigneeId: string,
   startDate: string,
 ): Promise<{ error?: string }> {
-  const user = await requireAuth();
-
-  const [project, template] = await Promise.all([
-    prisma.project.findFirst({
-      where: { id: projectId, companyId: user.companyId, deletedAt: null },
-    }),
-    prisma.template.findFirst({
-      where: { id: templateId, companyId: user.companyId, isActive: true },
-      include: {
-        templateTasks: {
-          orderBy: { position: "asc" },
-          include: { checklistItems: { orderBy: { position: "asc" } } },
-        },
-      },
-    }),
-  ]);
-
-  if (!project) return { error: "Projeto não encontrado." };
-  if (!template) return { error: "Template não encontrado." };
-
-  if (!project.description?.trim() && template.description?.trim()) {
-    await prisma.project.update({
-      where: { id: projectId },
-      data: { description: template.description.trim() },
-    });
-  }
-
-  const start = startDate ? new Date(startDate) : new Date();
-  const resolvedAssignee = assigneeId || null;
-
-  for (let tIdx = 0; tIdx < template.templateTasks.length; tIdx++) {
-    const tt = template.templateTasks[tIdx];
-    const dueDate = tt.daysToComplete
-      ? new Date(start.getTime() + tt.daysToComplete * 86400000)
-      : null;
-
-    const parentTask = await prisma.task.create({
-      data: {
-        companyId: user.companyId,
-        projectId,
-        templateId: template.id,
-        sectorId: template.sectorId,
-        title: tt.title,
-        description: tt.description,
-        priority: tt.priority,
-        assigneeId: resolvedAssignee,
-        createdById: user.userId,
-        dueDate,
-        metadata: { templatePosition: tIdx },
-      },
-    });
-
-    for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
-      const ci = tt.checklistItems[cIdx];
-      if (!ci.title?.trim()) continue;
-      await prisma.task.create({
-        data: {
-          companyId: user.companyId,
-          projectId,
-          parentTaskId: parentTask.id,
-          title: ci.title.trim(),
-          priority: tt.priority,
-          assigneeId: resolvedAssignee,
-          createdById: user.userId,
-          metadata: { templatePosition: cIdx },
-        },
-      });
-    }
-  }
-
-  await prisma.template.update({
-    where: { id: templateId },
-    data: { useCount: { increment: 1 } },
-  });
-
-  await logActivity({
-    companyId: user.companyId,
-    userId: user.userId,
-    action: "project.template_applied",
-    resourceType: "project",
-    resourceId: projectId,
-    newValue: { templateName: template.name, tasksCreated: template.templateTasks.length },
-  });
-
-  revalidatePath(`/projetos/${projectId}`);
-  return {};
+  return applyTemplatesToProjectAction(projectId, [templateId], assigneeId, startDate);
 }

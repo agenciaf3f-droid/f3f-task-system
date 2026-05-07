@@ -21,7 +21,7 @@ export function NewProjectForm({ clients, templates, defaultClientId }: { client
     ? defaultClientId
     : (clients[0]?.id ?? "__new__");
   const [clientId, setClientId] = useState(initialClientId);
-  const [showNewClient, setShowNewClient] = useState(clients.length === 0);
+  const [showNewClient, setShowNewClient] = useState(clients.length === 0 || initialClientId === "__new__");
   const [templateId, setTemplateId] = useState("__none__");
   const [description, setDescription] = useState("");
   const [descriptionTouched, setDescriptionTouched] = useState(false);

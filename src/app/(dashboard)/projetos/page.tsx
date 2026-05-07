@@ -104,7 +104,7 @@ export default async function ProjetosPage({
             </div>
             <p className="text-sm font-semibold text-neutral-600">Nenhum projeto para este cliente</p>
             <p className="text-xs text-neutral-400 mt-1 mb-5">Crie o primeiro projeto para {client.name}</p>
-            <LinkButton href="/projetos/novo" size="sm">
+            <LinkButton href={`/projetos/novo?clientId=${client.id}`} size="sm">
               <Plus className="w-4 h-4 mr-2" />
               Novo projeto
             </LinkButton>
