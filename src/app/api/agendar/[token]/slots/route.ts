@@ -1,5 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
+
+const TOLERANCE_MINUTES = 10;
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
 
 function generateSlots(startTime: string, endTime: string): string[] {
   const slots: string[] = [];
@@ -33,6 +41,9 @@ export async function GET(
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "date inválida" }, { status: 400 });
   }
+  if (isPastDate(date)) {
+    return NextResponse.json({ slots: [] });
+  }
 
   const user = await prisma.user.findFirst({
     where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
@@ -65,8 +76,14 @@ export async function GET(
   });
   const bookedSet = new Set(booked.map((b) => b.startTime));
 
+  // Tolerância 10min: se for hoje, esconde slots cujo início + 10min já passou.
+  const now = nowInBrazil();
+  const isToday = date === now.date;
+  const cutoffMinutes = isToday ? timeToMinutes(now.time) - TOLERANCE_MINUTES : -1;
+
   const slots = allSlots
     .filter((s) => !bookedSet.has(s))
+    .filter((s) => !isToday || timeToMinutes(s) >= cutoffMinutes)
     .map((s) => ({ startTime: s, endTime: addMinutes(s, 30) }));
 
   return NextResponse.json({ slots });

@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Link2, Check, Pencil, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Link2, Check, Pencil, X, Repeat } from "lucide-react";
 import { useState, useTransition } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
-import { cancelMeetingAction, updateCalendarSlugAction } from "./actions";
+import { cancelMeetingAction, updateCalendarSlugAction, type CancelScope } from "./actions";
 
 type Meeting = {
   id: string;
@@ -14,6 +14,7 @@ type Meeting = {
   status: string;
   hostId: string;
   hostName: string;
+  isRecurring: boolean;
 };
 
 type Availability = {
@@ -86,6 +87,7 @@ export function WeekCalendar({
   const [slugDraft, setSlugDraft] = useState(currentSlug);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [savingSlug, startSaveSlug] = useTransition();
+  const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
 
   function saveSlug() {
     setSlugError(null);
@@ -123,8 +125,20 @@ export function WeekCalendar({
     });
   }
 
-  function handleCancel(meetingId: string) {
-    startCancel(() => cancelMeetingAction(meetingId));
+  function handleCancelClick(m: Meeting) {
+    if (m.isRecurring) {
+      setCancelTarget(m);
+    } else {
+      if (!confirm("Cancelar esta reunião?")) return;
+      startCancel(() => cancelMeetingAction(m.id, "single"));
+    }
+  }
+
+  function confirmCancel(scope: CancelScope) {
+    if (!cancelTarget) return;
+    const id = cancelTarget.id;
+    setCancelTarget(null);
+    startCancel(() => cancelMeetingAction(id, scope));
   }
 
   const availableDays = new Set(availability.map((a) => a.dayOfWeek));
@@ -239,13 +253,14 @@ export function WeekCalendar({
                       <div
                         key={m.id}
                         className={`group/m relative flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-white ${color} truncate cursor-default`}
-                        title={`${m.hostName} · ${m.startTime}–${m.endTime}`}
+                        title={`${m.hostName} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
                       >
+                        {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 opacity-90" />}
                         <span className="font-medium shrink-0">{m.startTime}</span>
                         <span className="truncate opacity-95">{firstName(m.hostName)}</span>
                         {isOwn && (
                           <button
-                            onClick={() => handleCancel(m.id)}
+                            onClick={() => handleCancelClick(m)}
                             disabled={cancelling}
                             className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-white/20 rounded p-0.5"
                             aria-label="Cancelar"
@@ -323,6 +338,50 @@ export function WeekCalendar({
           </>
         )}
       </div>
+
+      {/* Cancel recurring modal */}
+      {cancelTarget && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={() => setCancelTarget(null)}
+          />
+          <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Repeat className="w-4 h-4 text-blue-600" />
+              <h3 className="text-base font-semibold text-slate-900">Cancelar reunião recorrente</h3>
+            </div>
+            <p className="text-sm text-slate-500 mb-5">
+              Esta reunião faz parte de uma série mensal. O que você quer cancelar?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => confirmCancel("single")}
+                disabled={cancelling}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:border-slate-300 text-sm font-medium text-slate-700 text-left disabled:opacity-50"
+              >
+                Apenas esta reunião
+                <span className="block text-xs text-slate-400 mt-0.5">As próximas continuam agendadas.</span>
+              </button>
+              <button
+                onClick={() => confirmCancel("series")}
+                disabled={cancelling}
+                className="px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-sm font-medium text-red-700 text-left disabled:opacity-50"
+              >
+                Toda a série mensal
+                <span className="block text-xs text-red-500/80 mt-0.5">Cancela esta e todas as futuras.</span>
+              </button>
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelling}
+                className="mt-2 px-4 py-2 text-sm text-slate-500 hover:text-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

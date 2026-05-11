@@ -2,6 +2,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WeekCalendar } from "./week-calendar";
 import { getOrCreateCalendarToken } from "./actions";
+import { currentYearMonthInBrazil } from "@/lib/meeting-recurrence";
 
 export const metadata = { title: "Calendário" };
 
@@ -30,7 +31,13 @@ export default async function CalendarioPage({
   const user = await requireAuth();
   const sp = await searchParams;
 
-  const monthRef = sp?.month ? new Date(sp.month + "-01T00:00:00Z") : new Date();
+  let monthRef: Date;
+  if (sp?.month) {
+    monthRef = new Date(sp.month + "-01T00:00:00Z");
+  } else {
+    const { year, month } = currentYearMonthInBrazil();
+    monthRef = new Date(Date.UTC(year, month, 1));
+  }
   const { gridStart, gridEnd, firstOfMonth } = getMonthGridRange(monthRef);
 
   const [meetings, availability, calendarToken, currentUser] = await Promise.all([
@@ -42,6 +49,7 @@ export default async function CalendarioPage({
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
       include: { user: { select: { id: true, name: true } } },
+      // recurrenceRule + recurrenceParentId já vêm por padrão; explicito não precisa.
     }),
     prisma.calendarAvailability.findMany({
       where: { userId: user.userId },
@@ -66,6 +74,7 @@ export default async function CalendarioPage({
         status: m.status,
         hostId: m.user.id,
         hostName: m.user.name,
+        isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
       }))}
       availability={availability.map((a) => ({
         dayOfWeek: a.dayOfWeek,

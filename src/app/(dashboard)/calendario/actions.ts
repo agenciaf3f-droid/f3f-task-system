@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deleteCalendarMeeting } from "@/lib/google-calendar";
+import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 export type AvailabilityInput = {
   dayOfWeek: number;
@@ -15,40 +16,91 @@ export type AvailabilityInput = {
 export async function saveAvailabilityAction(data: AvailabilityInput) {
   const user = await requireAuth();
 
-  // Delete all existing, then recreate
-  await prisma.calendarAvailability.deleteMany({ where: { userId: user.userId } });
-
-  if (data.length > 0) {
-    await prisma.calendarAvailability.createMany({
-      data: data.map((d) => ({
-        userId: user.userId,
-        dayOfWeek: d.dayOfWeek,
-        startTime: d.startTime,
-        endTime: d.endTime,
-      })),
-    });
-  }
+  // Atomicidade: se algum step falhar, mantém estado anterior.
+  await prisma.$transaction([
+    prisma.calendarAvailability.deleteMany({ where: { userId: user.userId } }),
+    ...(data.length > 0
+      ? [
+          prisma.calendarAvailability.createMany({
+            data: data.map((d) => ({
+              userId: user.userId,
+              dayOfWeek: d.dayOfWeek,
+              startTime: d.startTime,
+              endTime: d.endTime,
+            })),
+          }),
+        ]
+      : []),
+  ]);
 
   revalidatePath("/calendario");
   return { success: true };
 }
 
-export async function cancelMeetingAction(meetingId: string) {
+export type CancelScope = "single" | "series";
+
+export async function cancelMeetingAction(
+  meetingId: string,
+  scope: CancelScope = "single",
+) {
   const user = await requireAuth();
 
   const meeting = await prisma.meeting.findFirst({
     where: { id: meetingId, userId: user.userId },
-    select: { googleEventId: true },
+    select: {
+      id: true,
+      googleEventId: true,
+      recurrenceRule: true,
+      recurrenceParentId: true,
+    },
+  });
+  if (!meeting) return;
+
+  const isRecurring = meeting.recurrenceRule != null || meeting.recurrenceParentId != null;
+
+  // Sem recorrência: cancela só ela.
+  if (!isRecurring || scope === "single") {
+    await prisma.meeting.update({
+      where: { id: meetingId },
+      data: { status: "cancelled" },
+    });
+    if (meeting.googleEventId) {
+      await deleteCalendarMeeting(meeting.googleEventId);
+    }
+    revalidatePath("/calendario");
+    return;
+  }
+
+  // Série: cancela parent + todos os irmãos com date >= hoje, status confirmed.
+  const parentId = meeting.recurrenceParentId ?? meeting.id;
+  const today = todayInBrazil();
+
+  const targets = await prisma.meeting.findMany({
+    where: {
+      userId: user.userId,
+      status: "confirmed",
+      date: { gte: today },
+      OR: [{ id: parentId }, { recurrenceParentId: parentId }],
+    },
+    select: { id: true, googleEventId: true },
   });
 
+  if (targets.length === 0) {
+    revalidatePath("/calendario");
+    return;
+  }
+
   await prisma.meeting.updateMany({
-    where: { id: meetingId, userId: user.userId },
+    where: { id: { in: targets.map((t) => t.id) } },
     data: { status: "cancelled" },
   });
 
-  if (meeting?.googleEventId) {
-    await deleteCalendarMeeting(meeting.googleEventId);
-  }
+  // Google deletes em paralelo (best-effort, fora da transação DB).
+  await Promise.allSettled(
+    targets
+      .filter((t) => t.googleEventId)
+      .map((t) => deleteCalendarMeeting(t.googleEventId!)),
+  );
 
   revalidatePath("/calendario");
 }

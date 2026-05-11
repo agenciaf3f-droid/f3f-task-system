@@ -563,9 +563,16 @@ model Meeting {
   googleEventId  String?  @map("google_event_id")
   bookedAt       DateTime @default(now()) @map("booked_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Recurrence (booker-side fixed monthly)
+  recurrenceRule     Json?    @map("recurrence_rule")
+  recurrenceParentId String?  @map("recurrence_parent_id") @db.Uuid
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurrenceParent Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
+  recurrenceChildren Meeting[] @relation("MeetingRecurrence")
 
   @@unique([userId, date, startTime])
   @@index([userId, date])
+  @@index([recurrenceParentId])
   @@map("meetings")
 }

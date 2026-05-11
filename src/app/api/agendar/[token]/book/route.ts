@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting } from "@/lib/google-calendar";
+import {
+  generateMonthlyOccurrences,
+  getWeekOfMonth,
+  isPastDate,
+  type MonthlyNthWeekdayRule,
+} from "@/lib/meeting-recurrence";
+
+const RECURRING_INSTANCES_AHEAD = 12;
 
 function addMinutes(time: string, minutes: number): string {
   let [h, m] = time.split(":").map(Number);
@@ -16,20 +24,23 @@ export async function POST(
 ) {
   const { token } = await params;
 
-  let body: { date?: string; startTime?: string };
+  let body: { date?: string; startTime?: string; recurring?: boolean };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "body inválido" }, { status: 400 });
   }
 
-  const { date, startTime } = body;
+  const { date, startTime, recurring } = body;
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "date inválida" }, { status: 400 });
   }
   if (!startTime || !/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ ok: false, error: "startTime inválido" }, { status: 400 });
+  }
+  if (isPastDate(date)) {
+    return NextResponse.json({ ok: false, error: "Data no passado." }, { status: 400 });
   }
 
   const user = await prisma.user.findFirst({
@@ -41,46 +52,125 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
   }
 
-  // Validate slot is within availability
   const [y, mo, d] = date.split("-").map(Number);
-  const dayOfWeek = new Date(y, mo - 1, d).getDay();
+  const pickedDate = new Date(y, mo - 1, d);
+  const dayOfWeek = pickedDate.getDay();
 
   const availability = await prisma.calendarAvailability.findUnique({
     where: { userId_dayOfWeek: { userId: user.id, dayOfWeek } },
   });
-
   if (!availability) {
     return NextResponse.json({ ok: false, error: "Dia não disponível." }, { status: 400 });
   }
-
-  // Check slot is within time range
   if (startTime < availability.startTime || startTime >= availability.endTime) {
     return NextResponse.json({ ok: false, error: "Horário fora da disponibilidade." }, { status: 400 });
   }
 
   const endTime = addMinutes(startTime, 30);
 
-  try {
-    // Create in Google Calendar (fire-and-forget style, won't block booking)
-    const googleEventId = await createCalendarMeeting({
-      date,
-      startTime,
-      endTime,
-      ownerName: user.name,
-    });
+  // ─── Booking simples ───────────────────────────────────────────
+  if (!recurring) {
+    let createdMeetingId: string;
+    try {
+      const meeting = await prisma.meeting.create({
+        data: { userId: user.id, date, startTime, endTime, status: "confirmed" },
+        select: { id: true },
+      });
+      createdMeetingId = meeting.id;
+    } catch {
+      return NextResponse.json({ ok: false, error: "Horário já reservado." }, { status: 409 });
+    }
 
-    await prisma.meeting.create({
+    // Google Calendar fora da transação (best-effort)
+    const googleEventId = await createCalendarMeeting({
+      date, startTime, endTime, ownerName: user.name,
+    });
+    if (googleEventId) {
+      await prisma.meeting.update({
+        where: { id: createdMeetingId },
+        data: { googleEventId },
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // ─── Booking recorrente (mensal, Nª <weekday>) ─────────────────
+  const rule: MonthlyNthWeekdayRule = {
+    type: "monthly_nth_weekday",
+    weekOfMonth: getWeekOfMonth(pickedDate),
+    dayOfWeek,
+  };
+
+  const dates = generateMonthlyOccurrences(date, rule, RECURRING_INSTANCES_AHEAD);
+  if (dates.length === 0) {
+    return NextResponse.json({ ok: false, error: "Não foi possível gerar ocorrências." }, { status: 400 });
+  }
+
+  // Parent precisa existir pra dar sentido à série; se a primeira data conflita,
+  // aborta o booking todo (caller pode tentar outra data).
+  // Filhos são criados independentes — conflitos individuais skipam silenciosamente.
+  // (Transação no Postgres aborta ao primeiro erro, então não faz sentido aqui.)
+  let parentId: string;
+  try {
+    const parent = await prisma.meeting.create({
       data: {
         userId: user.id,
-        date,
+        date: dates[0],
         startTime,
         endTime,
         status: "confirmed",
-        googleEventId,
+        recurrenceRule: rule as object,
       },
+      select: { id: true },
     });
-    return NextResponse.json({ ok: true });
+    parentId = parent.id;
   } catch {
-    return NextResponse.json({ ok: false, error: "Horário já reservado." }, { status: 409 });
+    return NextResponse.json({ ok: false, error: "Primeiro horário já reservado." }, { status: 409 });
   }
+
+  const createdMeetings: { id: string; date: string }[] = [{ id: parentId, date: dates[0] }];
+  let skippedCount = 0;
+
+  for (let i = 1; i < dates.length; i++) {
+    try {
+      const child = await prisma.meeting.create({
+        data: {
+          userId: user.id,
+          date: dates[i],
+          startTime,
+          endTime,
+          status: "confirmed",
+          recurrenceRule: rule as object,
+          recurrenceParentId: parentId,
+        },
+        select: { id: true },
+      });
+      createdMeetings.push({ id: child.id, date: dates[i] });
+    } catch {
+      skippedCount++;
+    }
+  }
+
+  // Google Calendar em paralelo, fora da transação.
+  const results = await Promise.allSettled(
+    createdMeetings.map((m) =>
+      createCalendarMeeting({ date: m.date, startTime, endTime, ownerName: user.name })
+        .then((googleEventId) =>
+          googleEventId
+            ? prisma.meeting.update({ where: { id: m.id }, data: { googleEventId } })
+            : null,
+        ),
+    ),
+  );
+  const googleFailures = results.filter((r) => r.status === "rejected").length;
+  if (googleFailures > 0) {
+    console.error(`[Booking] ${googleFailures} Google Calendar syncs falharam (DB OK).`);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    recurring: true,
+    created: createdMeetings.length,
+    skipped: skippedCount,
+  });
 }

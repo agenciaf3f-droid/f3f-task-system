@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Check, CalendarDays, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, CalendarDays, Clock, Repeat } from "lucide-react";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const DAYS_LONG = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+const WEEK_LABELS = ["1ª","2ª","3ª","4ª","5ª"];
+
+function getWeekOfMonthFromDateStr(dateStr: string): number {
+  const [, , d] = dateStr.split("-").map(Number);
+  return Math.ceil(d / 7);
+}
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -41,6 +48,8 @@ export function BookingForm({
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
+  const [recurring, setRecurring] = useState(false);
+  const [bookedSummary, setBookedSummary] = useState<{ created: number; skipped: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const availableSet = new Set(availableDays);
@@ -80,11 +89,12 @@ export function BookingForm({
       const res = await fetch(`/api/agendar/${token}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, startTime: selectedSlot.startTime }),
+        body: JSON.stringify({ date: selectedDate, startTime: selectedSlot.startTime, recurring }),
       });
       const data = await res.json();
       if (data.ok) {
         setBooked(true);
+        if (data.recurring) setBookedSummary({ created: data.created, skipped: data.skipped });
       } else {
         setError(data.error ?? "Erro ao agendar.");
       }
@@ -107,20 +117,51 @@ export function BookingForm({
         <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
           <Check className="w-8 h-8 text-green-600" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900 mb-2">Reunião agendada!</h2>
+        <h2 className="text-xl font-bold text-slate-900 mb-2">
+          {bookedSummary ? "Reuniões agendadas!" : "Reunião agendada!"}
+        </h2>
         <p className="text-slate-500 text-sm max-w-xs">
-          Sua reunião com <strong>{userName}</strong> foi confirmada para{" "}
-          <strong>
-            {DAYS_SHORT[dateObj.getDay()]}, {dateObj.getDate()} de {MONTHS[dateObj.getMonth()]}
-          </strong>{" "}
-          às <strong>{selectedSlot.startTime}</strong>.
+          {bookedSummary ? (
+            <>
+              <strong>{bookedSummary.created}</strong> reuniões mensais com <strong>{userName}</strong>{" "}
+              começando <strong>{DAYS_SHORT[dateObj.getDay()]}, {dateObj.getDate()} de {MONTHS[dateObj.getMonth()]}</strong>{" "}
+              às <strong>{selectedSlot.startTime}</strong>.
+              {bookedSummary.skipped > 0 && (
+                <span className="block mt-2 text-xs text-amber-600">
+                  {bookedSummary.skipped} ocorrência{bookedSummary.skipped !== 1 ? "s" : ""} pulada{bookedSummary.skipped !== 1 ? "s" : ""} por conflito.
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              Sua reunião com <strong>{userName}</strong> foi confirmada para{" "}
+              <strong>{DAYS_SHORT[dateObj.getDay()]}, {dateObj.getDate()} de {MONTHS[dateObj.getMonth()]}</strong>{" "}
+              às <strong>{selectedSlot.startTime}</strong>.
+            </>
+          )}
         </p>
       </div>
     );
   }
 
+  let recurrenceLabel = "";
+  if (selectedDate) {
+    const [ry, rm, rd] = selectedDate.split("-").map(Number);
+    const weekday = new Date(ry, rm - 1, rd).getDay();
+    const week = getWeekOfMonthFromDateStr(selectedDate);
+    recurrenceLabel = `Toda ${WEEK_LABELS[week - 1]} ${DAYS_LONG[weekday]} do mês`;
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Tolerância banner */}
+      <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+        <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+        <span>
+          <strong>Tolerância de 10 min:</strong> você pode confirmar uma reunião até 10 minutos após o horário marcado começar.
+        </span>
+      </div>
+
       {/* Calendar */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -222,13 +263,37 @@ export function BookingForm({
               <p className="text-xs text-blue-600">{selectedSlot.startTime} – {selectedSlot.endTime} (30 min)</p>
             </div>
           </div>
+          {/* Recurring toggle */}
+          <button
+            type="button"
+            onClick={() => setRecurring((v) => !v)}
+            className={`w-full mb-2 p-3 rounded-xl border text-left flex items-center gap-3 transition-colors ${
+              recurring
+                ? "border-blue-500 bg-blue-50"
+                : "border-slate-200 bg-white hover:border-slate-300"
+            }`}
+          >
+            <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${recurring ? "bg-blue-600" : "bg-slate-300"}`}>
+              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${recurring ? "left-4" : "left-0.5"}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                <Repeat className="w-3 h-3" />
+                Repetir mensalmente
+              </p>
+              {recurring && (
+                <p className="text-[11px] text-blue-700 mt-0.5">{recurrenceLabel} (próximos 12 meses)</p>
+              )}
+            </div>
+          </button>
+
           {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
           <button
             onClick={confirmBooking}
             disabled={booking}
             className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
           >
-            {booking ? "Agendando..." : "Confirmar agendamento"}
+            {booking ? "Agendando..." : recurring ? "Confirmar série mensal" : "Confirmar agendamento"}
           </button>
         </div>
       )}

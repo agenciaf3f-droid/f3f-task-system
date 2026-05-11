@@ -95,6 +95,12 @@ export function AvailabilityDialog({
 
             <p className="text-xs text-slate-500 mb-4">Defina os horários que clientes poderão agendar reuniões.</p>
 
+            {Object.values(days).every((d) => !d.enabled) && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+                Você ainda não definiu sua disponibilidade. Ative os dias abaixo e escolha os horários — sem isso, ninguém consegue agendar reuniões com você.
+              </div>
+            )}
+
             <div className="flex flex-col gap-3">
               {DAYS.map((d) => {
                 const cfg = days[d.value];
