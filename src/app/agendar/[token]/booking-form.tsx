@@ -314,21 +314,34 @@ export function BookingForm({
           {recurring && selectedDate && (() => {
             const [y, m] = selectedDate.split("-").map(Number);
             const maxWeeks = getMaxWeeksInMonth(y, m - 1);
+            const todayStr = toDateStr(today);
+            const availableWeeks = [];
+
+            // Filter weeks that have at least one future date
+            for (let week = 1; week <= maxWeeks; week++) {
+              const startDay = (week - 1) * 7 + 1;
+              const endDay = Math.min(week * 7, getDaysInMonth(y, m - 1));
+              const lastDateOfWeek = `${y}-${String(m).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+              if (lastDateOfWeek >= todayStr) {
+                availableWeeks.push(week);
+              }
+            }
+
             return (
               <div className="mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
                 <p className="text-xs font-semibold text-slate-700 mb-2">Qual semana do mês?</p>
                 <div className="flex gap-2 flex-wrap">
-                  {WEEK_LABELS.slice(0, maxWeeks).map((label, idx) => (
+                  {availableWeeks.map((week) => (
                     <button
-                      key={idx}
-                      onClick={() => setSelectedWeek(idx + 1)}
+                      key={week}
+                      onClick={() => setSelectedWeek(week)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                        selectedWeek === idx + 1
+                        selectedWeek === week
                           ? "bg-blue-600 text-white border-blue-600"
                           : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
                       }`}
                     >
-                      {label}
+                      {WEEK_LABELS[week - 1]}
                     </button>
                   ))}
                 </div>
