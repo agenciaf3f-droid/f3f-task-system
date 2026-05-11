@@ -24,14 +24,14 @@ export async function POST(
 ) {
   const { token } = await params;
 
-  let body: { date?: string; startTime?: string; recurring?: boolean };
+  let body: { date?: string; startTime?: string; recurring?: boolean; weekOfMonth?: number };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "body inválido" }, { status: 400 });
   }
 
-  const { date, startTime, recurring } = body;
+  const { date, startTime, recurring, weekOfMonth: clientWeekOfMonth } = body;
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "date inválida" }, { status: 400 });
@@ -97,7 +97,7 @@ export async function POST(
   // ─── Booking recorrente (mensal, Nª <weekday>) ─────────────────
   const rule: MonthlyNthWeekdayRule = {
     type: "monthly_nth_weekday",
-    weekOfMonth: getWeekOfMonth(pickedDate),
+    weekOfMonth: clientWeekOfMonth || getWeekOfMonth(pickedDate),
     dayOfWeek,
   };
 

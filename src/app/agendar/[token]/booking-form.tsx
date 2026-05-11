@@ -49,6 +49,7 @@ export function BookingForm({
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
   const [recurring, setRecurring] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
   const [bookedSummary, setBookedSummary] = useState<{ created: number; skipped: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +71,9 @@ export function BookingForm({
     setSlots([]);
     setLoadingSlots(true);
     setError(null);
+    // Set default week based on selected date
+    const week = getWeekOfMonthFromDateStr(dateStr);
+    setSelectedWeek(week);
     try {
       const res = await fetch(`/api/agendar/${token}/slots?date=${dateStr}`);
       const data = await res.json();
@@ -89,7 +93,12 @@ export function BookingForm({
       const res = await fetch(`/api/agendar/${token}/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: selectedDate, startTime: selectedSlot.startTime, recurring }),
+        body: JSON.stringify({
+          date: selectedDate,
+          startTime: selectedSlot.startTime,
+          recurring,
+          weekOfMonth: recurring && selectedWeek ? selectedWeek : undefined,
+        }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -260,7 +269,8 @@ export function BookingForm({
                   return `${DAYS_SHORT[dateObj.getDay()]}, ${dateObj.getDate()} de ${MONTHS[dateObj.getMonth()]}`;
                 })()}
               </p>
-              <p className="text-xs text-blue-600">{selectedSlot.startTime} – {selectedSlot.endTime} (30 min)</p>
+              <p className="text-xs text-blue-600">{selectedSlot.startTime} – {selectedSlot.endTime}</p>
+              <p className="text-[11px] text-blue-500 mt-1 font-medium">Duração: 30 min (fixo)</p>
             </div>
           </div>
           {/* Recurring toggle */}
@@ -286,6 +296,28 @@ export function BookingForm({
               )}
             </div>
           </button>
+
+          {/* Week selector (only if recurring) */}
+          {recurring && (
+            <div className="mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <p className="text-xs font-semibold text-slate-700 mb-2">Qual semana do mês?</p>
+              <div className="flex gap-2 flex-wrap">
+                {WEEK_LABELS.map((label, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedWeek(idx + 1)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                      selectedWeek === idx + 1
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
           <button
