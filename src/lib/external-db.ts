@@ -1,14 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.EXTERNAL_SUPABASE_URL;
-const supabaseKey = process.env.EXTERNAL_SUPABASE_SERVICE_ROLE_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("Missing EXTERNAL_SUPABASE_URL or EXTERNAL_SUPABASE_SERVICE_ROLE_KEY");
-}
-
-const externalSupabase = createClient(supabaseUrl, supabaseKey);
-
 export type ClientData = {
   email: string;
   nome: string;
@@ -18,11 +9,23 @@ export type ClientData = {
   user_id?: string;
 };
 
+function getExternalSupabase() {
+  const supabaseUrl = process.env.EXTERNAL_SUPABASE_URL;
+  const supabaseKey = process.env.EXTERNAL_SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Missing EXTERNAL_SUPABASE_URL or EXTERNAL_SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  return createClient(supabaseUrl, supabaseKey);
+}
+
 export async function findClientByCredentials(
   email: string,
   password: string
 ): Promise<ClientData | null> {
   try {
+    const externalSupabase = getExternalSupabase();
     const tableName = process.env.EXTERNAL_CLIENT_TABLE || "client_dashboards";
     const emailField = process.env.EXTERNAL_FIELD_EMAIL || "email";
     const passwordField = process.env.EXTERNAL_FIELD_PASSWORD || "senha";
