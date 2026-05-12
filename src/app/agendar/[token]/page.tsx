@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getClientSession } from "@/lib/client-session";
 import { BookingForm } from "./booking-form";
 import { CalendarDays } from "lucide-react";
 
@@ -24,6 +25,12 @@ export default async function AgendarPage({
 
   if (!user || !user.isActive) notFound();
 
+  // Verificar sessão do cliente
+  const session = await getClientSession();
+  if (!session.clientEmail || session.bookingToken !== token) {
+    redirect(`/agendar/${token}/login`);
+  }
+
   const availableDays = user.calendarAvailability.map((a) => a.dayOfWeek);
 
   return (
@@ -36,6 +43,9 @@ export default async function AgendarPage({
           </div>
           <h1 className="text-xl font-bold text-slate-900">Agendar reunião</h1>
           <p className="text-sm text-slate-500 mt-1">com <strong className="text-slate-700">{user.name}</strong></p>
+          {session.clientName && (
+            <p className="text-xs text-slate-400 mt-2">Olá, <strong>{session.clientName}</strong></p>
+          )}
         </div>
 
         {availableDays.length === 0 ? (
@@ -49,6 +59,7 @@ export default async function AgendarPage({
               userName={user.name}
               token={token}
               availableDays={availableDays}
+              clientName={session.clientName}
             />
           </div>
         )}

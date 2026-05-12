@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting } from "@/lib/google-calendar";
+import { getClientSession } from "@/lib/client-session";
 import {
   generateMonthlyOccurrences,
   getWeekOfMonth,
@@ -52,6 +53,19 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
   }
 
+  // ─── Ler sessão do cliente ─────────────────────────────────────
+  const session = await getClientSession();
+  if (!session.clientEmail || session.bookingToken !== token) {
+    return NextResponse.json({ ok: false, error: "Sessão inválida ou expirada" }, { status: 401 });
+  }
+
+  // Mapear plano para Google Calendar ID
+  let calendarId: string | undefined;
+  if (session.clientPlan) {
+    const envKey = `GOOGLE_CALENDAR_ID_${session.clientPlan.toUpperCase()}`;
+    calendarId = process.env[envKey];
+  }
+
   const [y, mo, d] = date.split("-").map(Number);
   const pickedDate = new Date(y, mo - 1, d);
   const dayOfWeek = pickedDate.getDay();
@@ -73,7 +87,16 @@ export async function POST(
     let createdMeetingId: string;
     try {
       const meeting = await prisma.meeting.create({
-        data: { userId: user.id, date, startTime, endTime, status: "confirmed" },
+        data: {
+          userId: user.id,
+          date,
+          startTime,
+          endTime,
+          status: "confirmed",
+          clientName: session.clientName,
+          clientGroupId: session.clientGroupId,
+          clientPlan: session.clientPlan,
+        },
         select: { id: true },
       });
       createdMeetingId = meeting.id;
@@ -83,7 +106,13 @@ export async function POST(
 
     // Google Calendar fora da transação (best-effort)
     const googleEventId = await createCalendarMeeting({
-      date, startTime, endTime, ownerName: user.name,
+      date,
+      startTime,
+      endTime,
+      ownerName: user.name,
+      clientName: session.clientName,
+      clientGroupId: session.clientGroupId,
+      calendarId,
     });
     if (googleEventId) {
       await prisma.meeting.update({
@@ -120,6 +149,9 @@ export async function POST(
         endTime,
         status: "confirmed",
         recurrenceRule: rule as object,
+        clientName: session.clientName,
+        clientGroupId: session.clientGroupId,
+        clientPlan: session.clientPlan,
       },
       select: { id: true },
     });
@@ -142,6 +174,9 @@ export async function POST(
           status: "confirmed",
           recurrenceRule: rule as object,
           recurrenceParentId: parentId,
+          clientName: session.clientName,
+          clientGroupId: session.clientGroupId,
+          clientPlan: session.clientPlan,
         },
         select: { id: true },
       });
@@ -154,7 +189,15 @@ export async function POST(
   // Google Calendar em paralelo, fora da transação.
   const results = await Promise.allSettled(
     createdMeetings.map((m) =>
-      createCalendarMeeting({ date: m.date, startTime, endTime, ownerName: user.name })
+      createCalendarMeeting({
+        date: m.date,
+        startTime,
+        endTime,
+        ownerName: user.name,
+        clientName: session.clientName,
+        clientGroupId: session.clientGroupId,
+        calendarId,
+      })
         .then((googleEventId) =>
           googleEventId
             ? prisma.meeting.update({ where: { id: m.id }, data: { googleEventId } })

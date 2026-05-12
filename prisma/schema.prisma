@@ -563,6 +563,11 @@ model Meeting {
   googleEventId  String?  @map("google_event_id")
   bookedAt       DateTime @default(now()) @map("booked_at")
 
+  // Client data (from external DB)
+  clientName     String?  @map("client_name")
+  clientGroupId  String?  @map("client_group_id")
+  clientPlan     String?  @map("client_plan")
+
   // Recurrence (booker-side fixed monthly)
   recurrenceRule     Json?    @map("recurrence_rule")
   recurrenceParentId String?  @map("recurrence_parent_id") @db.Uuid

@@ -39,10 +39,12 @@ export function BookingForm({
   userName,
   token,
   availableDays,
+  clientName,
 }: {
   userName: string;
   token: string;
   availableDays: number[];
+  clientName?: string;
 }) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());

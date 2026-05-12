@@ -26,20 +26,31 @@ export async function createCalendarMeeting({
   startTime,
   endTime,
   ownerName,
+  clientName,
+  clientGroupId,
+  calendarId: customCalendarId,
 }: {
   date: string;       // "YYYY-MM-DD"
   startTime: string;  // "HH:MM"
   endTime: string;    // "HH:MM"
   ownerName: string;
+  clientName?: string;
+  clientGroupId?: string;
+  calendarId?: string;
 }): Promise<string | null> {
   const client = getClient();
   if (!client) return null;
 
   try {
+    const summary = clientName ? `${clientName} — ${startTime}` : `Reunião — ${ownerName}`;
+    const description = clientGroupId ? `Group ID: ${clientGroupId}` : undefined;
+    const targetCalendarId = customCalendarId || client.calendarId;
+
     const res = await client.calendar.events.insert({
-      calendarId: client.calendarId,
+      calendarId: targetCalendarId,
       requestBody: {
-        summary: `Reunião — ${ownerName}`,
+        summary,
+        description,
         start: { dateTime: `${date}T${startTime}:00`, timeZone: TIMEZONE },
         end:   { dateTime: `${date}T${endTime}:00`,   timeZone: TIMEZONE },
         colorId: "7", // Peacock (azul)
