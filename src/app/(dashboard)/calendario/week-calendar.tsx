@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Link2, Check, Pencil, X, Repeat } from "luci
 import { useState, useTransition } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
 import { cancelMeetingAction, updateCalendarSlugAction, type CancelScope } from "./actions";
+import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 type Meeting = {
   id: string;
@@ -14,6 +15,7 @@ type Meeting = {
   status: string;
   hostId: string;
   hostName: string;
+  clientName: string | null;
   isRecurring: boolean;
 };
 
@@ -105,7 +107,7 @@ export function WeekCalendar({
   const monthRef = new Date(monthRefIso);
   const monthName = MONTHS[monthRef.getUTCMonth()];
   const year = monthRef.getUTCFullYear();
-  const todayStr = toDateStr(new Date());
+  const todayStr = todayInBrazil();
 
   const days = Array.from({ length: 42 }, (_, i) => {
     const d = new Date(gridStart);
@@ -249,15 +251,19 @@ export function WeekCalendar({
                   {visible.map((m) => {
                     const color = colorForHost(m.hostId);
                     const isOwn = m.hostId === userId;
+                    const displayName = m.clientName || m.hostName;
+                    const tooltipPrefix = m.clientName
+                      ? `${m.clientName} com ${m.hostName}`
+                      : m.hostName;
                     return (
                       <div
                         key={m.id}
                         className={`group/m relative flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-white ${color} truncate cursor-default`}
-                        title={`${m.hostName} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
+                        title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
                       >
                         {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 opacity-90" />}
                         <span className="font-medium shrink-0">{m.startTime}</span>
-                        <span className="truncate opacity-95">{firstName(m.hostName)}</span>
+                        <span className="truncate opacity-95">{firstName(displayName)}</span>
                         {isOwn && (
                           <button
                             onClick={() => handleCancelClick(m)}

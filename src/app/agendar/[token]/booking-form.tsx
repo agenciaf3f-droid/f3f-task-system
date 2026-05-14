@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Check, CalendarDays, Clock, Repeat } from "lucide-react";
+import type { Recurrence } from "@/lib/meeting-duration";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -28,11 +29,6 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
 
-function getMaxWeeksInMonth(year: number, month: number): number {
-  const daysInMonth = getDaysInMonth(year, month);
-  return Math.ceil(daysInMonth / 7);
-}
-
 type Slot = { startTime: string; endTime: string };
 
 export function BookingForm({
@@ -40,11 +36,15 @@ export function BookingForm({
   token,
   availableDays,
   clientName,
+  durationMinutes,
+  recurrence,
 }: {
   userName: string;
   token: string;
   availableDays: number[];
   clientName?: string;
+  durationMinutes: number;
+  recurrence: Recurrence;
 }) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -55,10 +55,13 @@ export function BookingForm({
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
-  const [recurring, setRecurring] = useState(false);
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+  const [recurring, setRecurring] = useState(true);
   const [bookedSummary, setBookedSummary] = useState<{ created: number; skipped: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const durationLabel = durationMinutes >= 60
+    ? `${Math.floor(durationMinutes / 60)} h${durationMinutes % 60 ? ` ${durationMinutes % 60} min` : ""}`
+    : `${durationMinutes} min`;
 
   const availableSet = new Set(availableDays);
 
@@ -78,9 +81,6 @@ export function BookingForm({
     setSlots([]);
     setLoadingSlots(true);
     setError(null);
-    // Set default week based on selected date
-    const week = getWeekOfMonthFromDateStr(dateStr);
-    setSelectedWeek(week);
     try {
       const res = await fetch(`/api/agendar/${token}/slots?date=${dateStr}`);
       const data = await res.json();
@@ -104,7 +104,6 @@ export function BookingForm({
           date: selectedDate,
           startTime: selectedSlot.startTime,
           recurring,
-          weekOfMonth: recurring && selectedWeek ? selectedWeek : undefined,
         }),
       });
       const data = await res.json();
@@ -164,9 +163,14 @@ export function BookingForm({
   if (selectedDate) {
     const [ry, rm, rd] = selectedDate.split("-").map(Number);
     const weekday = new Date(ry, rm - 1, rd).getDay();
-    const week = getWeekOfMonthFromDateStr(selectedDate);
-    recurrenceLabel = `Toda ${WEEK_LABELS[week - 1]} ${DAYS_LONG[weekday]} do mês`;
+    if (recurrence === "weekly") {
+      recurrenceLabel = `Toda ${DAYS_LONG[weekday]}`;
+    } else {
+      const week = getWeekOfMonthFromDateStr(selectedDate);
+      recurrenceLabel = `Toda ${WEEK_LABELS[week - 1]} ${DAYS_LONG[weekday]} do mês`;
+    }
   }
+  const recurrenceFrequencyLabel = recurrence === "weekly" ? "Repetir semanalmente" : "Repetir mensalmente";
 
   return (
     <div className="flex flex-col gap-6">
@@ -182,7 +186,7 @@ export function BookingForm({
       <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800">
         <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5" />
         <span>
-          <strong>Duração fixa:</strong> todas as reuniões têm 30 minutos.
+          <strong>Duração:</strong> {durationLabel}. Marque com pelo menos 1 h de antecedência.
         </span>
       </div>
 
@@ -285,7 +289,7 @@ export function BookingForm({
                 })()}
               </p>
               <p className="text-xs text-blue-600">{selectedSlot.startTime} – {selectedSlot.endTime}</p>
-              <p className="text-[11px] text-blue-500 mt-1 font-medium">Duração: 30 min (fixo)</p>
+              <p className="text-[11px] text-blue-500 mt-1 font-medium">Duração: {durationLabel}</p>
             </div>
           </div>
           {/* Recurring toggle */}
@@ -304,52 +308,13 @@ export function BookingForm({
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                 <Repeat className="w-3 h-3" />
-                Repetir mensalmente
+                {recurrenceFrequencyLabel} <span className="font-normal text-slate-500">(recomendado)</span>
               </p>
               {recurring && (
-                <p className="text-[11px] text-blue-700 mt-0.5">{recurrenceLabel} (próximos 12 meses)</p>
+                <p className="text-[11px] text-blue-700 mt-0.5">{recurrenceLabel}</p>
               )}
             </div>
           </button>
-
-          {/* Week selector (only if recurring) */}
-          {recurring && selectedDate && (() => {
-            const [y, m] = selectedDate.split("-").map(Number);
-            const maxWeeks = getMaxWeeksInMonth(y, m - 1);
-            const todayStr = toDateStr(today);
-            const availableWeeks = [];
-
-            // Filter weeks that have at least one future date
-            for (let week = 1; week <= maxWeeks; week++) {
-              const startDay = (week - 1) * 7 + 1;
-              const endDay = Math.min(week * 7, getDaysInMonth(y, m - 1));
-              const lastDateOfWeek = `${y}-${String(m).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
-              if (lastDateOfWeek >= todayStr) {
-                availableWeeks.push(week);
-              }
-            }
-
-            return (
-              <div className="mb-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
-                <p className="text-xs font-semibold text-slate-700 mb-2">Qual semana do mês?</p>
-                <div className="flex gap-2 flex-wrap">
-                  {availableWeeks.map((week) => (
-                    <button
-                      key={week}
-                      onClick={() => setSelectedWeek(week)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                        selectedWeek === week
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50"
-                      }`}
-                    >
-                      {WEEK_LABELS[week - 1]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
 
           {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
           <button
@@ -357,7 +322,7 @@ export function BookingForm({
             disabled={booking}
             className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
           >
-            {booking ? "Agendando..." : recurring ? "Confirmar série mensal" : "Confirmar agendamento"}
+            {booking ? "Agendando..." : "Confirmar reunião"}
           </button>
         </div>
       )}

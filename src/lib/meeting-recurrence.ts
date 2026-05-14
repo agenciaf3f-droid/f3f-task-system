@@ -11,6 +11,13 @@ export type MonthlyNthWeekdayRule = {
   dayOfWeek: number;   // 0=Dom..6=Sáb
 };
 
+export type WeeklyRule = {
+  type: "weekly";
+  dayOfWeek: number; // 0=Dom..6=Sáb
+};
+
+export type RecurrenceRule = MonthlyNthWeekdayRule | WeeklyRule;
+
 export function getWeekOfMonth(date: Date): number {
   return Math.ceil(date.getDate() / 7);
 }
@@ -66,8 +73,38 @@ export function generateMonthlyOccurrences(
 const WEEK_LABELS = ["1ª", "2ª", "3ª", "4ª", "5ª"];
 const DAY_LABELS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
-export function describeRule(rule: MonthlyNthWeekdayRule): string {
+export function describeRule(rule: RecurrenceRule): string {
+  if (rule.type === "weekly") {
+    return `Toda ${DAY_LABELS[rule.dayOfWeek]}`;
+  }
   return `Toda ${WEEK_LABELS[rule.weekOfMonth - 1]} ${DAY_LABELS[rule.dayOfWeek]} do mês`;
+}
+
+/**
+ * Gera próximas `count` ocorrências semanais a partir de `fromDate` (inclusive),
+ * respeitando o `dayOfWeek` da rule. Se `fromDate` cai em outro dia da semana,
+ * primeira ocorrência será a próxima data válida.
+ */
+export function generateWeeklyOccurrences(
+  fromDate: string,
+  rule: WeeklyRule,
+  count: number,
+): string[] {
+  const [y, m, d] = fromDate.split("-").map(Number);
+  let cursor = new Date(Date.UTC(y, m - 1, d));
+  // Avança até o dayOfWeek correto (UTC para evitar TZ shenanigans).
+  while (cursor.getUTCDay() !== rule.dayOfWeek) {
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  const dates: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const yy = cursor.getUTCFullYear();
+    const mm = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(cursor.getUTCDate()).padStart(2, "0");
+    dates.push(`${yy}-${mm}-${dd}`);
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return dates;
 }
 
 // ─── TZ helpers (hardcoded America/Sao_Paulo) ──────────────────────────────

@@ -38,7 +38,7 @@ export function ModalClient({ children }: ModalClientProps) {
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-10 px-4 overflow-y-auto">
         <div
-          className="relative bg-[#f8f9fb] rounded-2xl w-full max-w-3xl shadow-2xl"
+          className="relative bg-background rounded-2xl w-full max-w-3xl shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close button */}

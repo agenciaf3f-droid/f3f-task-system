@@ -74,6 +74,7 @@ export default async function CalendarioPage({
         status: m.status,
         hostId: m.user.id,
         hostName: m.user.name,
+        clientName: m.clientName,
         isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
       }))}
       availability={availability.map((a) => ({

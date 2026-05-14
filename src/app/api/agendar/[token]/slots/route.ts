@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
+import { getClientSession } from "@/lib/client-session";
+import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
 
 const TOLERANCE_MINUTES = 10;
 
@@ -9,15 +11,15 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
-function generateSlots(startTime: string, endTime: string): string[] {
+function generateSlots(startTime: string, endTime: string, stepMinutes: number): string[] {
   const slots: string[] = [];
   let [h, m] = startTime.split(":").map(Number);
   const [endH, endM] = endTime.split(":").map(Number);
   const endMinutes = endH * 60 + endM;
-  while (h * 60 + m < endMinutes) {
+  while (h * 60 + m + stepMinutes <= endMinutes) {
     slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-    m += 30;
-    if (m >= 60) { h += 1; m -= 60; }
+    m += stepMinutes;
+    while (m >= 60) { h += 1; m -= 60; }
   }
   return slots;
 }
@@ -54,7 +56,10 @@ export async function GET(
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  // Day of week for the requested date
+  // Plano vem da sessão do cliente; sem sessão, assume 60min.
+  const session = await getClientSession();
+  const durationMinutes = getMeetingDurationMinutes(session.clientPlan);
+
   const [y, mo, d] = date.split("-").map(Number);
   const dayOfWeek = new Date(y, mo - 1, d).getDay();
 
@@ -66,25 +71,42 @@ export async function GET(
     return NextResponse.json({ slots: [] });
   }
 
-  // All possible 30-min slots
-  const allSlots = generateSlots(availability.startTime, availability.endTime);
+  // Slots na granularidade da duração do plano.
+  const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Already booked slots
+  // Reuniões já marcadas (ocupam intervalo startTime..endTime).
   const booked = await prisma.meeting.findMany({
     where: { userId: user.id, date, status: "confirmed" },
-    select: { startTime: true },
+    select: { startTime: true, endTime: true },
   });
-  const bookedSet = new Set(booked.map((b) => b.startTime));
+  function overlapsBooked(slotStart: string): boolean {
+    const slotEnd = addMinutes(slotStart, durationMinutes);
+    const a = timeToMinutes(slotStart);
+    const b = timeToMinutes(slotEnd);
+    return booked.some((m) => {
+      const x = timeToMinutes(m.startTime);
+      const y = timeToMinutes(m.endTime);
+      return a < y && b > x;
+    });
+  }
 
+  // Antecedência mínima: 1h. Pra hoje, slot precisa começar >= agora + 60min.
   // Tolerância 10min: se for hoje, esconde slots cujo início + 10min já passou.
+  // (regra de antecedência sobrepõe tolerância pra hoje)
   const now = nowInBrazil();
   const isToday = date === now.date;
-  const cutoffMinutes = isToday ? timeToMinutes(now.time) - TOLERANCE_MINUTES : -1;
+  const nowMin = timeToMinutes(now.time);
+  const advanceCutoff = nowMin + MIN_ADVANCE_MINUTES;
+  const toleranceCutoff = nowMin - TOLERANCE_MINUTES;
 
   const slots = allSlots
-    .filter((s) => !bookedSet.has(s))
-    .filter((s) => !isToday || timeToMinutes(s) >= cutoffMinutes)
-    .map((s) => ({ startTime: s, endTime: addMinutes(s, 30) }));
+    .filter((s) => !overlapsBooked(s))
+    .filter((s) => {
+      if (!isToday) return true;
+      const m = timeToMinutes(s);
+      return m >= advanceCutoff && m >= toleranceCutoff;
+    })
+    .map((s) => ({ startTime: s, endTime: addMinutes(s, durationMinutes) }));
 
-  return NextResponse.json({ slots });
+  return NextResponse.json({ slots, durationMinutes });
 }

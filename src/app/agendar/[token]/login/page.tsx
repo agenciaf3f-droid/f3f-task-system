@@ -18,7 +18,7 @@ export default async function ClientLoginPage({
   if (!user || !user.isActive) notFound();
 
   return (
-    <div className="min-h-screen bg-[#f8f9fb] flex items-start justify-center pt-12 px-4 pb-12">
+    <div className="min-h-screen bg-background flex items-start justify-center pt-12 px-4 pb-12">
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-8">

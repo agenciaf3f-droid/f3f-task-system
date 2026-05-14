@@ -4,12 +4,18 @@ import { createCalendarMeeting } from "@/lib/google-calendar";
 import { getClientSession } from "@/lib/client-session";
 import {
   generateMonthlyOccurrences,
+  generateWeeklyOccurrences,
   getWeekOfMonth,
   isPastDate,
-  type MonthlyNthWeekdayRule,
+  nowInBrazil,
+  type RecurrenceRule,
 } from "@/lib/meeting-recurrence";
-
-const RECURRING_INSTANCES_AHEAD = 12;
+import {
+  getMeetingDurationMinutes,
+  getMeetingRecurrence,
+  MIN_ADVANCE_MINUTES,
+  RECURRING_INSTANCES_AHEAD,
+} from "@/lib/meeting-duration";
 
 function addMinutes(time: string, minutes: number): string {
   let [h, m] = time.split(":").map(Number);
@@ -17,6 +23,11 @@ function addMinutes(time: string, minutes: number): string {
   h += Math.floor(m / 60);
   m = m % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
 }
 
 export async function POST(
@@ -80,7 +91,20 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Horário fora da disponibilidade." }, { status: 400 });
   }
 
-  const endTime = addMinutes(startTime, 30);
+  // Antecedência mínima de 1h: se for hoje, slot precisa começar >= agora + 60min
+  const nowBR = nowInBrazil();
+  if (date === nowBR.date && timeToMinutes(startTime) < timeToMinutes(nowBR.time) + MIN_ADVANCE_MINUTES) {
+    return NextResponse.json(
+      { ok: false, error: `Reuniões precisam ser marcadas com ${MIN_ADVANCE_MINUTES} min de antecedência.` },
+      { status: 400 },
+    );
+  }
+
+  const durationMinutes = getMeetingDurationMinutes(session.clientPlan);
+  const endTime = addMinutes(startTime, durationMinutes);
+  if (endTime > availability.endTime) {
+    return NextResponse.json({ ok: false, error: "Horário não cabe na disponibilidade." }, { status: 400 });
+  }
 
   // ─── Booking simples ───────────────────────────────────────────
   if (!recurring) {
@@ -123,14 +147,22 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  // ─── Booking recorrente (mensal, Nª <weekday>) ─────────────────
-  const rule: MonthlyNthWeekdayRule = {
-    type: "monthly_nth_weekday",
-    weekOfMonth: clientWeekOfMonth || getWeekOfMonth(pickedDate),
-    dayOfWeek,
-  };
+  // ─── Booking recorrente: regra depende do plano (semanal vs mensal) ──
+  const recurrenceType = getMeetingRecurrence(session.clientPlan);
+  const rule: RecurrenceRule =
+    recurrenceType === "weekly"
+      ? { type: "weekly", dayOfWeek }
+      : {
+          type: "monthly_nth_weekday",
+          weekOfMonth: clientWeekOfMonth || getWeekOfMonth(pickedDate),
+          dayOfWeek,
+        };
 
-  const dates = generateMonthlyOccurrences(date, rule, RECURRING_INSTANCES_AHEAD);
+  const dates =
+    rule.type === "weekly"
+      ? generateWeeklyOccurrences(date, rule, RECURRING_INSTANCES_AHEAD)
+      : generateMonthlyOccurrences(date, rule, RECURRING_INSTANCES_AHEAD);
+
   if (dates.length === 0) {
     return NextResponse.json({ ok: false, error: "Não foi possível gerar ocorrências." }, { status: 400 });
   }

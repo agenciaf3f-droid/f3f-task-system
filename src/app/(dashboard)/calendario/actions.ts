@@ -13,8 +13,22 @@ export type AvailabilityInput = {
   endTime: string;
 }[];
 
-export async function saveAvailabilityAction(data: AvailabilityInput) {
+export async function saveAvailabilityAction(
+  data: AvailabilityInput,
+): Promise<{ success?: boolean; error?: string }> {
   const user = await requireAuth();
+
+  for (const d of data) {
+    if (d.dayOfWeek < 0 || d.dayOfWeek > 6) {
+      return { error: `Dia da semana inválido: ${d.dayOfWeek}` };
+    }
+    if (!/^\d{2}:\d{2}$/.test(d.startTime) || !/^\d{2}:\d{2}$/.test(d.endTime)) {
+      return { error: `Formato de horário inválido (esperado HH:MM).` };
+    }
+    if (d.endTime <= d.startTime) {
+      return { error: `Horário inválido no dia ${d.dayOfWeek}: fim deve ser após início.` };
+    }
+  }
 
   // Atomicidade: se algum step falhar, mantém estado anterior.
   await prisma.$transaction([

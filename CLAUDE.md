@@ -37,7 +37,7 @@ npx prisma generate  # regenerate client after schema change
 src/
   app/
     (auth)/           # login, forgot-password, reset-password
-    (dashboard)/      # authenticated area
+    (dashboard)/      # authenticated area (f3f_session cookie)
       @modal/         # parallel route — intercepting modals
         (.)tarefas/[id]/    # task detail modal
         (.)tarefas/nova/    # new task modal
@@ -47,14 +47,24 @@ src/
       clientes/       # clients CRUD
       setores/        # sectors
       equipe/         # team / users
-      calendario/     # calendar
+      calendario/     # gestor's calendar + availability dialog
       templates/      # task templates
+    agendar/[token]/  # PUBLIC booking page (no dashboard auth)
+      login/          # client login (separate auth — external DB)
+      booking-form.tsx
+    api/agendar/[token]/
+      auth/route.ts   # POST: client credentials → f3f_client_session
+      book/route.ts   # POST: create Meeting + Google Calendar event
   components/
-    ui/               # shared primitives (Button, Input, etc.)
+    ui/               # shared primitives
     tasks/            # task-specific components
     layout/           # sidebar, top-bar
   lib/
-    auth.ts           # requireAuth(), requireRole()
+    auth.ts           # requireAuth(), requireRole() — dashboard
+    client-session.ts # iron-session for /agendar clients
+    external-db.ts    # findClientByCredentials() → external Supabase
+    google-calendar.ts# createCalendarMeeting() / deleteCalendarMeeting()
+    meeting-recurrence.ts # todayInBrazil(), currentYearMonthInBrazil()
     prisma.ts         # Prisma singleton
     activity.ts       # logActivity()
     webhook.ts        # dispatchWebhook()
@@ -63,6 +73,58 @@ src/
 **Multi-tenant:** every query scoped by `companyId`. Pattern: check ownership with `companyId` before mutating by `id`.
 
 **Auth roles:** `admin > manager > supervisor > member (colaborador)`
+
+---
+
+## Authentication Systems (TWO separate)
+
+| Sistema | Rota | Banco | Senha | Sessão |
+|---|---|---|---|---|
+| Dashboard | `/login` | Interno (`User`, Prisma) | bcrypt | `f3f_session` |
+| Agendamento público | `/agendar/[token]/login` | **Externo** (`client_dashboards`, Supabase separado) | **plaintext** (fallback `"123456"` se null) | `f3f_client_session` |
+
+**Env vars externas:**
+- `EXTERNAL_SUPABASE_URL` · `EXTERNAL_SUPABASE_SERVICE_ROLE_KEY`
+- `EXTERNAL_CLIENT_TABLE` (default: `client_dashboards`)
+- `EXTERNAL_FIELD_EMAIL` · `EXTERNAL_FIELD_PASSWORD` · `EXTERNAL_FIELD_NAME` · `EXTERNAL_FIELD_PLAN` · `EXTERNAL_FIELD_GROUP_ID` · `EXTERNAL_FIELD_MANAGER_ID`
+
+Banco externo NÃO é controlado por esta app — apenas leitura para login. Hash de senha não é viável (outra fonte alimenta).
+
+---
+
+## Booking Flow (`/agendar`)
+
+1. Gestor copia link `/agendar/<slugOrToken>` (User.calendarSlug ou calendarToken) → envia ao cliente
+2. Cliente abre → sem sessão → redireciona para `/agendar/[token]/login`
+3. Cliente faz login → `POST /api/agendar/[token]/auth` → `findClientByCredentials()` no banco externo
+4. Sessão guarda: `clientEmail`, `clientName`, `clientPlan`, `clientGroupId` (whatsapp), `clientGestor`, `bookingToken`
+5. Cliente escolhe horário (respeitando `CalendarAvailability`) → `POST /api/agendar/[token]/book`
+6. Cria `Meeting` (Prisma interno) com `clientName`, `clientGroupId`, `clientPlan`
+7. Chama `createCalendarMeeting()` → cria evento Google Calendar → salva `googleEventId` na Meeting
+8. Recorrentes: gera 12 ocorrências mensais (parent + children); conflitos pulam silenciosamente
+
+---
+
+## Google Calendar Integration
+
+- **File:** `src/lib/google-calendar.ts`
+- **Auth:** OAuth2 refresh token
+  - `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` · `GOOGLE_REFRESH_TOKEN`
+- **Calendar por plano:** `GOOGLE_CALENDAR_ID_${PLAN.toUpperCase()}` → fallback `GOOGLE_CALENDAR_ID`
+- **Event title:** `${clientName} — ${startTime}` (ou `Reunião — ${ownerName}` se sem cliente)
+- **Event description:** `Group ID: ${clientGroupId}`
+- **Timezone:** `GOOGLE_CALENDAR_TIMEZONE` (default `America/Sao_Paulo`)
+- **Best-effort:** falha não bloqueia booking — loga `[GCal] Erro...` e segue
+
+**Calendário do dashboard (`/calendario`):** mostra `clientName || hostName` + horário. Cor por gestor (`colorForHost(hostId)`).
+
+---
+
+## Prisma Models (key fields)
+
+- **User**: + `calendarSlug` (unique, nullable), `calendarToken` (unique, nullable) — para link público
+- **CalendarAvailability**: `userId`, `dayOfWeek` (0-6), `startTime`, `endTime` (HH:MM); unique `[userId, dayOfWeek]`
+- **Meeting**: `userId`, `date` (YYYY-MM-DD), `startTime`, `endTime`, `status` (default `confirmed`), `googleEventId`, `clientName`, `clientGroupId`, `clientPlan`, `recurrenceRule` (JSON), `recurrenceParentId` (self); unique `[userId, date, startTime]`
 
 ---
 
@@ -145,7 +207,9 @@ src/
 - Adding `revalidatePath` without the matching route → stale UI
 - Forgetting `npx prisma generate` after schema change → type errors
 - Modal close with `router.push()` → use `router.back()`
+- Confundir os DOIS auth systems: `/login` (dashboard, bcrypt) ≠ `/agendar/.../login` (cliente público, banco externo plaintext)
+- Usar `new Date()` cru para "hoje" → use `todayInBrazil()` (timezone-aware)
 
 ---
 
-**Last Updated:** 2026-05-04
+**Last Updated:** 2026-05-12

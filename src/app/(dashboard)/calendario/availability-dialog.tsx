@@ -57,6 +57,16 @@ export function AvailabilityDialog({
   }
 
   function handleSave() {
+    const invalid = Object.entries(days)
+      .filter(([, cfg]) => cfg.enabled && cfg.endTime <= cfg.startTime)
+      .map(([dow]) => DAYS.find(d => d.value === Number(dow))?.short)
+      .filter(Boolean);
+
+    if (invalid.length > 0) {
+      alert(`Horário inválido em ${invalid.join(", ")} — fim deve ser após início`);
+      return;
+    }
+
     const data: AvailabilityInput = Object.entries(days)
       .filter(([, cfg]) => cfg.enabled)
       .map(([dow, cfg]) => ({
@@ -66,7 +76,11 @@ export function AvailabilityDialog({
       }));
 
     startTransition(async () => {
-      await saveAvailabilityAction(data);
+      const res = await saveAvailabilityAction(data);
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
       setSaved(true);
       setTimeout(() => { setSaved(false); setOpen(false); }, 800);
     });
