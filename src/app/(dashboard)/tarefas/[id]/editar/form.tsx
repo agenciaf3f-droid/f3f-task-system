@@ -44,7 +44,7 @@ export function EditTaskForm({
   );
 
   const dueDateValue = task.dueDate
-    ? format(new Date(task.dueDate), "yyyy-MM-dd'T'HH:mm")
+    ? format(new Date(task.dueDate), "yyyy-MM-dd")
     : "";
 
   const backHref = returnTo ?? `/tarefas/${task.id}`;
@@ -151,7 +151,7 @@ export function EditTaskForm({
             <Input
               id="dueDate"
               name="dueDate"
-              type="datetime-local"
+              type="date"
               defaultValue={dueDateValue}
               disabled={isPending}
             />

@@ -148,7 +148,7 @@ export function NewTaskForm({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="dueDate">Prazo</Label>
-            <Input id="dueDate" name="dueDate" type="datetime-local" disabled={isPending} />
+            <Input id="dueDate" name="dueDate" type="date" disabled={isPending} />
           </div>
         </div>
 
