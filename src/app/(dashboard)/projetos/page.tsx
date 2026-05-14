@@ -116,15 +116,18 @@ export default async function ProjetosPage({
                 {active.map((project) => (
                   <div
                     key={project.id}
-                    className="bg-white border border-neutral-200 rounded-2xl p-5 flex flex-col gap-4 hover:border-blue-300 hover:shadow-md transition-all"
+                    className="relative bg-white border border-neutral-200 rounded-2xl p-5 flex flex-col gap-4 hover:border-blue-300 hover:shadow-md transition-all"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <Link
+                      href={`/projetos/${project.id}`}
+                      className="absolute inset-0 z-0 rounded-2xl"
+                      aria-label={`Abrir projeto ${project.name}`}
+                    />
+                    <div className="relative z-10 flex items-start justify-between gap-2 pointer-events-none">
                       <div className="flex-1 min-w-0">
-                        <Link href={`/projetos/${project.id}`}>
-                          <h3 className="font-bold text-neutral-900 text-sm leading-tight hover:text-blue-700 transition-colors">
-                            {project.name}
-                          </h3>
-                        </Link>
+                        <h3 className="font-bold text-neutral-900 text-sm leading-tight">
+                          {project.name}
+                        </h3>
                         {project.description && (
                           <p className="text-xs text-neutral-500 mt-1 leading-relaxed line-clamp-2">
                             {project.description}
@@ -135,14 +138,14 @@ export default async function ProjetosPage({
                         href={`/projetos/${project.id}/editar`}
                         variant="outline"
                         size="sm"
-                        className="shrink-0 h-7 px-2 text-xs"
+                        className="shrink-0 h-7 px-2 text-xs pointer-events-auto"
                       >
                         <Pencil className="w-3 h-3 mr-1" />
                         Editar
                       </LinkButton>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-neutral-500 flex-wrap">
+                    <div className="relative z-10 flex items-center gap-3 text-xs text-neutral-500 flex-wrap pointer-events-none">
                       <span className="flex items-center gap-1">
                         <Hash className="w-3 h-3" />
                         {project.total} tarefa{project.total !== 1 ? "s" : ""}
@@ -164,7 +167,7 @@ export default async function ProjetosPage({
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-1.5 mt-auto pt-2 border-t border-neutral-100">
+                    <div className="relative z-10 flex flex-col gap-1.5 mt-auto pt-2 border-t border-neutral-100 pointer-events-none">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-neutral-400">
                           {project.done} de {project.total} concluída{project.total !== 1 ? "s" : ""}

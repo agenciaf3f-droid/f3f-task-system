@@ -113,7 +113,7 @@ export default async function TaskDetailPage({
               <div className="flex items-center gap-2 text-neutral-600">
                 <Calendar className="w-4 h-4 text-neutral-400 shrink-0" />
                 <span>
-                  {format(task.dueDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  {format(task.dueDate, "dd/MM/yyyy", { locale: ptBR })}
                 </span>
               </div>
             )}

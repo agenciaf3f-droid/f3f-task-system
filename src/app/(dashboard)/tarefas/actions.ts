@@ -137,6 +137,9 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
     data: {
       status,
       completedAt: status === "done" ? new Date() : null,
+      // Sincroniza progress com status: done=100%, todo=0%, demais (in_progress/cancelled): mantém.
+      ...(status === "done" ? { progress: 100 } : {}),
+      ...(status === "todo" ? { progress: 0 } : {}),
     },
   });
 
@@ -182,6 +185,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
   }
 
   revalidatePath(`/tarefas/${taskId}`);
+  revalidatePath("/tarefas");
   revalidatePath("/dashboard");
   if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
 }
