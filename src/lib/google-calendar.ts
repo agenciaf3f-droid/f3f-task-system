@@ -43,7 +43,7 @@ export async function createCalendarMeeting({
 
   try {
     const summary = clientName ? `${clientName} — ${startTime}` : `Reunião — ${ownerName}`;
-    const description = clientGroupId ? `Group ID: ${clientGroupId}` : undefined;
+    const description = clientGroupId || undefined;
     const targetCalendarId = customCalendarId || client.calendarId;
 
     const res = await client.calendar.events.insert({
