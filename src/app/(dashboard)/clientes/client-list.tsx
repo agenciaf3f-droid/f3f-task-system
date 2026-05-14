@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Briefcase, FolderKanban, ListTodo, Search } from "lucide-react";
+import { Briefcase, FolderKanban, ListTodo, Search, Star } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
 import { DeleteClientButton } from "./delete-client-button";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -20,15 +20,28 @@ type ClientItem = {
 export function ClientList({
   clients,
   userRole,
+  myClientIds,
 }: {
   clients: ClientItem[];
   userRole: string;
+  myClientIds: string[] | null;
 }) {
   const [query, setQuery] = useState("");
+  const [onlyMine, setOnlyMine] = useState(false);
 
-  const filtered = query.trim()
-    ? clients.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()))
-    : clients;
+  const mySet = useMemo(() => new Set(myClientIds ?? []), [myClientIds]);
+
+  const filtered = useMemo(() => {
+    let result = clients;
+    if (onlyMine && myClientIds) {
+      result = result.filter((c) => mySet.has(c.id));
+    }
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      result = result.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    return result;
+  }, [clients, query, onlyMine, myClientIds, mySet]);
 
   if (clients.length === 0) {
     return (
@@ -44,14 +57,34 @@ export function ClientList({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar cliente..."
-          className="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-neutral-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar cliente..."
+            className="w-full h-9 pl-9 pr-3 text-sm rounded-lg border border-neutral-200 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+        {myClientIds && (
+          <button
+            type="button"
+            onClick={() => setOnlyMine((v) => !v)}
+            className={`h-9 px-3 inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg border transition-colors shrink-0 ${
+              onlyMine
+                ? "bg-blue-600 text-white border-blue-600 hover:bg-blue-700"
+                : "bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50"
+            }`}
+            title={onlyMine ? "Mostrando só meus clientes" : "Mostrar só meus clientes"}
+          >
+            <Star className={`w-3.5 h-3.5 ${onlyMine ? "fill-current" : ""}`} />
+            Meus clientes
+            <span className={`ml-1 px-1.5 rounded-full text-[10px] ${onlyMine ? "bg-white/20" : "bg-neutral-100"}`}>
+              {myClientIds.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (

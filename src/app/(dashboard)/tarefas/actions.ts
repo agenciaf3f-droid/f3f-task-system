@@ -204,37 +204,34 @@ export async function updateTaskProgressAction(taskId: string, progress: number)
   revalidatePath(`/tarefas/${taskId}`);
 }
 
-export async function deleteTaskAction(taskId: string) {
+export async function deleteTaskAction(taskId: string): Promise<{ projectId: string | null }> {
   const user = await requireAuth();
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { title: true, projectId: true },
   });
-  if (!task) return;
+  if (!task) return { projectId: null };
 
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
     data: { deletedAt: new Date() },
   });
 
-  if (task) {
-    await logActivity({
-      companyId: user.companyId,
-      userId: user.userId,
-      action: "task.deleted",
-      resourceType: "task",
-      resourceId: taskId,
-      oldValue: { title: task.title },
-    });
-  }
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.deleted",
+    resourceType: "task",
+    resourceId: taskId,
+    oldValue: { title: task.title },
+  });
 
   revalidatePath("/dashboard");
-  if (task?.projectId) {
-    revalidatePath(`/projetos/${task.projectId}`);
-    redirect(`/projetos/${task.projectId}`);
-  }
-  redirect("/dashboard");
+  revalidatePath("/tarefas");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+
+  return { projectId: task.projectId };
 }
 
 export async function updateTaskAction(

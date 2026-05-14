@@ -5,6 +5,9 @@ import { ClientList } from "./client-list";
 
 export const metadata = { title: "Clientes" };
 
+// Email do owner que vê o toggle "Meus clientes".
+const MY_CLIENTS_OWNER_EMAIL = "rdlecal342@gmail.com";
+
 export default async function ClientesPage() {
   const user = await requireAuth();
 
@@ -33,6 +36,21 @@ export default async function ClientesPage() {
     activeTasks: c.projects.reduce((sum, p) => sum + p._count.tasks, 0),
   }));
 
+  // Computa IDs dos "meus clientes" — clientes onde o user logado é assignee de pelo menos 1 task.
+  // Só calcula pro owner; demais usuários recebem null e o toggle fica escondido.
+  let myClientIds: string[] | null = null;
+  if (user.email === MY_CLIENTS_OWNER_EMAIL) {
+    const myProjects = await prisma.project.findMany({
+      where: {
+        deletedAt: null,
+        companyId: user.companyId,
+        tasks: { some: { assigneeId: user.userId, deletedAt: null } },
+      },
+      select: { clientId: true },
+    });
+    myClientIds = Array.from(new Set(myProjects.map((p) => p.clientId)));
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
@@ -45,7 +63,11 @@ export default async function ClientesPage() {
         <NewClientDialog />
       </div>
 
-      <ClientList clients={clientsWithTaskCount} userRole={user.role} />
+      <ClientList
+        clients={clientsWithTaskCount}
+        userRole={user.role}
+        myClientIds={myClientIds}
+      />
     </div>
   );
 }
