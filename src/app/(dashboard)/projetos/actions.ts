@@ -312,9 +312,6 @@ export async function updateProjectStatusAction(
 
 export async function deleteProjectAction(projectId: string) {
   const user = await requireAuth();
-  if (user.role !== "admin" && user.role !== "manager" && user.role !== "supervisor") {
-    throw new Error("Sem permissão para excluir projetos.");
-  }
   await prisma.project.updateMany({
     where: { id: projectId, companyId: user.companyId },
     data: { deletedAt: new Date() },

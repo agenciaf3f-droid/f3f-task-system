@@ -156,7 +156,7 @@ export default async function ProjetoDetailPage({
             {templates.length > 0 && (
               <ApplyTemplateDialog projectId={project.id} templates={templates} users={users} />
             )}
-            <ProjectActions projectId={project.id} currentStatus={project.status} canDelete={canManage} />
+            <ProjectActions projectId={project.id} currentStatus={project.status} canDelete={true} />
             <LinkButton href={`/tarefas/nova?projectId=${project.id}`} size="sm">
               <Plus className="w-3.5 h-3.5 mr-1.5" />
               Nova tarefa
