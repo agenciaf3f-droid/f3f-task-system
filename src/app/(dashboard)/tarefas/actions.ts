@@ -41,7 +41,7 @@ const taskSchema = z.object({
   assigneeId: z.string().uuid().optional().or(z.literal("")),
   sectorId: z.string().uuid().optional().or(z.literal("")),
   projectId: z.string().uuid().optional().or(z.literal("")),
-  priority: z.enum(["low", "medium", "high", "urgent"]),
+  priority: z.enum(["low", "medium", "high", "urgent"]).optional().or(z.literal("")),
   dueDate: z.string().optional().or(z.literal("")),
 });
 
@@ -69,6 +69,7 @@ export async function createTaskAction(
   }
 
   const { title, description, priority, assigneeId, sectorId, projectId, dueDate } = parsed.data;
+  const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
@@ -77,7 +78,7 @@ export async function createTaskAction(
       companyId: user.companyId,
       title,
       description: description || null,
-      priority: priority as TaskPriority,
+      priority: safePriority,
       assigneeId: assigneeId || null,
       sectorId: sectorId || null,
       projectId: projectId || null,
@@ -255,6 +256,7 @@ export async function updateTaskAction(
   }
 
   const { title, description, priority, assigneeId, sectorId, dueDate } = parsed.data;
+  const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
@@ -269,7 +271,7 @@ export async function updateTaskAction(
     data: {
       title,
       description: description || null,
-      priority: priority as TaskPriority,
+      priority: safePriority,
       assigneeId: assigneeId || null,
       sectorId: sectorId || null,
       dueDate: parseDateInput(dueDate),

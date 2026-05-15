@@ -95,37 +95,20 @@ export function NewTaskForm({
           />
         </div>
 
-        {/* Row: Assignee + Sector */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="assigneeId">Responsável</Label>
-            <select
-              id="assigneeId"
-              name="assigneeId"
-              disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Sem responsável</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sectorId">Setor</Label>
-            <select
-              id="sectorId"
-              name="sectorId"
-              disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Sem setor</option>
-              {sectors.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+        {/* Row: Assignee */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="assigneeId">Responsável</Label>
+          <select
+            id="assigneeId"
+            name="assigneeId"
+            disabled={isPending}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">Sem responsável</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Row: Due date */}
