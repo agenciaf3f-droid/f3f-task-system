@@ -36,7 +36,7 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
   const [tasks, setTasks] = useState<TaskRow[]>(
     initialTasks.length > 0
       ? initialTasks
-      : [{ id: crypto.randomUUID(), title: "", days: "", priority: "medium", assigneeId: "", subtasks: [] }],
+      : [{ id: crypto.randomUUID(), title: "", description: "", days: "", priority: "medium", assigneeId: "", subtasks: [] }],
   );
 
   return (

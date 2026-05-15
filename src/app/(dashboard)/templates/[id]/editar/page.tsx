@@ -38,6 +38,7 @@ export default async function EditarTemplatePage({
   const initialTasks = template.templateTasks.map((t) => ({
     id: t.id,
     title: t.title,
+    description: t.description ?? "",
     days: t.daysToComplete?.toString() ?? "",
     priority: t.priority,
     assigneeId: t.defaultAssigneeId ?? "",

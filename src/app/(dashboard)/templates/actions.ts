@@ -31,6 +31,7 @@ export async function createTemplateAction(
 
   // Parse template tasks from formData
   const taskTitles = formData.getAll("taskTitle[]") as string[];
+  const taskDescriptions = formData.getAll("taskDescription[]") as string[];
   const taskDays = formData.getAll("taskDays[]") as string[];
   const taskPriorities = formData.getAll("taskPriority[]") as string[];
 
@@ -55,6 +56,7 @@ export async function createTemplateAction(
   const tasksToCreate = taskTitles
     .map((title, i) => ({
       title: title.trim(),
+      description: (taskDescriptions[i] ?? "").trim(),
       days: taskDays[i],
       priority: taskPriorities[i],
       assigneeId: taskAssigneeIds[i] || null,
@@ -68,6 +70,7 @@ export async function createTemplateAction(
       data: {
         templateId: template.id,
         title: t.title,
+        description: t.description || null,
         priority: (t.priority || "medium") as TaskPriority,
         daysToComplete: t.days ? parseInt(t.days) : null,
         defaultAssigneeId: t.assigneeId || null,
@@ -104,6 +107,7 @@ export async function updateTemplateAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
   const taskTitles = formData.getAll("taskTitle[]") as string[];
+  const taskDescriptions = formData.getAll("taskDescription[]") as string[];
   const taskDays = formData.getAll("taskDays[]") as string[];
   const taskPriorities = formData.getAll("taskPriority[]") as string[];
   const taskAssigneeIds = formData.getAll("taskAssigneeId[]") as string[];
@@ -134,6 +138,7 @@ export async function updateTemplateAction(
   const tasksToCreate = taskTitles
     .map((title, i) => ({
       title: title.trim(),
+      description: (taskDescriptions[i] ?? "").trim(),
       days: taskDays[i],
       priority: taskPriorities[i],
       assigneeId: taskAssigneeIds[i] || null,
@@ -147,6 +152,7 @@ export async function updateTemplateAction(
       data: {
         templateId,
         title: t.title,
+        description: t.description || null,
         priority: (t.priority || "medium") as TaskPriority,
         daysToComplete: t.days ? parseInt(t.days) : null,
         defaultAssigneeId: t.assigneeId || null,

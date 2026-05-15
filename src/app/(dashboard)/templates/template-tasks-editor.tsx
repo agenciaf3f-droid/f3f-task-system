@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, ChevronDown, ChevronRight, GripVertical, Flag, User, Clock } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, GripVertical, Flag, User, Clock, FileText } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface Sector { id: string; name: string }
@@ -10,6 +10,7 @@ interface Subtask { id: string; title: string }
 export interface TaskRow {
   id: string;
   title: string;
+  description: string;
   days: string;
   priority: string;
   assigneeId: string;
@@ -32,13 +33,13 @@ interface Props {
 
 export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props) {
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(
-    () => new Set(tasks.filter((t) => t.subtasks.length > 0).map((t) => t.id)),
+    () => new Set(tasks.filter((t) => t.subtasks.length > 0 || (t.description ?? "").trim() !== "").map((t) => t.id)),
   );
 
   function addTask() {
     setTasks((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), title: "", days: "", priority: "medium", assigneeId: "", subtasks: [] },
+      { id: crypto.randomUUID(), title: "", description: "", days: "", priority: "medium", assigneeId: "", subtasks: [] },
     ]);
   }
 
@@ -129,16 +130,13 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                   <span className="group-hover:opacity-0 transition-opacity">{i + 1}</span>
                 </div>
 
-                {/* Expand subtasks */}
+                {/* Expand */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!hasSub) addSubtask(task.id);
-                    else toggleExpand(task.id);
-                  }}
+                  onClick={() => toggleExpand(task.id)}
                   disabled={isPending}
                   className="text-neutral-300 hover:text-neutral-600 transition-colors shrink-0"
-                  title={hasSub ? "Expandir subtarefas" : "Adicionar subtarefa"}
+                  title="Editar mensagem e subtarefas"
                 >
                   {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
@@ -241,41 +239,68 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                 </div>
               </div>
 
-              {/* Subtasks */}
+              {/* Expanded: description + subtasks */}
               {isExpanded && (
-                <div className="pl-[72px] pr-5 pb-3 pt-1 flex flex-col gap-1">
-                  {task.subtasks.map((st) => (
-                    <div key={st.id} className="flex items-center gap-2 group/sub">
-                      <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
-                      <input
-                        type="text"
-                        value={st.title}
-                        onChange={(e) => updateSubtask(task.id, st.id, e.target.value)}
-                        placeholder="Subtarefa..."
-                        disabled={isPending}
-                        className="flex-1 text-xs bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeSubtask(task.id, st.id)}
-                        disabled={isPending}
-                        className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addSubtask(task.id)}
-                    disabled={isPending}
-                    className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-600 transition-colors mt-1 self-start px-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Adicionar subtarefa
-                  </button>
+                <div className="pl-[72px] pr-5 pb-3 pt-1 flex flex-col gap-3">
+                  {/* Description / Mensagem */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-neutral-500 font-medium flex items-center gap-1.5">
+                      <FileText className="w-3 h-3" />
+                      Mensagem / Descrição
+                    </label>
+                    <textarea
+                      value={task.description}
+                      onChange={(e) => updateTask(task.id, "description", e.target.value)}
+                      placeholder="Ex: mensagem que deve ser enviada ao cliente, instruções pra concluir essa tarefa..."
+                      disabled={isPending}
+                      rows={3}
+                      className="w-full text-xs bg-neutral-50/60 border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-neutral-300 text-neutral-700 resize-y"
+                    />
+                  </div>
+
+                  {/* Subtasks */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-neutral-500 font-medium">Subtarefas</label>
+                    {task.subtasks.map((st) => (
+                      <div key={st.id} className="flex items-center gap-2 group/sub">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                        <input
+                          type="text"
+                          value={st.title}
+                          onChange={(e) => updateSubtask(task.id, st.id, e.target.value)}
+                          placeholder="Subtarefa..."
+                          disabled={isPending}
+                          className="flex-1 text-xs bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSubtask(task.id, st.id)}
+                          disabled={isPending}
+                          className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addSubtask(task.id)}
+                      disabled={isPending}
+                      className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-600 transition-colors mt-1 self-start px-1"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Adicionar subtarefa
+                    </button>
+                  </div>
                 </div>
               )}
+
+              {/* Hidden description payload */}
+              <input
+                type="hidden"
+                name="taskDescription[]"
+                value={task.description}
+              />
 
               {/* Hidden subtasks payload */}
               <input
