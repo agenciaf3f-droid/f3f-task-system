@@ -35,14 +35,25 @@ function parseRecurrenceRuleFromForm(raw: FormDataEntryValue | null): unknown {
   }
 }
 
+// Campos removidos da UI (sectorId, priority) podem vir como null no FormData.
+// Pré-processa null → "" pra casar com .or(z.literal("")).
+const optStr = z.preprocess(
+  (v) => (v == null ? "" : v),
+  z.string(),
+);
+const optUuid = z.preprocess(
+  (v) => (v == null ? "" : v),
+  z.string().uuid().or(z.literal("")),
+);
+
 const taskSchema = z.object({
   title: z.string().min(1, "Título obrigatório").max(500),
-  description: z.string().optional(),
-  assigneeId: z.string().uuid().optional().or(z.literal("")),
-  sectorId: z.string().uuid().optional().or(z.literal("")),
-  projectId: z.string().uuid().optional().or(z.literal("")),
-  priority: z.enum(["low", "medium", "high", "urgent"]).optional().or(z.literal("")),
-  dueDate: z.string().optional().or(z.literal("")),
+  description: optStr,
+  assigneeId: optUuid,
+  sectorId: optUuid,
+  projectId: optUuid,
+  priority: optStr,
+  dueDate: optStr,
 });
 
 export async function createTaskAction(

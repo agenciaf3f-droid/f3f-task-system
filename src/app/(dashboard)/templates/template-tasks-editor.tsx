@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, ChevronDown, ChevronRight, GripVertical, Flag, User, Clock, FileText } from "lucide-react";
+import { Plus, X, GripVertical, User, Clock, FileText, CheckSquare, Pencil } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-interface Sector { id: string; name: string }
 interface User { id: string; name: string; avatarUrl?: string | null }
 interface Subtask { id: string; title: string }
 export interface TaskRow {
@@ -17,13 +17,6 @@ export interface TaskRow {
   subtasks: Subtask[];
 }
 
-const PRIORITY_META: Record<string, { label: string; dot: string; text: string }> = {
-  low:    { label: "Baixa",   dot: "bg-neutral-300", text: "text-neutral-500" },
-  medium: { label: "Média",   dot: "bg-blue-400",    text: "text-blue-600" },
-  high:   { label: "Alta",    dot: "bg-orange-400",  text: "text-orange-600" },
-  urgent: { label: "Urgente", dot: "bg-red-500",     text: "text-red-600" },
-};
-
 interface Props {
   tasks: TaskRow[];
   setTasks: React.Dispatch<React.SetStateAction<TaskRow[]>>;
@@ -32,33 +25,24 @@ interface Props {
 }
 
 export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props) {
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(
-    () => new Set(tasks.filter((t) => t.subtasks.length > 0 || (t.description ?? "").trim() !== "").map((t) => t.id)),
-  );
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function addTask() {
+    const newId = crypto.randomUUID();
     setTasks((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), title: "", description: "", days: "", priority: "medium", assigneeId: "", subtasks: [] },
+      { id: newId, title: "", description: "", days: "", priority: "medium", assigneeId: "", subtasks: [] },
     ]);
+    setEditingId(newId);
   }
 
   function removeTask(id: string) {
     if (tasks.length === 1) return;
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    setExpandedTasks((prev) => { const s = new Set(prev); s.delete(id); return s; });
   }
 
   function updateTask(id: string, field: keyof Omit<TaskRow, "subtasks">, value: string) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)));
-  }
-
-  function toggleExpand(id: string) {
-    setExpandedTasks((prev) => {
-      const s = new Set(prev);
-      if (s.has(id)) s.delete(id); else s.add(id);
-      return s;
-    });
   }
 
   function addSubtask(taskId: string) {
@@ -69,7 +53,6 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
           : t,
       ),
     );
-    setExpandedTasks((prev) => new Set(prev).add(taskId));
   }
 
   function removeSubtask(taskId: string, subtaskId: string) {
@@ -89,6 +72,8 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
       ),
     );
   }
+
+  const editingTask = editingId ? tasks.find((t) => t.id === editingId) ?? null : null;
 
   return (
     <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
@@ -114,48 +99,43 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
       {/* Rows */}
       <div className="divide-y divide-neutral-100">
         {tasks.map((task, i) => {
-          const isExpanded = expandedTasks.has(task.id);
-          const prio = PRIORITY_META[task.priority] ?? PRIORITY_META.medium;
           const assigneeUser = users.find((u) => u.id === task.assigneeId);
-          const assigneeName = assigneeUser?.name;
           const hasSub = task.subtasks.length > 0;
+          const hasDesc = (task.description ?? "").trim() !== "";
 
           return (
             <div key={task.id} className="group">
-              {/* Main row */}
               <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
                 {/* Drag handle + index */}
-                <div className="w-8 shrink-0 flex items-center justify-center text-xs text-neutral-300 group-hover:text-neutral-500 font-medium">
+                <div className="w-8 shrink-0 flex items-center justify-center text-xs text-neutral-300 group-hover:text-neutral-500 font-medium relative">
                   <GripVertical className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity absolute" />
                   <span className="group-hover:opacity-0 transition-opacity">{i + 1}</span>
                 </div>
 
-                {/* Expand */}
+                {/* Title — click opens modal */}
                 <button
                   type="button"
-                  onClick={() => toggleExpand(task.id)}
+                  onClick={() => setEditingId(task.id)}
                   disabled={isPending}
-                  className="text-neutral-300 hover:text-neutral-600 transition-colors shrink-0"
-                  title="Editar mensagem e subtarefas"
+                  className="flex-1 text-left text-sm px-1 py-1 hover:text-blue-600 transition-colors truncate text-neutral-800 font-medium"
                 >
-                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  {task.title || <span className="text-neutral-300 italic">Sem título — clique para editar</span>}
                 </button>
 
-                {/* Title — flat, no border */}
-                <input
-                  type="text"
-                  name="taskTitle[]"
-                  value={task.title}
-                  onChange={(e) => updateTask(task.id, "title", e.target.value)}
-                  placeholder="Digite o título da tarefa..."
-                  required
-                  disabled={isPending}
-                  className="flex-1 text-sm bg-transparent border-none px-1 py-1 focus:outline-none placeholder:text-neutral-300 text-neutral-800 font-medium"
-                />
+                {/* Indicators */}
+                <div className="flex items-center gap-1 shrink-0 text-[10px] text-neutral-400">
+                  {hasDesc && <FileText className="w-3 h-3" />}
+                  {hasSub && (
+                    <span className="flex items-center gap-0.5">
+                      <CheckSquare className="w-3 h-3" />
+                      {task.subtasks.length}
+                    </span>
+                  )}
+                </div>
 
                 {/* Chips */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {/* Days chip */}
+                  {/* Days */}
                   <label className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors cursor-text text-xs">
                     <Clock className="w-3 h-3 text-neutral-400" />
                     <input
@@ -172,25 +152,7 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                     <span className="text-neutral-400">d</span>
                   </label>
 
-                  {/* Priority chip */}
-                  <label className="relative flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors cursor-pointer text-xs">
-                    <span className={`w-2 h-2 rounded-full ${prio.dot}`} />
-                    <span className={prio.text}>{prio.label}</span>
-                    <select
-                      name="taskPriority[]"
-                      value={task.priority}
-                      onChange={(e) => updateTask(task.id, "priority", e.target.value)}
-                      disabled={isPending}
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                    >
-                      <option value="low">Baixa</option>
-                      <option value="medium">Média</option>
-                      <option value="high">Alta</option>
-                      <option value="urgent">Urgente</option>
-                    </select>
-                  </label>
-
-                  {/* Assignee chip */}
+                  {/* Assignee */}
                   {users.length > 0 ? (
                     <label className="relative flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-100 transition-colors cursor-pointer text-xs max-w-[140px]">
                       {assigneeUser ? (
@@ -219,12 +181,16 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                     <input type="hidden" name="taskAssigneeId[]" value="" />
                   )}
 
-                  {/* Subtasks counter */}
-                  {hasSub && (
-                    <span className="text-[10px] text-neutral-400 px-1.5">
-                      {task.subtasks.length} sub
-                    </span>
-                  )}
+                  {/* Edit button */}
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(task.id)}
+                    disabled={isPending}
+                    className="text-neutral-300 hover:text-blue-600 transition-colors p-1"
+                    title="Editar tarefa"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
 
                   {/* Remove */}
                   <button
@@ -239,70 +205,10 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
                 </div>
               </div>
 
-              {/* Expanded: description + subtasks */}
-              {isExpanded && (
-                <div className="pl-[72px] pr-5 pb-3 pt-1 flex flex-col gap-3">
-                  {/* Description / Mensagem */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] text-neutral-500 font-medium flex items-center gap-1.5">
-                      <FileText className="w-3 h-3" />
-                      Mensagem / Descrição
-                    </label>
-                    <textarea
-                      value={task.description}
-                      onChange={(e) => updateTask(task.id, "description", e.target.value)}
-                      placeholder="Ex: mensagem que deve ser enviada ao cliente, instruções pra concluir essa tarefa..."
-                      disabled={isPending}
-                      rows={3}
-                      className="w-full text-xs bg-neutral-50/60 border border-neutral-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-neutral-300 text-neutral-700 resize-y"
-                    />
-                  </div>
-
-                  {/* Subtasks */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] text-neutral-500 font-medium">Subtarefas</label>
-                    {task.subtasks.map((st) => (
-                      <div key={st.id} className="flex items-center gap-2 group/sub">
-                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
-                        <input
-                          type="text"
-                          value={st.title}
-                          onChange={(e) => updateSubtask(task.id, st.id, e.target.value)}
-                          placeholder="Subtarefa..."
-                          disabled={isPending}
-                          className="flex-1 text-xs bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeSubtask(task.id, st.id)}
-                          disabled={isPending}
-                          className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => addSubtask(task.id)}
-                      disabled={isPending}
-                      className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-600 transition-colors mt-1 self-start px-1"
-                    >
-                      <Plus className="w-3 h-3" />
-                      Adicionar subtarefa
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Hidden description payload */}
-              <input
-                type="hidden"
-                name="taskDescription[]"
-                value={task.description}
-              />
-
-              {/* Hidden subtasks payload */}
+              {/* Hidden payloads pra o POST do form */}
+              <input type="hidden" name="taskTitle[]" value={task.title} />
+              <input type="hidden" name="taskPriority[]" value={task.priority} />
+              <input type="hidden" name="taskDescription[]" value={task.description} />
               <input
                 type="hidden"
                 name="taskSubtasks[]"
@@ -313,13 +219,108 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
         })}
       </div>
 
-      {/* Footer hint */}
-      <div className="px-5 py-3 bg-neutral-50/50 border-t border-neutral-100">
-        <p className="text-[11px] text-neutral-400">
-          <Flag className="w-3 h-3 inline mr-1" />
-          <strong className="text-neutral-600">Dias:</strong> quantos dias <em>antes</em> da data de início a tarefa deve ser concluída.
-        </p>
-      </div>
+      {/* Edit modal */}
+      <Dialog open={editingTask !== null} onOpenChange={(open) => !open && setEditingId(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar tarefa do template</DialogTitle>
+          </DialogHeader>
+          {editingTask && (
+            <div className="flex flex-col gap-5 mt-2">
+              {/* Título */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-neutral-700">Título</label>
+                <input
+                  type="text"
+                  value={editingTask.title}
+                  onChange={(e) => updateTask(editingTask.id, "title", e.target.value)}
+                  disabled={isPending}
+                  placeholder="Digite o título da tarefa..."
+                  className="w-full text-base font-semibold text-neutral-900 bg-white border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-neutral-300"
+                />
+              </div>
+
+              {/* Mensagem / Descrição */}
+              <div className="bg-white border border-neutral-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-4 h-4 text-neutral-500" />
+                  <h3 className="text-sm font-semibold text-neutral-800">Mensagem / Descrição</h3>
+                </div>
+                <textarea
+                  value={editingTask.description}
+                  onChange={(e) => updateTask(editingTask.id, "description", e.target.value)}
+                  disabled={isPending}
+                  rows={5}
+                  placeholder="Ex: mensagem que deve ser enviada ao cliente, instruções pra concluir essa tarefa..."
+                  className="w-full text-sm bg-neutral-50/60 border border-neutral-200 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-neutral-300 text-neutral-700 resize-y"
+                />
+              </div>
+
+              {/* Subtarefas */}
+              <div className="bg-white border border-neutral-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckSquare className="w-4 h-4 text-neutral-500" />
+                    <h3 className="text-sm font-semibold text-neutral-800">
+                      Subtarefas
+                      {editingTask.subtasks.length > 0 && (
+                        <span className="text-neutral-400 font-normal ml-1">({editingTask.subtasks.length})</span>
+                      )}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addSubtask(editingTask.id)}
+                    disabled={isPending}
+                    className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="w-3 h-3" /> Adicionar
+                  </button>
+                </div>
+                {editingTask.subtasks.length === 0 ? (
+                  <p className="text-xs text-neutral-400 italic">Nenhuma subtarefa.</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {editingTask.subtasks.map((st) => (
+                      <div key={st.id} className="flex items-center gap-2 group/sub">
+                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                        <input
+                          type="text"
+                          value={st.title}
+                          onChange={(e) => updateSubtask(editingTask.id, st.id, e.target.value)}
+                          placeholder="Subtarefa..."
+                          disabled={isPending}
+                          className="flex-1 text-sm bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSubtask(editingTask.id, st.id)}
+                          disabled={isPending}
+                          className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingId(null)}
+                  disabled={isPending}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
