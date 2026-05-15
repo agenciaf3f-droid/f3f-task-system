@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Briefcase, FolderKanban, ListTodo, Search, Star } from "lucide-react";
+import { Briefcase, FolderKanban, ListTodo, Search, Star, UserCog } from "lucide-react";
 import { EditClientDialog } from "./edit-client-dialog";
 import { DeleteClientButton } from "./delete-client-button";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -13,6 +13,8 @@ type ClientItem = {
   color: string | null;
   avatarUrl: string | null;
   description: string | null;
+  managerId: string | null;
+  manager: { id: string; name: string } | null;
   _count: { projects: number };
   activeTasks: number;
 };
@@ -21,10 +23,12 @@ export function ClientList({
   clients,
   userRole,
   myClientIds,
+  managers,
 }: {
   clients: ClientItem[];
   userRole: string;
   myClientIds: string[] | null;
+  managers: { id: string; name: string }[];
 }) {
   const [query, setQuery] = useState("");
   const [onlyMine, setOnlyMine] = useState(false);
@@ -101,7 +105,7 @@ export function ClientList({
               <div className="h-1.5 w-full" style={{ backgroundColor: client.color ?? "#6366f1" }} />
 
               <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
-                <EditClientDialog client={client} />
+                <EditClientDialog client={client} managers={managers} />
                 {userRole !== "member" && (
                   <DeleteClientButton
                     clientId={client.id}
@@ -129,6 +133,15 @@ export function ClientList({
                 <p className="text-xs text-neutral-500 line-clamp-2 min-h-[2.5rem]">
                   {client.description || <span className="text-neutral-300 italic">Sem descrição</span>}
                 </p>
+
+                <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                  <UserCog className="w-3.5 h-3.5 text-neutral-400" />
+                  {client.manager ? (
+                    <span className="truncate"><strong className="text-neutral-700">{client.manager.name}</strong></span>
+                  ) : (
+                    <span className="text-neutral-300 italic">Sem gestor</span>
+                  )}
+                </div>
 
                 <div className="flex items-center gap-4 text-xs text-neutral-500 mt-auto pt-3 border-t border-neutral-100">
                   <div className="flex items-center gap-1.5">

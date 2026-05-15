@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Loader2, AlertCircle } from "lucide-react";
 
-export function NewClientDialog() {
+type Manager = { id: string; name: string };
+
+export function NewClientDialog({ managers }: { managers: Manager[] }) {
   const [open, setOpen] = useState(false);
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
@@ -33,6 +35,22 @@ export function NewClientDialog() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="name">Nome do cliente</Label>
             <Input id="name" name="name" placeholder="Ex: Empresa ABC" required disabled={isPending} autoFocus />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="managerId">Gestor responsável</Label>
+            <select
+              id="managerId"
+              name="managerId"
+              disabled={isPending}
+              className="border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              defaultValue=""
+            >
+              <option value="">— Sem gestor —</option>
+              {managers.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-1.5">

@@ -11,25 +11,33 @@ const MY_CLIENTS_OWNER_EMAIL = "rdlecal342@gmail.com";
 export default async function ClientesPage() {
   const user = await requireAuth();
 
-  const clients = await prisma.client.findMany({
-    where: { companyId: user.companyId, deletedAt: null },
-    orderBy: { name: "asc" },
-    include: {
-      _count: {
-        select: { projects: { where: { deletedAt: null } } },
-      },
-      projects: {
-        where: { deletedAt: null },
-        select: {
-          _count: {
-            select: {
-              tasks: { where: { status: { notIn: ["done", "cancelled"] }, deletedAt: null } },
+  const [clients, managers] = await Promise.all([
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
+      orderBy: { name: "asc" },
+      include: {
+        manager: { select: { id: true, name: true } },
+        _count: {
+          select: { projects: { where: { deletedAt: null } } },
+        },
+        projects: {
+          where: { deletedAt: null },
+          select: {
+            _count: {
+              select: {
+                tasks: { where: { status: { notIn: ["done", "cancelled"] }, deletedAt: null } },
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.user.findMany({
+      where: { companyId: user.companyId, deletedAt: null, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   const clientsWithTaskCount = clients.map((c) => ({
     ...c,
@@ -60,13 +68,14 @@ export default async function ClientesPage() {
             {clients.length} cliente{clients.length !== 1 ? "s" : ""} ativo{clients.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <NewClientDialog />
+        <NewClientDialog managers={managers} />
       </div>
 
       <ClientList
         clients={clientsWithTaskCount}
         userRole={user.role}
         myClientIds={myClientIds}
+        managers={managers}
       />
     </div>
   );

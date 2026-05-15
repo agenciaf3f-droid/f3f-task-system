@@ -16,10 +16,12 @@ interface EditClientDialogProps {
     color: string | null;
     avatarUrl: string | null;
     description: string | null;
+    managerId: string | null;
   };
+  managers: { id: string; name: string }[];
 }
 
-export function EditClientDialog({ client }: EditClientDialogProps) {
+export function EditClientDialog({ client, managers }: EditClientDialogProps) {
   const [open, setOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(client.avatarUrl);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -112,6 +114,22 @@ export function EditClientDialog({ client }: EditClientDialogProps) {
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="name">Nome</Label>
               <Input id="name" name="name" defaultValue={client.name} required disabled={isPending} />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="managerId">Gestor responsável</Label>
+              <select
+                id="managerId"
+                name="managerId"
+                disabled={isPending}
+                defaultValue={client.managerId ?? ""}
+                className="border border-neutral-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Sem gestor —</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-1.5">

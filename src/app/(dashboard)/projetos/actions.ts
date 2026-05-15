@@ -15,6 +15,7 @@ import type { ProjectStatus } from "@prisma/client";
 const clientSchema = z.object({
   name: z.string().min(1, "Nome do cliente obrigatório").max(255),
   description: z.string().optional().or(z.literal("")),
+  managerId: z.string().uuid().optional().or(z.literal("")),
 });
 
 export async function createClientAction(
@@ -26,6 +27,7 @@ export async function createClientAction(
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
+    managerId: formData.get("managerId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -35,6 +37,7 @@ export async function createClientAction(
       name: parsed.data.name,
       color: pickColor(parsed.data.name),
       description: parsed.data.description || null,
+      managerId: parsed.data.managerId || null,
     },
   });
 
@@ -56,6 +59,7 @@ export async function updateClientAction(
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
     description: formData.get("description"),
+    managerId: formData.get("managerId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
 
@@ -64,6 +68,7 @@ export async function updateClientAction(
     data: {
       name: parsed.data.name,
       description: parsed.data.description || null,
+      managerId: parsed.data.managerId || null,
     },
   });
 

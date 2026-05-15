@@ -126,6 +126,7 @@ model User {
   activityLogs      ActivityLog[]
   permissions       Permission[]
   projects          Project[]
+  managedClients    Client[]            @relation("ClientManager")
   passwordResetTokens  PasswordResetToken[]
   calendarToken        String?               @unique @map("calendar_token") @db.VarChar(32)
   calendarSlug         String?               @unique @map("calendar_slug") @db.VarChar(60)
@@ -330,6 +331,7 @@ model TaskAttachment {
 model Client {
   id        String    @id @default(uuid()) @db.Uuid
   companyId String    @map("company_id") @db.Uuid
+  managerId String?   @map("manager_id") @db.Uuid
   name      String    @db.VarChar(255)
   color     String?   @db.VarChar(7)
   email     String?   @db.VarChar(255)
@@ -341,9 +343,11 @@ model Client {
   deletedAt DateTime? @map("deleted_at")
 
   company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager  User?     @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
   projects Project[]
 
   @@index([companyId])
+  @@index([managerId])
   @@map("clients")
 }
 
