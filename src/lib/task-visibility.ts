@@ -1,4 +1,4 @@
-import type { Prisma, UserRole } from "@prisma/client";
+import type { Prisma, UserRole, ProjectStatus } from "@prisma/client";
 
 type VisibilityUser = {
   userId: string;
@@ -7,6 +7,23 @@ type VisibilityUser = {
 };
 
 const ELEVATED_ROLES: UserRole[] = ["admin", "manager", "supervisor"];
+
+/**
+ * Status de projeto que efetivamente "cancelam" as tarefas dele —
+ * ninguém deve fazê-las e elas somem das listagens de tasks ativas.
+ */
+export const INACTIVE_PROJECT_STATUSES: ProjectStatus[] = ["archived", "cancelled"];
+
+/**
+ * Cláusula que filtra tasks cujo projeto NÃO está arquivado/cancelado.
+ * Tasks sem project_id (standalone) sempre passam.
+ */
+export const activeProjectScope: Prisma.TaskWhereInput = {
+  OR: [
+    { projectId: null },
+    { project: { status: { notIn: INACTIVE_PROJECT_STATUSES } } },
+  ],
+};
 
 export function isElevated(role: UserRole): boolean {
   return ELEVATED_ROLES.includes(role);
@@ -17,27 +34,30 @@ export function isElevated(role: UserRole): boolean {
  * - admin/manager/supervisor → tudo da company
  * - member → tasks onde tem relação direta (assignee, multi-assignee, criador, watcher)
  *           OU tasks em projetos onde tem qualquer dessas relações em alguma task.
+ *
+ * Sempre exclui tasks de projetos arquivados/cancelados (essas tasks somem das listagens).
  */
 export function taskVisibilityFilter(user: VisibilityUser): Prisma.TaskWhereInput {
-  if (isElevated(user.role)) {
-    return { companyId: user.companyId };
-  }
-  const userId = user.userId;
-  const directOR: Prisma.TaskWhereInput[] = [
-    { assigneeId: userId },
-    { createdById: userId },
-    { assignees: { some: { userId } } },
-    { watchers: { some: { userId } } },
-  ];
-  return {
-    companyId: user.companyId,
-    OR: [
-      ...directOR,
-      // Visibilidade por projeto: se o user tem qualquer relação direta com
-      // ALGUMA task do mesmo projeto, vê todas as tasks daquele projeto.
-      { project: { tasks: { some: { OR: directOR } } } },
-    ],
-  };
+  const baseScope: Prisma.TaskWhereInput = isElevated(user.role)
+    ? { companyId: user.companyId }
+    : (() => {
+        const userId = user.userId;
+        const directOR: Prisma.TaskWhereInput[] = [
+          { assigneeId: userId },
+          { createdById: userId },
+          { assignees: { some: { userId } } },
+          { watchers: { some: { userId } } },
+        ];
+        return {
+          companyId: user.companyId,
+          OR: [
+            ...directOR,
+            { project: { tasks: { some: { OR: directOR } } } },
+          ],
+        };
+      })();
+
+  return { AND: [baseScope, activeProjectScope] };
 }
 
 /**
