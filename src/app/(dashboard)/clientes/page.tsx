@@ -5,9 +5,6 @@ import { ClientList } from "./client-list";
 
 export const metadata = { title: "Clientes" };
 
-// Email do owner que vê o toggle "Meus clientes".
-const MY_CLIENTS_OWNER_EMAIL = "rdlecal342@gmail.com";
-
 export default async function ClientesPage() {
   const user = await requireAuth();
 
@@ -44,20 +41,29 @@ export default async function ClientesPage() {
     activeTasks: c.projects.reduce((sum, p) => sum + p._count.tasks, 0),
   }));
 
-  // Computa IDs dos "meus clientes" — clientes onde o user logado é assignee de pelo menos 1 task.
-  // Só calcula pro owner; demais usuários recebem null e o toggle fica escondido.
-  let myClientIds: string[] | null = null;
-  if (user.email === MY_CLIENTS_OWNER_EMAIL) {
-    const myProjects = await prisma.project.findMany({
+  // Computa IDs dos "meus clientes":
+  //  - clientes onde o user logado é o manager (Client.managerId)
+  //  - OU clientes que têm projeto com task atribuída ao user (legado)
+  // Toggle aparece pra qualquer user que tenha pelo menos 1 cliente nesse conjunto.
+  const [managedClients, projectsWithMyTasks] = await Promise.all([
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null, managerId: user.userId },
+      select: { id: true },
+    }),
+    prisma.project.findMany({
       where: {
         deletedAt: null,
         companyId: user.companyId,
         tasks: { some: { assigneeId: user.userId, deletedAt: null } },
       },
       select: { clientId: true },
-    });
-    myClientIds = Array.from(new Set(myProjects.map((p) => p.clientId)));
-  }
+    }),
+  ]);
+  const ids = new Set<string>([
+    ...managedClients.map((c) => c.id),
+    ...projectsWithMyTasks.map((p) => p.clientId),
+  ]);
+  const myClientIds: string[] | null = ids.size > 0 ? Array.from(ids) : null;
 
   return (
     <div className="flex flex-col gap-8">
