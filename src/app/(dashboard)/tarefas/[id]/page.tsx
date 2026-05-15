@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
-import { ArrowLeft, Calendar, User, Building2, Pencil, FolderKanban } from "lucide-react";
+import { ArrowLeft, Calendar, User, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { StatusBadge, PriorityBadge } from "@/components/tasks/task-badges";
+import { StatusBadge } from "@/components/tasks/task-badges";
 import { TaskActions } from "./task-actions";
 import { ChecklistSection } from "./checklist-section";
 import { CommentsSection } from "./comments-section";
@@ -26,7 +26,7 @@ export default async function TaskDetailPage({
     include: {
       assignee: { select: { id: true, name: true } },
       sector: { select: { name: true, color: true } },
-      project: { select: { id: true, name: true } },
+      project: { select: { id: true, name: true, client: { select: { name: true } } } },
       createdBy: { select: { name: true } },
       checklistItems: { orderBy: { position: "asc" } },
       comments: {
@@ -84,7 +84,6 @@ export default async function TaskDetailPage({
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap mb-5">
             <StatusBadge status={task.status} />
-            <PriorityBadge priority={task.priority} />
           </div>
 
           {/* Meta grid */}
@@ -93,7 +92,9 @@ export default async function TaskDetailPage({
               <div className="flex items-center gap-2 text-neutral-600 col-span-2">
                 <FolderKanban className="w-4 h-4 text-neutral-400 shrink-0" />
                 <Link href={`/projetos/${task.project.id}`} className="hover:text-blue-600 transition-colors font-medium">
-                  {task.project.name}
+                  {task.project.client
+                    ? `${task.project.client.name.split(" ").slice(0, 2).join(" ")} — ${task.project.name}`
+                    : task.project.name}
                 </Link>
               </div>
             )}
@@ -101,12 +102,6 @@ export default async function TaskDetailPage({
               <div className="flex items-center gap-2 text-neutral-600">
                 <User className="w-4 h-4 text-neutral-400 shrink-0" />
                 <span>{task.assignee.name}</span>
-              </div>
-            )}
-            {task.sector && (
-              <div className="flex items-center gap-2 text-neutral-600">
-                <Building2 className="w-4 h-4 text-neutral-400 shrink-0" />
-                <span>{task.sector.name}</span>
               </div>
             )}
             {task.dueDate && (

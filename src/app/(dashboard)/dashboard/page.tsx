@@ -34,10 +34,10 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
   const [myTasks, overdueCount, todayCount, completedTodayCount, recentProjects] = await Promise.all([
     prisma.task.findMany({
       where: taskWhere,
-      orderBy: [{ priority: "desc" }, { dueDate: "asc" }],
+      orderBy: [{ dueDate: "asc" }],
       take: 20,
       select: {
-        id: true, title: true, status: true, priority: true, dueDate: true, progress: true,
+        id: true, title: true, status: true, dueDate: true, progress: true,
         sector: { select: { name: true, color: true } },
         project: { select: { name: true, client: { select: { name: true } } } },
       },
@@ -100,7 +100,6 @@ export default async function DashboardPage({
     await getDashboardData(user.userId, user.companyId, activeStatus);
 
   const inProgressCount = myTasks.filter((t) => t.status === "in_progress").length;
-  const urgentTasks = myTasks.filter((t) => t.priority === "urgent" || t.priority === "high");
 
   const stats = [
     {
@@ -222,35 +221,6 @@ export default async function DashboardPage({
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
-          {/* Urgent */}
-          {urgentTasks.length > 0 && (
-            <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <Flame className="w-4 h-4 text-orange-500" />
-                <h3 className="text-sm font-bold text-neutral-800">Urgentes / Alta prioridade</h3>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {urgentTasks.slice(0, 4).map((t) => (
-                  <Link
-                    key={t.id}
-                    href={`/tarefas/${t.id}`}
-                    className="flex items-center gap-2 py-1.5 hover:text-blue-600 transition-colors group"
-                  >
-                    <Circle className="w-3 h-3 text-neutral-300 shrink-0" />
-                    <span className="text-xs text-neutral-700 truncate flex-1 group-hover:text-blue-600">{t.title}</span>
-                    {t.dueDate && (
-                      <span className={`text-[10px] font-semibold shrink-0 ${
-                        isBefore(t.dueDate, new Date()) ? "text-red-500" : "text-neutral-400"
-                      }`}>
-                        {format(t.dueDate, "dd/MM")}
-                      </span>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Recent Projects */}
           <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">

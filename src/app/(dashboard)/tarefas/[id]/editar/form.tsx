@@ -128,34 +128,16 @@ export function EditTaskForm({
           </div>
         </div>
 
-        {/* Row: Priority + Due date */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="priority">Prioridade</Label>
-            <select
-              id="priority"
-              name="priority"
-              defaultValue={task.priority}
-              disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="low">Baixa</option>
-              <option value="medium">Média</option>
-              <option value="high">Alta</option>
-              <option value="urgent">Urgente</option>
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dueDate">Prazo</Label>
-            <Input
-              id="dueDate"
-              name="dueDate"
-              type="date"
-              defaultValue={dueDateValue}
-              disabled={isPending}
-            />
-          </div>
+        {/* Row: Due date */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="dueDate">Prazo</Label>
+          <Input
+            id="dueDate"
+            name="dueDate"
+            type="date"
+            defaultValue={dueDateValue}
+            disabled={isPending}
+          />
         </div>
 
         <div className="flex flex-col gap-1.5">

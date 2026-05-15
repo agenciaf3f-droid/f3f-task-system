@@ -3,18 +3,17 @@
 import { useTransition, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Circle } from "lucide-react";
-import { PRIORITY_BORDER, StatusBadge } from "@/components/tasks/task-badges";
+import { StatusBadge } from "@/components/tasks/task-badges";
 import { updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 import { format, isBefore, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { TaskStatus, TaskPriority } from "@prisma/client";
+import type { TaskStatus } from "@prisma/client";
 
 interface DashboardTaskRowProps {
   task: {
     id: string;
     title: string;
     status: TaskStatus;
-    priority: TaskPriority;
     dueDate: Date | null;
     project: { name: string; client: { name: string } } | null;
     sector: { name: string; color: string | null } | null;
@@ -27,7 +26,6 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
 
   const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && !isDone;
   const isDueToday = task.dueDate && isToday(task.dueDate);
-  const priorityBar = PRIORITY_BORDER[task.priority];
 
   function handleToggle(e: React.MouseEvent) {
     e.preventDefault();
@@ -59,9 +57,6 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
 
   return (
     <div className={`flex items-center gap-3 border rounded-xl px-4 py-3 transition-all group ${getBackgroundColor()} hover:shadow-md hover:border-opacity-100 border-opacity-70`}>
-      {/* Priority bar */}
-      <span className={`w-1 h-9 rounded-full shrink-0 ${priorityBar}`} />
-
       {/* Checkbox */}
       <button
         onClick={handleToggle}
