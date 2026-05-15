@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X, GripVertical, User, Clock, FileText, CheckSquare, Pencil } from "lucide-react";
+import { Plus, X, GripVertical, User, Clock, FileText, CheckSquare, Pencil, ArrowLeft, FolderOpen } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,9 +25,10 @@ interface Props {
   setTasks: React.Dispatch<React.SetStateAction<TaskRow[]>>;
   users: User[];
   isPending: boolean;
+  templateName?: string;
 }
 
-export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props) {
+export function TemplateTasksEditor({ tasks, setTasks, users, isPending, templateName }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   function addTask() {
@@ -223,119 +224,149 @@ export function TemplateTasksEditor({ tasks, setTasks, users, isPending }: Props
         })}
       </div>
 
-      {/* Edit modal — visual flat igual ao /tarefas/nova */}
+      {/* Edit modal — visual idêntico ao /tarefas/nova */}
       <Dialog open={editingTask !== null} onOpenChange={(open) => !open && closeModal()}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar tarefa do template</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0">
           {editingTask && (
-            <div className="flex flex-col gap-5 mt-2">
-              {/* Title */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Título <span className="text-red-500">*</span></Label>
-                <Input
-                  type="text"
-                  value={editingTask.title}
-                  onChange={(e) => updateTask(editingTask.id, "title", e.target.value)}
-                  placeholder="Descreva a tarefa claramente..."
-                  disabled={isPending}
-                />
-              </div>
-
-              {/* Description */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Descrição</Label>
-                <textarea
-                  value={editingTask.description}
-                  onChange={(e) => updateTask(editingTask.id, "description", e.target.value)}
-                  disabled={isPending}
-                  rows={4}
-                  placeholder="Detalhes, contexto, instruções..."
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                />
-              </div>
-
-              {/* Responsável */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Responsável</Label>
-                <select
-                  value={editingTask.assigneeId}
-                  onChange={(e) => updateTask(editingTask.id, "assigneeId", e.target.value)}
-                  disabled={isPending}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <div className="p-6">
+              {/* Header com breadcrumb + título grande */}
+              <div className="flex items-center gap-3 mb-6">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="text-neutral-500 hover:text-neutral-900 transition-colors"
+                  title="Voltar"
                 >
-                  <option value="">Sem responsável</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Dias */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Dias antes do início</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={editingTask.days}
-                  onChange={(e) => updateTask(editingTask.id, "days", e.target.value)}
-                  disabled={isPending}
-                  placeholder="—"
-                />
-              </div>
-
-              {/* Subtarefas */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <Label>
-                    Subtarefas
-                    {editingTask.subtasks.length > 0 && (
-                      <span className="text-neutral-400 font-normal ml-1">({editingTask.subtasks.length})</span>
-                    )}
-                  </Label>
-                  <button
-                    type="button"
-                    onClick={() => addSubtask(editingTask.id)}
-                    disabled={isPending}
-                    className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
-                  >
-                    <Plus className="w-3 h-3" /> Adicionar
-                  </button>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div>
+                  {templateName && (
+                    <p className="text-xs text-neutral-400 flex items-center gap-1">
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      {templateName}
+                    </p>
+                  )}
+                  <h1 className="text-2xl font-semibold text-neutral-900">Editar tarefa</h1>
                 </div>
-                {editingTask.subtasks.length === 0 ? (
-                  <p className="text-xs text-neutral-400 italic">Nenhuma subtarefa.</p>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {editingTask.subtasks.map((st) => (
-                      <div key={st.id} className="flex items-center gap-2 group/sub">
-                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
-                        <input
-                          type="text"
-                          value={st.title}
-                          onChange={(e) => updateSubtask(editingTask.id, st.id, e.target.value)}
-                          placeholder="Subtarefa..."
-                          disabled={isPending}
-                          className="flex-1 text-sm bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removeSubtask(editingTask.id, st.id)}
-                          disabled={isPending}
-                          className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
 
-              <div className="flex gap-2 justify-end pt-1">
-                <Button type="button" onClick={closeModal} disabled={isPending}>
-                  Fechar
-                </Button>
+              {/* Card branco com inputs */}
+              <div className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5">
+                {/* Title */}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-task-title">Título <span className="text-red-500">*</span></Label>
+                  <Input
+                    id="tpl-task-title"
+                    type="text"
+                    value={editingTask.title}
+                    onChange={(e) => updateTask(editingTask.id, "title", e.target.value)}
+                    placeholder="Descreva a tarefa claramente..."
+                    disabled={isPending}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-task-desc">Descrição</Label>
+                  <textarea
+                    id="tpl-task-desc"
+                    value={editingTask.description}
+                    onChange={(e) => updateTask(editingTask.id, "description", e.target.value)}
+                    disabled={isPending}
+                    rows={4}
+                    placeholder="Detalhes, contexto, instruções..."
+                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                  />
+                </div>
+
+                {/* Responsável */}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-task-assignee">Responsável</Label>
+                  <select
+                    id="tpl-task-assignee"
+                    value={editingTask.assigneeId}
+                    onChange={(e) => updateTask(editingTask.id, "assigneeId", e.target.value)}
+                    disabled={isPending}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Sem responsável</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dias antes do início */}
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-task-days">Dias antes do início</Label>
+                  <Input
+                    id="tpl-task-days"
+                    type="number"
+                    min={0}
+                    value={editingTask.days}
+                    onChange={(e) => updateTask(editingTask.id, "days", e.target.value)}
+                    disabled={isPending}
+                    placeholder="—"
+                  />
+                </div>
+
+                {/* Subtarefas */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      Subtarefas
+                      {editingTask.subtasks.length > 0 && (
+                        <span className="text-neutral-400 font-normal ml-1">({editingTask.subtasks.length})</span>
+                      )}
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => addSubtask(editingTask.id)}
+                      disabled={isPending}
+                      className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                    >
+                      <Plus className="w-3 h-3" /> Adicionar
+                    </button>
+                  </div>
+                  {editingTask.subtasks.length === 0 ? (
+                    <p className="text-xs text-neutral-400 italic">Nenhuma subtarefa.</p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {editingTask.subtasks.map((st) => (
+                        <div key={st.id} className="flex items-center gap-2 group/sub">
+                          <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                          <input
+                            type="text"
+                            value={st.title}
+                            onChange={(e) => updateSubtask(editingTask.id, st.id, e.target.value)}
+                            placeholder="Subtarefa..."
+                            disabled={isPending}
+                            className="flex-1 text-sm bg-transparent border-none px-1 py-1 focus:outline-none focus:bg-neutral-50 rounded placeholder:text-neutral-300 text-neutral-700"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSubtask(editingTask.id, st.id)}
+                            disabled={isPending}
+                            className="text-neutral-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Botões — igual ao /tarefas/nova: azul + outline */}
+                <div className="flex gap-3 pt-1">
+                  <Button type="button" onClick={closeModal} disabled={isPending}>
+                    Salvar
+                  </Button>
+                  <Button type="button" variant="outline" onClick={closeModal} disabled={isPending}>
+                    Fechar
+                  </Button>
+                </div>
               </div>
             </div>
           )}

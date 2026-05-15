@@ -37,9 +37,9 @@ export function TaskActions({
   function handleDelete() {
     if (!confirm("Tem certeza? A tarefa será arquivada.")) return;
     startTransition(async () => {
-      const res = await deleteTaskAction(taskId);
-      if (res.projectId) router.push(`/projetos/${res.projectId}`);
-      else router.push("/dashboard");
+      await deleteTaskAction(taskId);
+      // router.back() funciona em modal interceptado (fecha) e em página standalone (volta).
+      router.back();
     });
   }
 

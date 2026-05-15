@@ -1,10 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
-import { LinkButton } from "@/components/ui/link-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2 } from "lucide-react";
@@ -30,6 +29,7 @@ export function NewTaskForm({
     FormData
   >(createTaskAction, {});
 
+  const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [justCreated, setJustCreated] = useState(false);
 
@@ -45,12 +45,22 @@ export function NewTaskForm({
 
   const backHref = project ? `/projetos/${project.id}` : "/tarefas";
 
+  function handleClose() {
+    // router.back() fecha o modal interceptado e também volta na página standalone
+    router.back();
+  }
+
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
-        <Link href={backHref} className="text-neutral-500 hover:text-neutral-900 transition-colors">
+        <button
+          type="button"
+          onClick={handleClose}
+          className="text-neutral-500 hover:text-neutral-900 transition-colors"
+          title="Voltar"
+        >
           <ArrowLeft className="w-4 h-4" />
-        </Link>
+        </button>
         <div>
           {project && (
             <p className="text-xs text-neutral-400 flex items-center gap-1">
@@ -141,9 +151,9 @@ export function NewTaskForm({
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Criar tarefa
           </Button>
-          <LinkButton variant="outline" href={backHref}>
+          <Button type="button" variant="outline" onClick={handleClose}>
             {keepOpenAfterCreate ? "Fechar" : "Cancelar"}
-          </LinkButton>
+          </Button>
         </div>
       </form>
     </div>
