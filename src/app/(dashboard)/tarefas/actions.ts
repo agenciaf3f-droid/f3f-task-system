@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
+import { createNotification } from "@/lib/notifications";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 import { taskVisibilityFilter, projectVisibilityFilter } from "@/lib/task-visibility";
@@ -171,6 +172,18 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
       taskTitle: old.title,
       completedBy: user.name,
     });
+
+    // Notifica o criador quando outra pessoa completa a tarefa dele
+    if (old.createdById !== user.userId) {
+      await createNotification({
+        companyId: user.companyId,
+        userId: old.createdById,
+        type: "system",
+        title: `${user.name} concluiu "${old.title}"`,
+        resourceType: "task",
+        resourceId: taskId,
+      });
+    }
 
     // Cria próxima ocorrência se tarefa é recorrente
     const rule = parseRecurrenceRuleFromDb(old.recurrenceRule);
