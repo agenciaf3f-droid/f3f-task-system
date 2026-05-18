@@ -75,42 +75,30 @@ export async function GET(req: Request) {
   }
 
   // ─── Limpeza: séries DIÁRIAS mantêm só as N ocorrências mais recentes ──
+  // Agrupa por (title, project_id) porque a cadeia recurrence_parent_id é linked-list
+  // (cada nova aponta pra anterior, não pra um root comum), então não dá pra confiar
+  // na hierarquia de pai.
   const DAILY_KEEP = 4;
-  let purged = 0;
+  const purgeResult = await prisma.$executeRaw`
+    WITH daily_tasks AS (
+      SELECT id, title, project_id, due_date
+      FROM tasks
+      WHERE deleted_at IS NULL
+        AND recurrence_rule->>'freq' = 'daily'
+    ),
+    ranked AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY title, project_id
+               ORDER BY due_date DESC NULLS LAST
+             ) AS rn
+      FROM daily_tasks
+    )
+    UPDATE tasks
+    SET deleted_at = NOW(), updated_at = NOW()
+    WHERE id IN (SELECT id FROM ranked WHERE rn > ${DAILY_KEEP})
+      AND deleted_at IS NULL
+  `;
 
-  const dailyParents = await prisma.task.findMany({
-    where: {
-      recurrenceRule: { not: undefined },
-      recurrenceParentId: null,
-      deletedAt: null,
-    },
-    select: { id: true, recurrenceRule: true },
-  });
-
-  for (const parent of dailyParents) {
-    const rule = parseRecurrenceRuleFromDb(parent.recurrenceRule);
-    if (!rule || rule.freq !== "daily") continue;
-
-    const occurrences = await prisma.task.findMany({
-      where: {
-        deletedAt: null,
-        OR: [{ id: parent.id }, { recurrenceParentId: parent.id }],
-      },
-      orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
-      select: { id: true },
-    });
-
-    if (occurrences.length <= DAILY_KEEP) continue;
-
-    const toDelete = occurrences.slice(DAILY_KEEP).map((t) => t.id);
-    if (toDelete.length > 0) {
-      const res = await prisma.task.updateMany({
-        where: { id: { in: toDelete } },
-        data: { deletedAt: new Date() },
-      });
-      purged += res.count;
-    }
-  }
-
-  return NextResponse.json({ ok: true, created, purged });
+  return NextResponse.json({ ok: true, created, purged: Number(purgeResult) });
 }
