@@ -74,5 +74,43 @@ export async function GET(req: Request) {
     created++;
   }
 
-  return NextResponse.json({ ok: true, created });
+  // ─── Limpeza: séries DIÁRIAS mantêm só as N ocorrências mais recentes ──
+  const DAILY_KEEP = 4;
+  let purged = 0;
+
+  const dailyParents = await prisma.task.findMany({
+    where: {
+      recurrenceRule: { not: undefined },
+      recurrenceParentId: null,
+      deletedAt: null,
+    },
+    select: { id: true, recurrenceRule: true },
+  });
+
+  for (const parent of dailyParents) {
+    const rule = parseRecurrenceRuleFromDb(parent.recurrenceRule);
+    if (!rule || rule.freq !== "daily") continue;
+
+    const occurrences = await prisma.task.findMany({
+      where: {
+        deletedAt: null,
+        OR: [{ id: parent.id }, { recurrenceParentId: parent.id }],
+      },
+      orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
+      select: { id: true },
+    });
+
+    if (occurrences.length <= DAILY_KEEP) continue;
+
+    const toDelete = occurrences.slice(DAILY_KEEP).map((t) => t.id);
+    if (toDelete.length > 0) {
+      const res = await prisma.task.updateMany({
+        where: { id: { in: toDelete } },
+        data: { deletedAt: new Date() },
+      });
+      purged += res.count;
+    }
+  }
+
+  return NextResponse.json({ ok: true, created, purged });
 }
