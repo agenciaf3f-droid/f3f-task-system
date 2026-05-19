@@ -48,7 +48,7 @@ export default async function CalendarioPage({
         status: "confirmed",
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      include: { user: { select: { id: true, name: true } } },
+      include: { user: { select: { id: true, name: true, calendarSlug: true } } },
       // recurrenceRule + recurrenceParentId já vêm por padrão; explicito não precisa.
     }),
     prisma.calendarAvailability.findMany({
@@ -74,6 +74,7 @@ export default async function CalendarioPage({
         status: m.status,
         hostId: m.user.id,
         hostName: m.user.name,
+        isShared: m.user.calendarSlug === "admin",
         clientName: m.clientName,
         isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
       }))}

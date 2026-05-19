@@ -15,6 +15,7 @@ type Meeting = {
   status: string;
   hostId: string;
   hostName: string;
+  isShared: boolean;
   clientName: string | null;
   isRecurring: boolean;
 };
@@ -93,8 +94,10 @@ export function WeekCalendar({
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
 
+  // "Minhas" mantém também reuniões shared (Daily 10h, Reunião de Gestores)
+  // que valem pra todo mundo
   const visibleMeetings = viewMode === "mine"
-    ? meetings.filter((m) => m.hostId === userId)
+    ? meetings.filter((m) => m.hostId === userId || m.isShared)
     : meetings;
 
   function saveSlug() {
