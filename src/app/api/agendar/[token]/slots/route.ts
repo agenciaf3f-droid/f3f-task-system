@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
 import { getClientSession } from "@/lib/client-session";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
-import { listCalendarEvents } from "@/lib/google-calendar";
+import { listAllCalendarIds, listCalendarEvents } from "@/lib/google-calendar";
 
 const TOLERANCE_MINUTES = 10;
 
@@ -75,18 +75,20 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Reuniões já marcadas no sistema (ocupam intervalo startTime..endTime).
+  // Reuniões já marcadas no sistema — TODAS reuniões do dia bloqueiam
+  // (sync atribui reuniões do Google ao user "admin", não ao gestor;
+  // F3F opera com agenda compartilhada — qualquer reunião bloqueia todos).
   const bookedFromDb = await prisma.meeting.findMany({
-    where: { userId: user.id, date, status: "confirmed" },
+    where: { date, status: "confirmed" },
     select: { startTime: true, endTime: true },
   });
 
-  // Eventos do Google Calendar pro mesmo dia — captura coisas criadas manualmente
-  // (ex: reuniões marcadas direto no Google que ainda não foram sincronizadas).
-  // Janela: o dia inteiro (00:00 → 23:59 em America/Sao_Paulo).
+  // Eventos live do Google Calendar (todas as agendas) — captura criados
+  // manualmente entre rodadas de sync (cron horário).
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(`${date}T23:59:59-03:00`);
-  const gcalEvents = await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd });
+  const allCalendarIds = (await listAllCalendarIds()) ?? undefined;
+  const gcalEvents = await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd, calendarIds: allCalendarIds });
 
   const bookedFromGcal = (gcalEvents ?? [])
     .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)

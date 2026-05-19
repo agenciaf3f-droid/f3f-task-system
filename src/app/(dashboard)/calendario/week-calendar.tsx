@@ -211,8 +211,7 @@ export function WeekCalendar({
             const dayMeetings = meetings.filter((m) => m.date === dateStr);
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
-            const visible = dayMeetings.slice(0, 3);
-            const overflow = dayMeetings.length - visible.length;
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isLastRow = idx >= 35;
             const isLastCol = (idx % 7) === 6;
 
@@ -220,35 +219,40 @@ export function WeekCalendar({
               <div
                 key={dateStr}
                 className={`
-                  group relative min-h-[120px] p-1.5 flex flex-col gap-1
+                  group relative min-h-[130px] p-2 flex flex-col gap-1.5
                   ${isLastRow ? "" : "border-b border-slate-200"}
                   ${isLastCol ? "" : "border-r border-slate-200"}
-                  ${isCurrentMonth ? "bg-white" : "bg-slate-50/60"}
+                  ${isCurrentMonth ? (isWeekend ? "bg-slate-50/40" : "bg-white") : "bg-slate-50/60"}
                 `}
               >
                 {/* Date number */}
-                <div className="flex items-center justify-center pt-0.5">
+                <div className="flex items-center justify-between">
                   {isToday ? (
-                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-xs font-semibold">
+                    <span className="w-7 h-7 flex items-center justify-center rounded-full bg-blue-600 text-white text-sm font-semibold shadow-sm">
                       {day.getUTCDate()}
                     </span>
                   ) : (
-                    <span className={`text-xs font-medium ${
-                      isCurrentMonth ? "text-slate-700" : "text-slate-400"
+                    <span className={`text-sm font-semibold ${
+                      isCurrentMonth ? (isWeekend ? "text-slate-500" : "text-slate-700") : "text-slate-300"
                     }`}>
                       {day.getUTCDate()}
+                    </span>
+                  )}
+                  {dayMeetings.length > 0 && (
+                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
+                      {dayMeetings.length}
                     </span>
                   )}
                 </div>
 
                 {/* Availability indicator (subtle dot) */}
                 {isCurrentMonth && isAvailable && dayMeetings.length === 0 && (
-                  <span className="absolute top-2 right-2 w-1 h-1 rounded-full bg-emerald-400" title="Disponível" />
+                  <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
                 )}
 
-                {/* Meetings */}
-                <div className="flex flex-col gap-0.5 flex-1">
-                  {visible.map((m) => {
+                {/* Meetings — todas, sem cap */}
+                <div className="flex flex-col gap-1 flex-1">
+                  {dayMeetings.map((m) => {
                     const color = colorForHost(m.hostId);
                     const isOwn = m.hostId === userId;
                     const displayName = m.clientName || m.hostName;
@@ -258,17 +262,17 @@ export function WeekCalendar({
                     return (
                       <div
                         key={m.id}
-                        className={`group/m relative flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-white ${color} truncate cursor-default`}
+                        className={`group/m relative flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-white ${color} shadow-sm hover:shadow ring-1 ring-black/5 cursor-default transition-shadow`}
                         title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
                       >
                         {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 opacity-90" />}
-                        <span className="font-medium shrink-0">{m.startTime}</span>
-                        <span className="truncate opacity-95">{firstName(displayName)}</span>
+                        <span className="font-semibold shrink-0 tabular-nums">{m.startTime}</span>
+                        <span className="truncate opacity-95 font-medium">{firstName(displayName)}</span>
                         {isOwn && (
                           <button
                             onClick={() => handleCancelClick(m)}
                             disabled={cancelling}
-                            className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-white/20 rounded p-0.5"
+                            className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-white/25 rounded p-0.5"
                             aria-label="Cancelar"
                           >
                             <X className="w-2.5 h-2.5" />
@@ -277,11 +281,6 @@ export function WeekCalendar({
                       </div>
                     );
                   })}
-                  {overflow > 0 && (
-                    <span className="text-[10px] text-slate-500 px-1.5">
-                      +{overflow} {overflow === 1 ? "outra" : "outras"}
-                    </span>
-                  )}
                 </div>
               </div>
             );
