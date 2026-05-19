@@ -63,6 +63,30 @@ export async function createCalendarMeeting({
   }
 }
 
+/**
+ * Lista todos os calendar IDs da conta OAuth conectada.
+ * Filtra a agenda de feriados (não tem reuniões reais).
+ */
+export async function listAllCalendarIds(): Promise<string[] | null> {
+  const client = getClient();
+  if (!client) return null;
+  try {
+    const res = await client.calendar.calendarList.list({ maxResults: 250 });
+    const ids: string[] = [];
+    for (const c of res.data.items ?? []) {
+      if (!c.id) continue;
+      // Pula agendas read-only de feriados/externas
+      if (c.id.endsWith("#holiday@group.v.calendar.google.com")) continue;
+      if (c.accessRole === "freeBusyReader") continue;
+      ids.push(c.id);
+    }
+    return ids;
+  } catch (err) {
+    console.error("[GCal] Erro ao listar calendars:", err);
+    return null;
+  }
+}
+
 export async function deleteCalendarMeeting(googleEventId: string): Promise<void> {
   const client = getClient();
   if (!client) return;

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { listCalendarEvents, type RawCalendarEvent } from "@/lib/google-calendar";
+import { listAllCalendarIds, listCalendarEvents, type RawCalendarEvent } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 /**
@@ -47,7 +47,12 @@ function collectCalendarIds(): string[] {
 }
 
 export async function syncCalendarToSystem(): Promise<SyncResult> {
-  const calendarsRead = collectCalendarIds();
+  // Prioridade: envs configuradas (override) > auto-discovery de todas as agendas da conta
+  let calendarsRead = collectCalendarIds();
+  if (calendarsRead.length === 0) {
+    const discovered = await listAllCalendarIds();
+    calendarsRead = discovered ?? [];
+  }
   const result: SyncResult = { created: 0, updated: 0, cancelled: 0, skipped: 0, errors: [], calendarsRead };
 
   // 1. Achar user default
