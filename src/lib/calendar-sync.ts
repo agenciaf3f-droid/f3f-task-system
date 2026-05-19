@@ -20,6 +20,7 @@ export type SyncResult = {
   cancelled: number;
   skipped: number;
   errors: string[];
+  calendarsRead: string[];
 };
 
 const DEFAULT_USER_SLUG = process.env.SYNC_DEFAULT_USER_SLUG ?? "admin";
@@ -28,8 +29,25 @@ const DEFAULT_USER_SLUG = process.env.SYNC_DEFAULT_USER_SLUG ?? "admin";
 const SYNC_WINDOW_PAST_DAYS = 7;
 const SYNC_WINDOW_FUTURE_MONTHS = 12;
 
+/**
+ * Coleta todos os calendar IDs configurados via env.
+ * F3F usa uma agenda por plano (GOOGLE_CALENDAR_ID_INICIANTES, etc) —
+ * sync precisa ler todas, não só a default.
+ */
+function collectCalendarIds(): string[] {
+  const ids = new Set<string>();
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!value) continue;
+    if (key === "GOOGLE_CALENDAR_ID" || key.startsWith("GOOGLE_CALENDAR_ID_")) {
+      ids.add(value);
+    }
+  }
+  return Array.from(ids);
+}
+
 export async function syncCalendarToSystem(): Promise<SyncResult> {
-  const result: SyncResult = { created: 0, updated: 0, cancelled: 0, skipped: 0, errors: [] };
+  const calendarsRead = collectCalendarIds();
+  const result: SyncResult = { created: 0, updated: 0, cancelled: 0, skipped: 0, errors: [], calendarsRead };
 
   // 1. Achar user default
   const user = await prisma.user.findFirst({
@@ -48,7 +66,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
   const timeMax = new Date(now);
   timeMax.setMonth(timeMax.getMonth() + SYNC_WINDOW_FUTURE_MONTHS);
 
-  const events = await listCalendarEvents({ timeMin, timeMax });
+  const events = await listCalendarEvents({ timeMin, timeMax, calendarIds: calendarsRead });
   if (events === null) {
     result.errors.push("Falha ao buscar eventos do Google Calendar");
     return result;
@@ -155,8 +173,9 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         });
         result.created++;
       } catch (err) {
-        // Provavelmente unique constraint [userId, date, startTime] — já tem outra reunião nesse slot
-        result.errors.push(`Conflito ao criar Meeting pra evento ${ev.id} (${ev.date} ${ev.startTime})`);
+        // Unique constraint foi removido; erro aqui é inesperado — loga e segue
+        const msg = err instanceof Error ? err.message : String(err);
+        result.errors.push(`Erro ao criar Meeting pra evento ${ev.id} (${ev.date} ${ev.startTime}): ${msg}`);
         result.skipped++;
       }
     } catch (err) {

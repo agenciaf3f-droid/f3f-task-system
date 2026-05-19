@@ -87,68 +87,80 @@ export type RawCalendarEvent = {
   endTime: string;                 // "HH:MM"
   isAllDay: boolean;
   updatedAt: string;               // ISO
+  sourceCalendarId: string;        // debug: qual agenda o evento veio
 };
 
 /**
  * Lê eventos do Google Calendar entre `timeMin` e `timeMax`.
  * Expande recorrentes (`singleEvents: true`) e inclui cancelados pra sync.
+ * Se `calendarIds` for passado, lê de cada agenda e concatena;
+ * erro em uma agenda individual não derruba as outras.
  */
 export async function listCalendarEvents({
   timeMin,
   timeMax,
+  calendarIds,
 }: {
   timeMin: Date;
   timeMax: Date;
+  calendarIds?: string[];
 }): Promise<RawCalendarEvent[] | null> {
   const client = getClient();
   if (!client) return null;
 
+  const targets = calendarIds && calendarIds.length > 0 ? calendarIds : [client.calendarId];
   const out: RawCalendarEvent[] = [];
-  let pageToken: string | undefined;
+  let anySucceeded = false;
 
-  try {
-    do {
-      const res = await client.calendar.events.list({
-        calendarId: client.calendarId,
-        timeMin: timeMin.toISOString(),
-        timeMax: timeMax.toISOString(),
-        singleEvents: true,
-        showDeleted: true,
-        maxResults: 250,
-        pageToken,
-      });
-
-      for (const ev of res.data.items ?? []) {
-        if (!ev.id) continue;
-        const startDateTime = ev.start?.dateTime ?? ev.start?.date;
-        const endDateTime = ev.end?.dateTime ?? ev.end?.date;
-        if (!startDateTime || !endDateTime) continue;
-
-        const isAllDay = !ev.start?.dateTime;
-        const startParts = parseEventInstant(startDateTime, isAllDay);
-        const endParts = parseEventInstant(endDateTime, isAllDay);
-
-        out.push({
-          id: ev.id,
-          status: ev.status ?? "confirmed",
-          summary: ev.summary ?? "",
-          description: ev.description ?? undefined,
-          date: startParts.date,
-          startTime: startParts.time,
-          endTime: endParts.time,
-          isAllDay,
-          updatedAt: ev.updated ?? new Date().toISOString(),
+  for (const calendarId of targets) {
+    let pageToken: string | undefined;
+    try {
+      do {
+        const res = await client.calendar.events.list({
+          calendarId,
+          timeMin: timeMin.toISOString(),
+          timeMax: timeMax.toISOString(),
+          singleEvents: true,
+          showDeleted: true,
+          maxResults: 250,
+          pageToken,
         });
-      }
 
-      pageToken = res.data.nextPageToken ?? undefined;
-    } while (pageToken);
+        for (const ev of res.data.items ?? []) {
+          if (!ev.id) continue;
+          const startDateTime = ev.start?.dateTime ?? ev.start?.date;
+          const endDateTime = ev.end?.dateTime ?? ev.end?.date;
+          if (!startDateTime || !endDateTime) continue;
 
-    return out;
-  } catch (err) {
-    console.error("[GCal] Erro ao listar eventos:", err);
-    return null;
+          const isAllDay = !ev.start?.dateTime;
+          const startParts = parseEventInstant(startDateTime, isAllDay);
+          const endParts = parseEventInstant(endDateTime, isAllDay);
+
+          out.push({
+            id: ev.id,
+            status: ev.status ?? "confirmed",
+            summary: ev.summary ?? "",
+            description: ev.description ?? undefined,
+            date: startParts.date,
+            startTime: startParts.time,
+            endTime: endParts.time,
+            isAllDay,
+            updatedAt: ev.updated ?? new Date().toISOString(),
+            sourceCalendarId: calendarId,
+          });
+        }
+
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
+      anySucceeded = true;
+    } catch (err) {
+      console.error(`[GCal] Erro ao listar de ${calendarId}:`, err);
+    }
   }
+
+  // Falha total (nenhum calendar respondeu) → null preserva sinal antigo pro caller
+  if (!anySucceeded) return null;
+  return out;
 }
 
 function parseEventInstant(value: string, isAllDay: boolean): { date: string; time: string } {
