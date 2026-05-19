@@ -147,9 +147,9 @@ export function WeekCalendar({
   const availableDays = new Set(availability.map((a) => a.dayOfWeek));
 
   return (
-    <div className="py-2">
+    <div className="flex flex-col h-[calc(100vh-160px)]">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
+      <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-semibold text-slate-900 capitalize">
             {monthName} <span className="font-normal text-slate-500">{year}</span>
@@ -190,13 +190,13 @@ export function WeekCalendar({
       </div>
 
       {/* Month grid */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Weekday headers */}
-        <div className="grid grid-cols-7 border-b border-slate-200">
+        <div className="grid grid-cols-7 border-b border-slate-200 shrink-0">
           {DAY_NAMES.map((name) => (
             <div
               key={name}
-              className="text-center py-2.5 text-[11px] font-semibold tracking-wider text-slate-500 border-r border-slate-200 last:border-r-0"
+              className="text-center py-2 text-[11px] font-semibold tracking-wider text-slate-500 border-r border-slate-200 last:border-r-0"
             >
               {name}
             </div>
@@ -204,7 +204,7 @@ export function WeekCalendar({
         </div>
 
         {/* Days */}
-        <div className="grid grid-cols-7 grid-rows-6">
+        <div className="grid grid-cols-7 grid-rows-6 flex-1 min-h-0">
           {days.map((day, idx) => {
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
@@ -214,25 +214,28 @@ export function WeekCalendar({
             const isAvailable = availableDays.has(dayOfWeek);
             const isLastRow = idx >= 35;
             const isLastCol = (idx % 7) === 6;
+            const VISIBLE_CAP = 3;
+            const visible = dayMeetings.slice(0, VISIBLE_CAP);
+            const overflow = dayMeetings.length - visible.length;
 
             return (
               <div
                 key={dateStr}
                 className={`
-                  group relative min-h-[130px] px-1.5 py-1 flex flex-col gap-0.5
+                  group relative px-1.5 py-1 flex flex-col gap-0.5 overflow-hidden min-h-0
                   ${isLastRow ? "" : "border-b border-slate-200"}
                   ${isLastCol ? "" : "border-r border-slate-200"}
                   ${isCurrentMonth ? "bg-white" : "bg-slate-50/50"}
                 `}
               >
                 {/* Date number (top-left, estilo Google) */}
-                <div className="flex items-center h-7">
+                <div className="flex items-center h-6 shrink-0">
                   {isToday ? (
-                    <span className="w-7 h-7 flex items-center justify-center rounded-full bg-blue-600 text-white text-[13px] font-semibold">
+                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold">
                       {day.getUTCDate()}
                     </span>
                   ) : (
-                    <span className={`px-1.5 text-[13px] font-medium ${
+                    <span className={`px-1.5 text-[12px] font-medium ${
                       isCurrentMonth ? "text-slate-700" : "text-slate-300"
                     }`}>
                       {day.getUTCDate()}
@@ -242,12 +245,12 @@ export function WeekCalendar({
 
                 {/* Availability indicator (subtle dot) */}
                 {isCurrentMonth && isAvailable && dayMeetings.length === 0 && (
-                  <span className="absolute top-3 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
+                  <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
                 )}
 
-                {/* Meetings — todas, estilo Google (bolinha + hora + nome) */}
-                <div className="flex flex-col flex-1">
-                  {dayMeetings.map((m) => {
+                {/* Meetings — cap em 3, "Mais N" no overflow (estilo Google) */}
+                <div className="flex flex-col min-h-0">
+                  {visible.map((m) => {
                     const dotColor = colorForHost(m.hostId);
                     const isOwn = m.hostId === userId;
                     const displayName = m.clientName || m.hostName;
@@ -257,7 +260,7 @@ export function WeekCalendar({
                     return (
                       <div
                         key={m.id}
-                        className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[12px] leading-tight"
+                        className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[11px] leading-tight"
                         title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
                       >
                         <span className={`shrink-0 w-2 h-2 rounded-full ${dotColor}`} />
@@ -277,6 +280,11 @@ export function WeekCalendar({
                       </div>
                     );
                   })}
+                  {overflow > 0 && (
+                    <span className="px-1.5 text-[11px] text-slate-500 font-medium">
+                      Mais {overflow}
+                    </span>
+                  )}
                 </div>
               </div>
             );
