@@ -31,6 +31,37 @@ const DEFAULT_USER_SLUG = process.env.SYNC_DEFAULT_USER_SLUG ?? "admin";
 const SYNC_WINDOW_FUTURE_MONTHS = 12;
 
 /**
+ * Normaliza nome pra match fuzzy: lowercase, sem acentos, espaços colapsados.
+ */
+function normalizeName(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Tenta achar o gestor responsável a partir do clientName extraído do evento.
+ * Match exato → match por substring bidirecional. Retorna null se ambíguo/sem match.
+ */
+function findManagerByClientName(
+  clientName: string | null,
+  clientMap: Map<string, string>,
+): string | null {
+  if (!clientName) return null;
+  const norm = normalizeName(clientName);
+  if (!norm) return null;
+  const exact = clientMap.get(norm);
+  if (exact) return exact;
+  for (const [name, mgr] of clientMap) {
+    if (norm.includes(name) || name.includes(norm)) return mgr;
+  }
+  return null;
+}
+
+/**
  * Coleta todos os calendar IDs configurados via env.
  * F3F usa uma agenda por plano (GOOGLE_CALENDAR_ID_INICIANTES, etc) —
  * sync precisa ler todas, não só a default.
@@ -76,6 +107,17 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     if (u.googleCalendarId) calendarToUserId.set(u.googleCalendarId, u.id);
   }
 
+  // Mapa clientName normalizado → managerId — usa Client.managerId como fonte
+  // automática (mais confiável que mapear agenda manualmente)
+  const clientsWithManager = await prisma.client.findMany({
+    where: { deletedAt: null, managerId: { not: null } },
+    select: { name: true, managerId: true },
+  });
+  const clientNameToManagerId = new Map<string, string>();
+  for (const c of clientsWithManager) {
+    if (c.managerId) clientNameToManagerId.set(normalizeName(c.name), c.managerId);
+  }
+
   // 2. Fetch eventos do Google — desde o 1º dia do mês corrente (Brazil)
   const monthStr = todayInBrazil().slice(0, 7); // "YYYY-MM"
   const timeMin = new Date(`${monthStr}-01T00:00:00-03:00`);
@@ -96,8 +138,16 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         continue;
       }
 
-      // Atribuição: agenda mapeada → gestor dono; senão → admin (shared/bloqueia todos)
-      const targetUserId = calendarToUserId.get(ev.sourceCalendarId) ?? adminUser.id;
+      // Atribuição em cascata:
+      // 1) Match por Client.name → Client.managerId (automático, prioridade)
+      // 2) Mapeamento manual gestor→agenda no /equipe (override)
+      // 3) Sem match → IGNORA o evento (reuniões internas/Daily não devem
+      //    bloquear slot de ninguém — só reuniões de cliente importam)
+      const parsed = parseEventSummary(ev);
+      const targetUserId: string | null =
+        findManagerByClientName(parsed.clientName, clientNameToManagerId) ??
+        calendarToUserId.get(ev.sourceCalendarId) ??
+        null;
 
       const existing = await prisma.meeting.findFirst({
         where: { googleEventId: ev.id },
@@ -118,7 +168,19 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         continue;
       }
 
-      const parsed = parseEventSummary(ev);
+      // Não-cliente: ignora. Se já existia (sync antigo), cancela pra parar de bloquear slots.
+      if (targetUserId === null) {
+        if (existing && existing.status !== "cancelled") {
+          await prisma.meeting.update({
+            where: { id: existing.id },
+            data: { status: "cancelled" },
+          });
+          result.cancelled++;
+        } else {
+          result.skipped++;
+        }
+        continue;
+      }
 
       if (existing) {
         // Detectar mudanças (inclui reatribuição se mapeamento mudou)

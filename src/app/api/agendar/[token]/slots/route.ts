@@ -75,37 +75,29 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Reuniões que bloqueiam slots desse gestor:
-  // - Próprias (userId = gestor) — agenda mapeada via User.googleCalendarId
-  // - Shared (userId = admin bucket) — agendas não-mapeadas (Daily, internas, etc)
+  // Reuniões que bloqueiam slots desse gestor: APENAS as próprias (reuniões
+  // de cliente já vêm atribuídas ao gestor responsável via Client.managerId).
+  // Reuniões internas/sem cliente não são importadas (sync ignora).
   const bookedFromDb = await prisma.meeting.findMany({
-    where: {
-      date,
-      status: "confirmed",
-      OR: [
-        { userId: user.id },
-        { user: { calendarSlug: "admin" } },
-      ],
-    },
+    where: { date, status: "confirmed", userId: user.id },
     select: { startTime: true, endTime: true },
   });
 
-  // Eventos live do Google Calendar — só agendas que bloqueiam esse gestor:
-  // a agenda dele (se mapeada) + agendas não-mapeadas (shared)
+  // Live check no Google Calendar pra capturar eventos criados manualmente
+  // depois do último sync. Lê só agendas relevantes ao gestor (agenda própria
+  // mapeada via User.googleCalendarId, se houver).
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(`${date}T23:59:59-03:00`);
-  const allCalendarIds = (await listAllCalendarIds()) ?? [];
-  const mappedUsers = await prisma.user.findMany({
-    where: { googleCalendarId: { not: null }, isActive: true },
-    select: { id: true, googleCalendarId: true },
+  const currentUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { googleCalendarId: true },
   });
-  const ownCalendarIds = new Set(mappedUsers.filter((u) => u.id === user.id).map((u) => u.googleCalendarId!));
-  const mappedCalendarIds = new Set(mappedUsers.map((u) => u.googleCalendarId!));
-  const relevantCalendarIds = allCalendarIds.filter(
-    (id) => ownCalendarIds.has(id) || !mappedCalendarIds.has(id),
-  );
-  const gcalEvents = relevantCalendarIds.length > 0
-    ? await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd, calendarIds: relevantCalendarIds })
+  const gcalEvents = currentUser?.googleCalendarId
+    ? await listCalendarEvents({
+        timeMin: dayStart,
+        timeMax: dayEnd,
+        calendarIds: [currentUser.googleCalendarId],
+      })
     : null;
 
   const bookedFromGcal = (gcalEvents ?? [])
