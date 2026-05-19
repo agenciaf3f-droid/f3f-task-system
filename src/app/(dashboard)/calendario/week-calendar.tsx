@@ -25,7 +25,8 @@ type Availability = {
   endTime: string;
 };
 
-const HOST_COLORS = [
+// Cor do bolinha por gestor — estilo Google Calendar
+const HOST_DOT_COLORS = [
   "bg-blue-500",
   "bg-emerald-500",
   "bg-violet-500",
@@ -39,14 +40,14 @@ const HOST_COLORS = [
 function colorForHost(hostId: string) {
   let hash = 0;
   for (let i = 0; i < hostId.length; i++) hash = (hash * 31 + hostId.charCodeAt(i)) | 0;
-  return HOST_COLORS[Math.abs(hash) % HOST_COLORS.length];
+  return HOST_DOT_COLORS[Math.abs(hash) % HOST_DOT_COLORS.length];
 }
 
 function firstName(name: string) {
   return name.trim().split(" ")[0];
 }
 
-const DAY_NAMES = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+const DAY_NAMES = ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."];
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -211,7 +212,6 @@ export function WeekCalendar({
             const dayMeetings = meetings.filter((m) => m.date === dateStr);
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isLastRow = idx >= 35;
             const isLastCol = (idx % 7) === 6;
 
@@ -219,41 +219,36 @@ export function WeekCalendar({
               <div
                 key={dateStr}
                 className={`
-                  group relative min-h-[130px] p-2 flex flex-col gap-1.5
+                  group relative min-h-[130px] px-1.5 py-1 flex flex-col gap-0.5
                   ${isLastRow ? "" : "border-b border-slate-200"}
                   ${isLastCol ? "" : "border-r border-slate-200"}
-                  ${isCurrentMonth ? (isWeekend ? "bg-slate-50/40" : "bg-white") : "bg-slate-50/60"}
+                  ${isCurrentMonth ? "bg-white" : "bg-slate-50/50"}
                 `}
               >
-                {/* Date number */}
-                <div className="flex items-center justify-between">
+                {/* Date number (top-left, estilo Google) */}
+                <div className="flex items-center h-7">
                   {isToday ? (
-                    <span className="w-7 h-7 flex items-center justify-center rounded-full bg-blue-600 text-white text-sm font-semibold shadow-sm">
+                    <span className="w-7 h-7 flex items-center justify-center rounded-full bg-blue-600 text-white text-[13px] font-semibold">
                       {day.getUTCDate()}
                     </span>
                   ) : (
-                    <span className={`text-sm font-semibold ${
-                      isCurrentMonth ? (isWeekend ? "text-slate-500" : "text-slate-700") : "text-slate-300"
+                    <span className={`px-1.5 text-[13px] font-medium ${
+                      isCurrentMonth ? "text-slate-700" : "text-slate-300"
                     }`}>
                       {day.getUTCDate()}
-                    </span>
-                  )}
-                  {dayMeetings.length > 0 && (
-                    <span className="text-[10px] font-medium text-slate-400 tabular-nums">
-                      {dayMeetings.length}
                     </span>
                   )}
                 </div>
 
                 {/* Availability indicator (subtle dot) */}
                 {isCurrentMonth && isAvailable && dayMeetings.length === 0 && (
-                  <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
+                  <span className="absolute top-3 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
                 )}
 
-                {/* Meetings — todas, sem cap */}
-                <div className="flex flex-col gap-1 flex-1">
+                {/* Meetings — todas, estilo Google (bolinha + hora + nome) */}
+                <div className="flex flex-col flex-1">
                   {dayMeetings.map((m) => {
-                    const color = colorForHost(m.hostId);
+                    const dotColor = colorForHost(m.hostId);
                     const isOwn = m.hostId === userId;
                     const displayName = m.clientName || m.hostName;
                     const tooltipPrefix = m.clientName
@@ -262,17 +257,18 @@ export function WeekCalendar({
                     return (
                       <div
                         key={m.id}
-                        className={`group/m relative flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] text-white ${color} shadow-sm hover:shadow ring-1 ring-black/5 cursor-default transition-shadow`}
+                        className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[12px] leading-tight"
                         title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
                       >
-                        {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 opacity-90" />}
-                        <span className="font-semibold shrink-0 tabular-nums">{m.startTime}</span>
-                        <span className="truncate opacity-95 font-medium">{firstName(displayName)}</span>
+                        <span className={`shrink-0 w-2 h-2 rounded-full ${dotColor}`} />
+                        {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
+                        <span className="font-medium text-slate-600 tabular-nums shrink-0">{m.startTime}</span>
+                        <span className="truncate text-slate-700">{firstName(displayName)}</span>
                         {isOwn && (
                           <button
                             onClick={() => handleCancelClick(m)}
                             disabled={cancelling}
-                            className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-white/25 rounded p-0.5"
+                            className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-slate-200 rounded p-0.5 text-slate-500"
                             aria-label="Cancelar"
                           >
                             <X className="w-2.5 h-2.5" />
