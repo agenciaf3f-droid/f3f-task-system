@@ -55,14 +55,25 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
   }
   const result: SyncResult = { created: 0, updated: 0, cancelled: 0, skipped: 0, errors: [], calendarsRead };
 
-  // 1. Achar user default
-  const user = await prisma.user.findFirst({
+  // 1. User default (bucket "admin" — recebe eventos de agendas não-mapeadas;
+  //    funcionam como "shared" — bloqueiam slots de todos os gestores)
+  const adminUser = await prisma.user.findFirst({
     where: { calendarSlug: DEFAULT_USER_SLUG, isActive: true },
     select: { id: true },
   });
-  if (!user) {
+  if (!adminUser) {
     result.errors.push(`User default não encontrado (calendarSlug="${DEFAULT_USER_SLUG}")`);
     return result;
+  }
+
+  // Mapa calendarId → userId pros gestores que configuraram a agenda própria
+  const mappedUsers = await prisma.user.findMany({
+    where: { googleCalendarId: { not: null }, isActive: true },
+    select: { id: true, googleCalendarId: true },
+  });
+  const calendarToUserId = new Map<string, string>();
+  for (const u of mappedUsers) {
+    if (u.googleCalendarId) calendarToUserId.set(u.googleCalendarId, u.id);
   }
 
   // 2. Fetch eventos do Google — desde o 1º dia do mês corrente (Brazil)
@@ -85,9 +96,12 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         continue;
       }
 
+      // Atribuição: agenda mapeada → gestor dono; senão → admin (shared/bloqueia todos)
+      const targetUserId = calendarToUserId.get(ev.sourceCalendarId) ?? adminUser.id;
+
       const existing = await prisma.meeting.findFirst({
         where: { googleEventId: ev.id },
-        select: { id: true, status: true, date: true, startTime: true, endTime: true, clientName: true, clientGroupId: true },
+        select: { id: true, status: true, date: true, startTime: true, endTime: true, clientName: true, clientGroupId: true, userId: true },
       });
 
       // Cancelado no Google
@@ -107,40 +121,21 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
       const parsed = parseEventSummary(ev);
 
       if (existing) {
-        // Detectar mudanças
+        // Detectar mudanças (inclui reatribuição se mapeamento mudou)
         const changed =
           existing.date !== ev.date ||
           existing.startTime !== ev.startTime ||
           existing.endTime !== ev.endTime ||
           existing.clientName !== parsed.clientName ||
           existing.clientGroupId !== parsed.clientGroupId ||
+          existing.userId !== targetUserId ||
           existing.status !== "confirmed";
 
         if (changed) {
-          // Verifica conflito de slot (outra Meeting nesse slot)
-          if (
-            existing.date !== ev.date ||
-            existing.startTime !== ev.startTime
-          ) {
-            const conflict = await prisma.meeting.findFirst({
-              where: {
-                userId: user.id,
-                date: ev.date,
-                startTime: ev.startTime,
-                status: "confirmed",
-                NOT: { id: existing.id },
-              },
-              select: { id: true },
-            });
-            if (conflict) {
-              result.errors.push(`Conflito ao mover evento ${ev.id} pra ${ev.date} ${ev.startTime}`);
-              result.skipped++;
-              continue;
-            }
-          }
           await prisma.meeting.update({
             where: { id: existing.id },
             data: {
+              userId: targetUserId,
               date: ev.date,
               startTime: ev.startTime,
               endTime: ev.endTime,
@@ -160,7 +155,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
       try {
         await prisma.meeting.create({
           data: {
-            userId: user.id,
+            userId: targetUserId,
             date: ev.date,
             startTime: ev.startTime,
             endTime: ev.endTime,

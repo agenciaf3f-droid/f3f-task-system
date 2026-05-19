@@ -75,20 +75,38 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Reuniões já marcadas no sistema — TODAS reuniões do dia bloqueiam
-  // (sync atribui reuniões do Google ao user "admin", não ao gestor;
-  // F3F opera com agenda compartilhada — qualquer reunião bloqueia todos).
+  // Reuniões que bloqueiam slots desse gestor:
+  // - Próprias (userId = gestor) — agenda mapeada via User.googleCalendarId
+  // - Shared (userId = admin bucket) — agendas não-mapeadas (Daily, internas, etc)
   const bookedFromDb = await prisma.meeting.findMany({
-    where: { date, status: "confirmed" },
+    where: {
+      date,
+      status: "confirmed",
+      OR: [
+        { userId: user.id },
+        { user: { calendarSlug: "admin" } },
+      ],
+    },
     select: { startTime: true, endTime: true },
   });
 
-  // Eventos live do Google Calendar (todas as agendas) — captura criados
-  // manualmente entre rodadas de sync (cron horário).
+  // Eventos live do Google Calendar — só agendas que bloqueiam esse gestor:
+  // a agenda dele (se mapeada) + agendas não-mapeadas (shared)
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(`${date}T23:59:59-03:00`);
-  const allCalendarIds = (await listAllCalendarIds()) ?? undefined;
-  const gcalEvents = await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd, calendarIds: allCalendarIds });
+  const allCalendarIds = (await listAllCalendarIds()) ?? [];
+  const mappedUsers = await prisma.user.findMany({
+    where: { googleCalendarId: { not: null }, isActive: true },
+    select: { id: true, googleCalendarId: true },
+  });
+  const ownCalendarIds = new Set(mappedUsers.filter((u) => u.id === user.id).map((u) => u.googleCalendarId!));
+  const mappedCalendarIds = new Set(mappedUsers.map((u) => u.googleCalendarId!));
+  const relevantCalendarIds = allCalendarIds.filter(
+    (id) => ownCalendarIds.has(id) || !mappedCalendarIds.has(id),
+  );
+  const gcalEvents = relevantCalendarIds.length > 0
+    ? await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd, calendarIds: relevantCalendarIds })
+    : null;
 
   const bookedFromGcal = (gcalEvents ?? [])
     .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)

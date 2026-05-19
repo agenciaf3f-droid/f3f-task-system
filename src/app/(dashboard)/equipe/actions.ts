@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { sendInviteEmail } from "@/lib/email";
+import { listAllCalendarSummaries } from "@/lib/google-calendar";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -105,6 +106,41 @@ export async function createUserAction(
 
   revalidatePath("/equipe");
   return { success: true };
+}
+
+export async function setUserGoogleCalendarAction(
+  targetUserId: string,
+  googleCalendarId: string | null,
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await requireRole(["admin"]);
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, companyId: user.companyId },
+    select: { id: true },
+  });
+  if (!target) return { error: "Usuário não encontrado." };
+
+  const value = googleCalendarId?.trim() || null;
+  try {
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: { googleCalendarId: value },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Unique") || msg.includes("unique")) {
+      return { error: "Essa agenda já está vinculada a outro gestor." };
+    }
+    return { error: msg };
+  }
+
+  revalidatePath("/equipe");
+  return { success: true };
+}
+
+export async function listGoogleCalendarsAction(): Promise<{ id: string; summary: string }[]> {
+  await requireRole(["admin"]);
+  const list = await listAllCalendarSummaries();
+  return list ?? [];
 }
 
 export async function toggleUserActiveAction(targetUserId: string) {

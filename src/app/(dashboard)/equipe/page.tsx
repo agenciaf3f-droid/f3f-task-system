@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
 import { DeleteUserButton } from "./delete-user-button";
+import { GoogleCalendarPicker } from "./google-calendar-picker";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -147,6 +148,10 @@ export default async function EquipePage() {
                   {u._count.assignedTasks} tarefa
                   {u._count.assignedTasks !== 1 ? "s" : ""}
                 </span>
+              )}
+
+              {currentUser.role === "admin" && (
+                <GoogleCalendarPicker userId={u.id} current={u.googleCalendarId} />
               )}
 
               {currentUser.role === "admin" && u.id !== currentUser.userId && (

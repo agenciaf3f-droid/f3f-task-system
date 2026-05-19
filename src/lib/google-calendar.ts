@@ -68,19 +68,28 @@ export async function createCalendarMeeting({
  * Filtra a agenda de feriados (não tem reuniões reais).
  */
 export async function listAllCalendarIds(): Promise<string[] | null> {
+  const summaries = await listAllCalendarSummaries();
+  return summaries ? summaries.map((c) => c.id) : null;
+}
+
+/**
+ * Mesma coisa que listAllCalendarIds() mas com summary — pra UI mostrar nome
+ * legível ("Reuniões Arthur") em vez do id criptíco.
+ */
+export async function listAllCalendarSummaries(): Promise<{ id: string; summary: string }[] | null> {
   const client = getClient();
   if (!client) return null;
   try {
     const res = await client.calendar.calendarList.list({ maxResults: 250 });
-    const ids: string[] = [];
+    const out: { id: string; summary: string }[] = [];
     for (const c of res.data.items ?? []) {
       if (!c.id) continue;
-      // Pula agendas read-only de feriados/externas
       if (c.id.endsWith("#holiday@group.v.calendar.google.com")) continue;
       if (c.accessRole === "freeBusyReader") continue;
-      ids.push(c.id);
+      out.push({ id: c.id, summary: c.summary ?? c.id });
     }
-    return ids;
+    out.sort((a, b) => a.summary.localeCompare(b.summary));
+    return out;
   } catch (err) {
     console.error("[GCal] Erro ao listar calendars:", err);
     return null;
