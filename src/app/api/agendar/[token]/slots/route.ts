@@ -75,11 +75,18 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Reuniões que bloqueiam slots desse gestor: APENAS as próprias (reuniões
-  // de cliente já vêm atribuídas ao gestor responsável via Client.managerId).
-  // Reuniões internas/sem cliente não são importadas (sync ignora).
+  // Reuniões que bloqueiam slots desse gestor:
+  // - Próprias (reuniões de cliente atribuídas via Client.managerId)
+  // - Admin bucket (Daily Agência, Reunião de Gestores, etc — shared, bloqueia todos)
   const bookedFromDb = await prisma.meeting.findMany({
-    where: { date, status: "confirmed", userId: user.id },
+    where: {
+      date,
+      status: "confirmed",
+      OR: [
+        { userId: user.id },
+        { user: { calendarSlug: "admin" } },
+      ],
+    },
     select: { startTime: true, endTime: true },
   });
 

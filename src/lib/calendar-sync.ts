@@ -43,20 +43,79 @@ function normalizeName(s: string): string {
 }
 
 /**
- * Tenta achar o gestor responsável a partir do clientName extraído do evento.
- * Match exato → match por substring bidirecional. Retorna null se ambíguo/sem match.
+ * Tokeniza um nome em palavras significativas (lowercase, sem acentos, len ≥ 3).
+ * Filtra palavras genéricas comuns em títulos de evento.
+ */
+const STOPWORDS = new Set([
+  "reuniao", "daily", "apresentacao", "call", "meeting", "checkin", "check-in",
+  "com", "para", "de", "da", "do", "dos", "das", "a", "o", "e",
+]);
+
+function tokenize(s: string): string[] {
+  return normalizeName(s)
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+}
+
+/**
+ * Score de match entre tokens do evento e tokens do cliente.
+ * Cada token do evento pontua 1 se acha algum token do cliente que:
+ *   - bate exato, OU
+ *   - um é prefixo do outro (cobre apelidos "Rafa" ↔ "Rafael", "Mari" ↔ "Mariana")
+ * Retorna { matched, total } pra calcular fração.
+ */
+function matchScore(eventTokens: string[], clientTokens: string[]): number {
+  if (eventTokens.length === 0) return 0;
+  let matched = 0;
+  for (const et of eventTokens) {
+    const hit = clientTokens.some(
+      (ct) => et === ct || et.startsWith(ct) || ct.startsWith(et),
+    );
+    if (hit) matched++;
+  }
+  return matched;
+}
+
+/**
+ * Acha o gestor dono do cliente cujo nome melhor bate com o título do evento.
+ *
+ * Estratégia: tokenização + scoring. Vence o cliente com mais tokens batidos,
+ * desde que score >= 1 e seja vencedor único (sem empate entre gestores
+ * diferentes). Apelidos ("Rafa Azevedo" → "Rafael Eduardo Silva Azevedo")
+ * casam via prefix.
  */
 function findManagerByClientName(
   clientName: string | null,
-  clientMap: Map<string, string>,
+  clients: { tokens: string[]; managerId: string; norm: string }[],
 ): string | null {
   if (!clientName) return null;
   const norm = normalizeName(clientName);
   if (!norm) return null;
-  const exact = clientMap.get(norm);
-  if (exact) return exact;
-  for (const [name, mgr] of clientMap) {
-    if (norm.includes(name) || name.includes(norm)) return mgr;
+
+  // Match exato curto-circuita
+  for (const c of clients) {
+    if (c.norm === norm) return c.managerId;
+  }
+
+  const eventTokens = tokenize(clientName);
+  if (eventTokens.length === 0) return null;
+
+  let bestScore = 0;
+  let bestManagers = new Set<string>();
+  for (const c of clients) {
+    const score = matchScore(eventTokens, c.tokens);
+    if (score === 0) continue;
+    if (score > bestScore) {
+      bestScore = score;
+      bestManagers = new Set([c.managerId]);
+    } else if (score === bestScore) {
+      bestManagers.add(c.managerId);
+    }
+  }
+
+  // Vencedor único e pelo menos 1 token batido
+  if (bestScore >= 1 && bestManagers.size === 1) {
+    return Array.from(bestManagers)[0];
   }
   return null;
 }
@@ -107,16 +166,18 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     if (u.googleCalendarId) calendarToUserId.set(u.googleCalendarId, u.id);
   }
 
-  // Mapa clientName normalizado → managerId — usa Client.managerId como fonte
-  // automática (mais confiável que mapear agenda manualmente)
+  // Pré-tokeniza lista de clientes pra match por scoring (apelido vs nome completo)
   const clientsWithManager = await prisma.client.findMany({
     where: { deletedAt: null, managerId: { not: null } },
     select: { name: true, managerId: true },
   });
-  const clientNameToManagerId = new Map<string, string>();
-  for (const c of clientsWithManager) {
-    if (c.managerId) clientNameToManagerId.set(normalizeName(c.name), c.managerId);
-  }
+  const clientList = clientsWithManager
+    .filter((c): c is { name: string; managerId: string } => c.managerId !== null)
+    .map((c) => ({
+      managerId: c.managerId,
+      norm: normalizeName(c.name),
+      tokens: tokenize(c.name),
+    }));
 
   // 2. Fetch eventos do Google — desde o 1º dia do mês corrente (Brazil)
   const monthStr = todayInBrazil().slice(0, 7); // "YYYY-MM"
@@ -141,13 +202,12 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
       // Atribuição em cascata:
       // 1) Match por Client.name → Client.managerId (automático, prioridade)
       // 2) Mapeamento manual gestor→agenda no /equipe (override)
-      // 3) Sem match → IGNORA o evento (reuniões internas/Daily não devem
-      //    bloquear slot de ninguém — só reuniões de cliente importam)
+      // 3) Admin bucket (Daily Agência, Reunião de Gestores, etc) — bloqueia TODOS
       const parsed = parseEventSummary(ev);
-      const targetUserId: string | null =
-        findManagerByClientName(parsed.clientName, clientNameToManagerId) ??
+      const targetUserId: string =
+        findManagerByClientName(parsed.clientName, clientList) ??
         calendarToUserId.get(ev.sourceCalendarId) ??
-        null;
+        adminUser.id;
 
       const existing = await prisma.meeting.findFirst({
         where: { googleEventId: ev.id },
@@ -168,19 +228,6 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         continue;
       }
 
-      // Não-cliente: ignora. Se já existia (sync antigo), cancela pra parar de bloquear slots.
-      if (targetUserId === null) {
-        if (existing && existing.status !== "cancelled") {
-          await prisma.meeting.update({
-            where: { id: existing.id },
-            data: { status: "cancelled" },
-          });
-          result.cancelled++;
-        } else {
-          result.skipped++;
-        }
-        continue;
-      }
 
       if (existing) {
         // Detectar mudanças (inclui reatribuição se mapeamento mudou)
