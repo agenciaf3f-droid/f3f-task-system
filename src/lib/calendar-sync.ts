@@ -25,8 +25,9 @@ export type SyncResult = {
 
 const DEFAULT_USER_SLUG = process.env.SYNC_DEFAULT_USER_SLUG ?? "admin";
 
-// Janela de sync: 7 dias atrás até 12 meses à frente.
-const SYNC_WINDOW_PAST_DAYS = 7;
+// Janela de sync: 1º dia do mês corrente (Brazil TZ) até 12 meses à frente.
+// Eventos recorrentes que se estendem pro futuro já são expandidos pelo Google
+// (singleEvents: true) e cabem na janela.
 const SYNC_WINDOW_FUTURE_MONTHS = 12;
 
 /**
@@ -59,11 +60,10 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     return result;
   }
 
-  // 2. Fetch eventos do Google
-  const now = new Date();
-  const timeMin = new Date(now);
-  timeMin.setDate(timeMin.getDate() - SYNC_WINDOW_PAST_DAYS);
-  const timeMax = new Date(now);
+  // 2. Fetch eventos do Google — desde o 1º dia do mês corrente (Brazil)
+  const monthStr = todayInBrazil().slice(0, 7); // "YYYY-MM"
+  const timeMin = new Date(`${monthStr}-01T00:00:00-03:00`);
+  const timeMax = new Date(timeMin);
   timeMax.setMonth(timeMax.getMonth() + SYNC_WINDOW_FUTURE_MONTHS);
 
   const events = await listCalendarEvents({ timeMin, timeMax, calendarIds: calendarsRead });
@@ -72,16 +72,10 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     return result;
   }
 
-  const today = todayInBrazil();
-
   for (const ev of events) {
     try {
-      // Ignorar all-day e eventos passados
+      // Ignorar all-day (recorrentes do Google já vêm expandidos via singleEvents: true)
       if (ev.isAllDay) {
-        result.skipped++;
-        continue;
-      }
-      if (ev.date < today) {
         result.skipped++;
         continue;
       }
