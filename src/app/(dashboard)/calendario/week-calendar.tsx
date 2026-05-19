@@ -91,6 +91,11 @@ export function WeekCalendar({
   const [slugError, setSlugError] = useState<string | null>(null);
   const [savingSlug, startSaveSlug] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
+  const [viewMode, setViewMode] = useState<"mine" | "all">("all");
+
+  const visibleMeetings = viewMode === "mine"
+    ? meetings.filter((m) => m.hostId === userId)
+    : meetings;
 
   function saveSlug() {
     setSlugError(null);
@@ -178,6 +183,25 @@ export function WeekCalendar({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Toggle Minhas / Todas */}
+          <div className="flex items-center bg-slate-100 rounded-full p-0.5">
+            <button
+              onClick={() => setViewMode("mine")}
+              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                viewMode === "mine" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Minhas
+            </button>
+            <button
+              onClick={() => setViewMode("all")}
+              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                viewMode === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Todas
+            </button>
+          </div>
           <AvailabilityDialog availability={availability} />
           <button
             onClick={copyLink}
@@ -209,7 +233,7 @@ export function WeekCalendar({
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
             const isCurrentMonth = day.getUTCMonth() === monthRef.getUTCMonth();
-            const dayMeetings = meetings.filter((m) => m.date === dateStr);
+            const dayMeetings = visibleMeetings.filter((m) => m.date === dateStr);
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
             const isLastRow = idx >= 35;
