@@ -108,25 +108,29 @@ export async function POST(
 
   // ─── Booking simples ───────────────────────────────────────────
   if (!recurring) {
-    let createdMeetingId: string;
-    try {
-      const meeting = await prisma.meeting.create({
-        data: {
-          userId: user.id,
-          date,
-          startTime,
-          endTime,
-          status: "confirmed",
-          clientName: session.clientName,
-          clientGroupId: session.clientGroupId,
-          clientPlan: session.clientPlan,
-        },
-        select: { id: true },
-      });
-      createdMeetingId = meeting.id;
-    } catch {
+    // Sem unique constraint no DB (precisa permitir multi-gestor no mesmo slot via sync),
+    // checagem manual de duplicata pra esse user no mesmo slot exato.
+    const existing = await prisma.meeting.findFirst({
+      where: { userId: user.id, date, startTime, status: "confirmed" },
+      select: { id: true },
+    });
+    if (existing) {
       return NextResponse.json({ ok: false, error: "Horário já reservado." }, { status: 409 });
     }
+    const meeting = await prisma.meeting.create({
+      data: {
+        userId: user.id,
+        date,
+        startTime,
+        endTime,
+        status: "confirmed",
+        clientName: session.clientName,
+        clientGroupId: session.clientGroupId,
+        clientPlan: session.clientPlan,
+      },
+      select: { id: true },
+    });
+    const createdMeetingId = meeting.id;
 
     // Google Calendar fora da transação (best-effort)
     const googleEventId = await createCalendarMeeting({
@@ -170,52 +174,57 @@ export async function POST(
   // Parent precisa existir pra dar sentido à série; se a primeira data conflita,
   // aborta o booking todo (caller pode tentar outra data).
   // Filhos são criados independentes — conflitos individuais skipam silenciosamente.
-  // (Transação no Postgres aborta ao primeiro erro, então não faz sentido aqui.)
-  let parentId: string;
-  try {
-    const parent = await prisma.meeting.create({
+  const parentConflict = await prisma.meeting.findFirst({
+    where: { userId: user.id, date: dates[0], startTime, status: "confirmed" },
+    select: { id: true },
+  });
+  if (parentConflict) {
+    return NextResponse.json({ ok: false, error: "Primeiro horário já reservado." }, { status: 409 });
+  }
+  const parent = await prisma.meeting.create({
+    data: {
+      userId: user.id,
+      date: dates[0],
+      startTime,
+      endTime,
+      status: "confirmed",
+      recurrenceRule: rule as object,
+      clientName: session.clientName,
+      clientGroupId: session.clientGroupId,
+      clientPlan: session.clientPlan,
+    },
+    select: { id: true },
+  });
+  const parentId = parent.id;
+
+  const createdMeetings: { id: string; date: string }[] = [{ id: parentId, date: dates[0] }];
+  let skippedCount = 0;
+
+  for (let i = 1; i < dates.length; i++) {
+    const childConflict = await prisma.meeting.findFirst({
+      where: { userId: user.id, date: dates[i], startTime, status: "confirmed" },
+      select: { id: true },
+    });
+    if (childConflict) {
+      skippedCount++;
+      continue;
+    }
+    const child = await prisma.meeting.create({
       data: {
         userId: user.id,
-        date: dates[0],
+        date: dates[i],
         startTime,
         endTime,
         status: "confirmed",
         recurrenceRule: rule as object,
+        recurrenceParentId: parentId,
         clientName: session.clientName,
         clientGroupId: session.clientGroupId,
         clientPlan: session.clientPlan,
       },
       select: { id: true },
     });
-    parentId = parent.id;
-  } catch {
-    return NextResponse.json({ ok: false, error: "Primeiro horário já reservado." }, { status: 409 });
-  }
-
-  const createdMeetings: { id: string; date: string }[] = [{ id: parentId, date: dates[0] }];
-  let skippedCount = 0;
-
-  for (let i = 1; i < dates.length; i++) {
-    try {
-      const child = await prisma.meeting.create({
-        data: {
-          userId: user.id,
-          date: dates[i],
-          startTime,
-          endTime,
-          status: "confirmed",
-          recurrenceRule: rule as object,
-          recurrenceParentId: parentId,
-          clientName: session.clientName,
-          clientGroupId: session.clientGroupId,
-          clientPlan: session.clientPlan,
-        },
-        select: { id: true },
-      });
-      createdMeetings.push({ id: child.id, date: dates[i] });
-    } catch {
-      skippedCount++;
-    }
+    createdMeetings.push({ id: child.id, date: dates[i] });
   }
 
   // Google Calendar em paralelo, fora da transação.

@@ -580,7 +580,6 @@ model Meeting {
   recurrenceParent Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
   recurrenceChildren Meeting[] @relation("MeetingRecurrence")
 
-  @@unique([userId, date, startTime])
   @@index([userId, date])
   @@index([recurrenceParentId])
   @@map("meetings")
