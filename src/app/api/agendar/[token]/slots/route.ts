@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
 import { getClientSession } from "@/lib/client-session";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
+import { listCalendarEvents } from "@/lib/google-calendar";
 
 const TOLERANCE_MINUTES = 10;
 
@@ -74,11 +75,34 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  // Reuniões já marcadas (ocupam intervalo startTime..endTime).
-  const booked = await prisma.meeting.findMany({
+  // Reuniões já marcadas no sistema (ocupam intervalo startTime..endTime).
+  const bookedFromDb = await prisma.meeting.findMany({
     where: { userId: user.id, date, status: "confirmed" },
     select: { startTime: true, endTime: true },
   });
+
+  // Eventos do Google Calendar pro mesmo dia — captura coisas criadas manualmente
+  // (ex: reuniões marcadas direto no Google que ainda não foram sincronizadas).
+  // Janela: o dia inteiro (00:00 → 23:59 em America/Sao_Paulo).
+  const dayStart = new Date(`${date}T00:00:00-03:00`);
+  const dayEnd = new Date(`${date}T23:59:59-03:00`);
+  const gcalEvents = await listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd });
+
+  const bookedFromGcal = (gcalEvents ?? [])
+    .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)
+    .map((ev) => ({ startTime: ev.startTime, endTime: ev.endTime }));
+
+  // União de ambos — dedupe por (startTime, endTime). Eventos criados via /agendar
+  // têm tanto Meeting quanto evento Google com o mesmo intervalo.
+  const seen = new Set<string>();
+  const booked: { startTime: string; endTime: string }[] = [];
+  for (const b of [...bookedFromDb, ...bookedFromGcal]) {
+    const key = `${b.startTime}-${b.endTime}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    booked.push(b);
+  }
+
   function overlapsBooked(slotStart: string): boolean {
     const slotEnd = addMinutes(slotStart, durationMinutes);
     const a = timeToMinutes(slotStart);
