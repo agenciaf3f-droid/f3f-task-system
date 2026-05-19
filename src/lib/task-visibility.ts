@@ -11,11 +11,13 @@ const ELEVATED_ROLES: UserRole[] = ["admin", "manager", "supervisor"];
 /**
  * Status de projeto que efetivamente "cancelam" as tarefas dele —
  * ninguém deve fazê-las e elas somem das listagens de tasks ativas.
+ * Inclui pausado, arquivado e cancelado. Concluído ("completed") fica fora
+ * pra não esconder tasks done de projetos finalizados.
  */
-export const INACTIVE_PROJECT_STATUSES: ProjectStatus[] = ["archived", "cancelled"];
+export const INACTIVE_PROJECT_STATUSES: ProjectStatus[] = ["paused", "archived", "cancelled"];
 
 /**
- * Cláusula que filtra tasks cujo projeto NÃO está arquivado/cancelado.
+ * Cláusula que filtra tasks cujo projeto NÃO está pausado/arquivado/cancelado.
  * Tasks sem project_id (standalone) sempre passam.
  */
 export const activeProjectScope: Prisma.TaskWhereInput = {
