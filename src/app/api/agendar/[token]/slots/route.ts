@@ -50,7 +50,7 @@ export async function GET(
 
   const user = await prisma.user.findFirst({
     where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
-    select: { id: true, isActive: true },
+    select: { id: true, isActive: true, googleCalendarId: true },
   });
 
   if (!user || !user.isActive) {
@@ -95,15 +95,11 @@ export async function GET(
   // mapeada via User.googleCalendarId, se houver).
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(`${date}T23:59:59-03:00`);
-  const currentUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { googleCalendarId: true },
-  });
-  const gcalEvents = currentUser?.googleCalendarId
+  const gcalEvents = user.googleCalendarId
     ? await listCalendarEvents({
         timeMin: dayStart,
         timeMax: dayEnd,
-        calendarIds: [currentUser.googleCalendarId],
+        calendarIds: [user.googleCalendarId],
       })
     : null;
 

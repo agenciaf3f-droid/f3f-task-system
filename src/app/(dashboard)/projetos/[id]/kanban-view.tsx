@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -48,7 +48,7 @@ const PRIORITY_DOT: Record<string, string> = {
   low:    "bg-neutral-300",
 };
 
-function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
+const KanbanCard = memo(function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
   const overdue = task.dueDate && !isToday(task.dueDate) && isBefore(task.dueDate, new Date()) && task.status !== "done";
 
   return (
@@ -99,16 +99,16 @@ function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) 
       </div>
     </div>
   );
-}
+});
 
-function DraggableCard({ task }: { task: Task }) {
+const DraggableCard = memo(function DraggableCard({ task }: { task: Task }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
   return (
     <div ref={setNodeRef} {...listeners} {...attributes}>
       <KanbanCard task={task} isDragging={isDragging} />
     </div>
   );
-}
+});
 
 function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });

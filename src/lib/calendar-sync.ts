@@ -191,6 +191,19 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     return result;
   }
 
+  // Pre-fetch existing meetings em batch: evita N findFirst (1 por evento)
+  const eventIds = events.map((e) => e.id).filter(Boolean);
+  const existingMeetings = eventIds.length > 0
+    ? await prisma.meeting.findMany({
+        where: { googleEventId: { in: eventIds } },
+        select: { id: true, status: true, date: true, startTime: true, endTime: true, clientName: true, clientGroupId: true, userId: true, googleEventId: true },
+      })
+    : [];
+  const existingByEventId = new Map<string, typeof existingMeetings[number]>();
+  for (const m of existingMeetings) {
+    if (m.googleEventId) existingByEventId.set(m.googleEventId, m);
+  }
+
   for (const ev of events) {
     try {
       // Ignorar all-day (recorrentes do Google já vêm expandidos via singleEvents: true)
@@ -209,10 +222,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         calendarToUserId.get(ev.sourceCalendarId) ??
         adminUser.id;
 
-      const existing = await prisma.meeting.findFirst({
-        where: { googleEventId: ev.id },
-        select: { id: true, status: true, date: true, startTime: true, endTime: true, clientName: true, clientGroupId: true, userId: true },
-      });
+      const existing = existingByEventId.get(ev.id) ?? null;
 
       // Cancelado no Google
       if (ev.status === "cancelled") {

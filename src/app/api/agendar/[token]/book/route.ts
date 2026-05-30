@@ -70,11 +70,30 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Sessão inválida ou expirada" }, { status: 401 });
   }
 
-  // Mapear plano para Google Calendar ID
+  // Mapear plano para Google Calendar ID — normaliza pra suportar variantes
+  // do banco externo: "Iniciante", "iniciante ", "INICIANTES", "low-ticket", etc.
+  // Tenta forma normalizada (sem acento/espaço/dash) e fallback singular/plural.
   let calendarId: string | undefined;
   if (session.clientPlan) {
-    const envKey = `GOOGLE_CALENDAR_ID_${session.clientPlan.toUpperCase()}`;
-    calendarId = process.env[envKey];
+    const norm = session.clientPlan
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .trim()
+      .toUpperCase()
+      .replace(/[\s\-]+/g, "_");
+    const candidates = [
+      `GOOGLE_CALENDAR_ID_${norm}`,
+      norm.endsWith("S") ? `GOOGLE_CALENDAR_ID_${norm.slice(0, -1)}` : `GOOGLE_CALENDAR_ID_${norm}S`,
+    ];
+    for (const key of candidates) {
+      if (process.env[key]) {
+        calendarId = process.env[key];
+        break;
+      }
+    }
+    if (!calendarId) {
+      console.warn(`[book] env GOOGLE_CALENDAR_ID_${norm} (e variantes) não encontrada. clientPlan="${session.clientPlan}". Fallback p/ primary.`);
+    }
   }
 
   const [y, mo, d] = date.split("-").map(Number);

@@ -583,5 +583,7 @@ model Meeting {
 
   @@index([userId, date])
   @@index([recurrenceParentId])
+  @@index([googleEventId])
+  @@index([date, status])
   @@map("meetings")
 }
