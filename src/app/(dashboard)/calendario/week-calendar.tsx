@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Link2, Check, Pencil, X, Repeat } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo, useCallback, memo } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
 import { cancelMeetingAction, updateCalendarSlugAction, type CancelScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
@@ -65,6 +65,109 @@ function toMonthStr(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+type DayCellProps = {
+  day: Date;
+  dateStr: string;
+  isToday: boolean;
+  isCurrentMonth: boolean;
+  dayMeetings: Meeting[];
+  isAvailable: boolean;
+  isLastRow: boolean;
+  isLastCol: boolean;
+  userId: string;
+  cancelling: boolean;
+  onCancelClick: (m: Meeting) => void;
+};
+
+const DayCell = memo(function DayCell({
+  day,
+  dateStr,
+  isToday,
+  isCurrentMonth,
+  dayMeetings,
+  isAvailable,
+  isLastRow,
+  isLastCol,
+  userId,
+  cancelling,
+  onCancelClick,
+}: DayCellProps) {
+  const VISIBLE_CAP = 3;
+  const visible = dayMeetings.slice(0, VISIBLE_CAP);
+  const overflow = dayMeetings.length - visible.length;
+
+  return (
+    <div
+      key={dateStr}
+      className={`
+        group relative px-1.5 py-1 flex flex-col gap-0.5 overflow-hidden min-h-0
+        ${isLastRow ? "" : "border-b border-slate-200"}
+        ${isLastCol ? "" : "border-r border-slate-200"}
+        ${isCurrentMonth ? "bg-white" : "bg-slate-50/50"}
+      `}
+    >
+      {/* Date number (top-left, estilo Google) */}
+      <div className="flex items-center h-6 shrink-0">
+        {isToday ? (
+          <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold">
+            {day.getUTCDate()}
+          </span>
+        ) : (
+          <span className={`px-1.5 text-[12px] font-medium ${
+            isCurrentMonth ? "text-slate-700" : "text-slate-300"
+          }`}>
+            {day.getUTCDate()}
+          </span>
+        )}
+      </div>
+
+      {/* Availability indicator (subtle dot) */}
+      {isCurrentMonth && isAvailable && dayMeetings.length === 0 && (
+        <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
+      )}
+
+      {/* Meetings — cap em 3, "Mais N" no overflow (estilo Google) */}
+      <div className="flex flex-col min-h-0">
+        {visible.map((m) => {
+          const dotColor = colorForHost(m.hostId);
+          const isOwn = m.hostId === userId;
+          const displayName = m.clientName || m.hostName;
+          const tooltipPrefix = m.clientName
+            ? `${m.clientName} com ${m.hostName}`
+            : m.hostName;
+          return (
+            <div
+              key={m.id}
+              className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[11px] leading-tight"
+              title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
+            >
+              <span className={`shrink-0 w-2 h-2 rounded-full ${dotColor}`} />
+              {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
+              <span className="font-medium text-slate-600 tabular-nums shrink-0">{m.startTime}</span>
+              <span className="truncate text-slate-700">{firstName(displayName)}</span>
+              {isOwn && (
+                <button
+                  onClick={() => onCancelClick(m)}
+                  disabled={cancelling}
+                  className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-slate-200 rounded p-0.5 text-slate-500"
+                  aria-label="Cancelar"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {overflow > 0 && (
+          <span className="px-1.5 text-[11px] text-slate-500 font-medium">
+            Mais {overflow}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export function WeekCalendar({
   gridStart: gridStartISO,
   monthRefIso,
@@ -96,11 +199,15 @@ export function WeekCalendar({
 
   // "Minhas" mantém também reuniões shared (Daily 10h, Reunião de Gestores)
   // que valem pra todo mundo
-  const visibleMeetings = viewMode === "mine"
-    ? meetings.filter((m) => m.hostId === userId || m.isShared)
-    : meetings;
+  const visibleMeetings = useMemo(
+    () =>
+      viewMode === "mine"
+        ? meetings.filter((m) => m.hostId === userId || m.isShared)
+        : meetings,
+    [meetings, viewMode, userId]
+  );
 
-  function saveSlug() {
+  const saveSlug = useCallback(() => {
     setSlugError(null);
     startSaveSlug(async () => {
       const res = await updateCalendarSlugAction(slugDraft);
@@ -110,7 +217,7 @@ export function WeekCalendar({
         router.refresh();
       }
     });
-  }
+  }, [slugDraft, router]);
 
   const gridStart = new Date(gridStartISO);
   const monthRef = new Date(monthRefIso);
@@ -118,41 +225,67 @@ export function WeekCalendar({
   const year = monthRef.getUTCFullYear();
   const todayStr = todayInBrazil();
 
-  const days = Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(gridStart);
-    d.setUTCDate(gridStart.getUTCDate() + i);
-    return d;
-  });
+  const days = useMemo(
+    () =>
+      Array.from({ length: 42 }, (_, i) => {
+        const d = new Date(gridStart);
+        d.setUTCDate(gridStart.getUTCDate() + i);
+        return d;
+      }),
+    [gridStartISO]
+  );
 
-  function navigateMonth(delta: number) {
-    const next = new Date(Date.UTC(monthRef.getUTCFullYear(), monthRef.getUTCMonth() + delta, 1));
-    router.push(`/calendario?month=${toMonthStr(next)}`);
-  }
+  const meetingsByDate = useMemo(() => {
+    const map = new Map<string, Meeting[]>();
+    for (const m of visibleMeetings) {
+      const arr = map.get(m.date);
+      if (arr) arr.push(m);
+      else map.set(m.date, [m]);
+    }
+    return map;
+  }, [visibleMeetings]);
 
-  function copyLink() {
+  const availableDays = useMemo(
+    () => new Set(availability.map((a) => a.dayOfWeek)),
+    [availability]
+  );
+
+  const navigateMonth = useCallback(
+    (delta: number) => {
+      const next = new Date(Date.UTC(monthRef.getUTCFullYear(), monthRef.getUTCMonth() + delta, 1));
+      router.push(`/calendario?month=${toMonthStr(next)}`);
+    },
+    [monthRefIso, router]
+  );
+
+  const copyLink = useCallback(() => {
     navigator.clipboard.writeText(bookingUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }
+  }, [bookingUrl]);
 
-  function handleCancelClick(m: Meeting) {
-    if (m.isRecurring) {
-      setCancelTarget(m);
-    } else {
-      if (!confirm("Cancelar esta reunião?")) return;
-      startCancel(() => cancelMeetingAction(m.id, "single"));
-    }
-  }
+  const handleCancelClick = useCallback(
+    (m: Meeting) => {
+      if (m.isRecurring) {
+        setCancelTarget(m);
+      } else {
+        if (!confirm("Cancelar esta reunião?")) return;
+        startCancel(() => cancelMeetingAction(m.id, "single"));
+      }
+    },
+    [startCancel]
+  );
 
-  function confirmCancel(scope: CancelScope) {
-    if (!cancelTarget) return;
-    const id = cancelTarget.id;
-    setCancelTarget(null);
-    startCancel(() => cancelMeetingAction(id, scope));
-  }
-
-  const availableDays = new Set(availability.map((a) => a.dayOfWeek));
+  const confirmCancel = useCallback(
+    (scope: CancelScope) => {
+      if (!cancelTarget) return;
+      const id = cancelTarget.id;
+      setCancelTarget(null);
+      startCancel(() => cancelMeetingAction(id, scope));
+    },
+    [cancelTarget, startCancel]
+  );
 
   return (
     <div className="flex flex-col h-[calc(100vh-160px)]">
@@ -236,84 +369,27 @@ export function WeekCalendar({
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
             const isCurrentMonth = day.getUTCMonth() === monthRef.getUTCMonth();
-            const dayMeetings = visibleMeetings.filter((m) => m.date === dateStr);
+            const dayMeetings = meetingsByDate.get(dateStr) ?? [];
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
             const isLastRow = idx >= 35;
             const isLastCol = (idx % 7) === 6;
-            const VISIBLE_CAP = 3;
-            const visible = dayMeetings.slice(0, VISIBLE_CAP);
-            const overflow = dayMeetings.length - visible.length;
 
             return (
-              <div
+              <DayCell
                 key={dateStr}
-                className={`
-                  group relative px-1.5 py-1 flex flex-col gap-0.5 overflow-hidden min-h-0
-                  ${isLastRow ? "" : "border-b border-slate-200"}
-                  ${isLastCol ? "" : "border-r border-slate-200"}
-                  ${isCurrentMonth ? "bg-white" : "bg-slate-50/50"}
-                `}
-              >
-                {/* Date number (top-left, estilo Google) */}
-                <div className="flex items-center h-6 shrink-0">
-                  {isToday ? (
-                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold">
-                      {day.getUTCDate()}
-                    </span>
-                  ) : (
-                    <span className={`px-1.5 text-[12px] font-medium ${
-                      isCurrentMonth ? "text-slate-700" : "text-slate-300"
-                    }`}>
-                      {day.getUTCDate()}
-                    </span>
-                  )}
-                </div>
-
-                {/* Availability indicator (subtle dot) */}
-                {isCurrentMonth && isAvailable && dayMeetings.length === 0 && (
-                  <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
-                )}
-
-                {/* Meetings — cap em 3, "Mais N" no overflow (estilo Google) */}
-                <div className="flex flex-col min-h-0">
-                  {visible.map((m) => {
-                    const dotColor = colorForHost(m.hostId);
-                    const isOwn = m.hostId === userId;
-                    const displayName = m.clientName || m.hostName;
-                    const tooltipPrefix = m.clientName
-                      ? `${m.clientName} com ${m.hostName}`
-                      : m.hostName;
-                    return (
-                      <div
-                        key={m.id}
-                        className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[11px] leading-tight"
-                        title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
-                      >
-                        <span className={`shrink-0 w-2 h-2 rounded-full ${dotColor}`} />
-                        {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
-                        <span className="font-medium text-slate-600 tabular-nums shrink-0">{m.startTime}</span>
-                        <span className="truncate text-slate-700">{firstName(displayName)}</span>
-                        {isOwn && (
-                          <button
-                            onClick={() => handleCancelClick(m)}
-                            disabled={cancelling}
-                            className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-slate-200 rounded p-0.5 text-slate-500"
-                            aria-label="Cancelar"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {overflow > 0 && (
-                    <span className="px-1.5 text-[11px] text-slate-500 font-medium">
-                      Mais {overflow}
-                    </span>
-                  )}
-                </div>
-              </div>
+                day={day}
+                dateStr={dateStr}
+                isToday={isToday}
+                isCurrentMonth={isCurrentMonth}
+                dayMeetings={dayMeetings}
+                isAvailable={isAvailable}
+                isLastRow={isLastRow}
+                isLastCol={isLastCol}
+                userId={userId}
+                cancelling={cancelling}
+                onCancelClick={handleCancelClick}
+              />
             );
           })}
         </div>

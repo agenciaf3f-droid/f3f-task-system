@@ -64,28 +64,25 @@ export async function createTemplateAction(
     }))
     .filter((t) => t.title);
 
-  for (let i = 0; i < tasksToCreate.length; i++) {
-    const t = tasksToCreate[i];
-    const tt = await prisma.templateTask.create({
-      data: {
-        templateId: template.id,
-        title: t.title,
-        description: t.description || null,
-        priority: (t.priority || "medium") as TaskPriority,
-        daysToComplete: t.days ? parseInt(t.days) : null,
-        defaultAssigneeId: t.assigneeId || null,
-        position: i,
-      },
-    });
-    for (let j = 0; j < t.subtasks.length; j++) {
-      const st = t.subtasks[j];
-      if (st.title?.trim()) {
-        await prisma.templateChecklistItem.create({
-          data: { templateTaskId: tt.id, title: st.title.trim(), position: j },
-        });
-      }
-    }
-  }
+  await Promise.all(
+    tasksToCreate.map((t, i) => {
+      const checklistItems = t.subtasks
+        .map((st, j) => ({ title: st.title?.trim() ?? "", position: j }))
+        .filter((st) => st.title);
+      return prisma.templateTask.create({
+        data: {
+          templateId: template.id,
+          title: t.title,
+          description: t.description || null,
+          priority: (t.priority || "medium") as TaskPriority,
+          daysToComplete: t.days ? parseInt(t.days) : null,
+          defaultAssigneeId: t.assigneeId || null,
+          position: i,
+          checklistItems: checklistItems.length ? { create: checklistItems } : undefined,
+        },
+      });
+    }),
+  );
 
   revalidatePath("/templates");
   redirect("/templates");
@@ -146,28 +143,25 @@ export async function updateTemplateAction(
     }))
     .filter((t) => t.title);
 
-  for (let i = 0; i < tasksToCreate.length; i++) {
-    const t = tasksToCreate[i];
-    const tt = await prisma.templateTask.create({
-      data: {
-        templateId,
-        title: t.title,
-        description: t.description || null,
-        priority: (t.priority || "medium") as TaskPriority,
-        daysToComplete: t.days ? parseInt(t.days) : null,
-        defaultAssigneeId: t.assigneeId || null,
-        position: i,
-      },
-    });
-    for (let j = 0; j < t.subtasks.length; j++) {
-      const st = t.subtasks[j];
-      if (st.title?.trim()) {
-        await prisma.templateChecklistItem.create({
-          data: { templateTaskId: tt.id, title: st.title.trim(), position: j },
-        });
-      }
-    }
-  }
+  await Promise.all(
+    tasksToCreate.map((t, i) => {
+      const checklistItems = t.subtasks
+        .map((st, j) => ({ title: st.title?.trim() ?? "", position: j }))
+        .filter((st) => st.title);
+      return prisma.templateTask.create({
+        data: {
+          templateId,
+          title: t.title,
+          description: t.description || null,
+          priority: (t.priority || "medium") as TaskPriority,
+          daysToComplete: t.days ? parseInt(t.days) : null,
+          defaultAssigneeId: t.assigneeId || null,
+          position: i,
+          checklistItems: checklistItems.length ? { create: checklistItems } : undefined,
+        },
+      });
+    }),
+  );
 
   revalidatePath("/templates");
   redirect("/templates");
@@ -189,25 +183,21 @@ export async function activateTemplateAction(
   const start = startDate ? new Date(startDate) : new Date();
   const resolvedAssignee = assigneeId || null;
 
-  for (const tt of template.templateTasks) {
-    const dueDate = tt.daysToComplete
-      ? new Date(start.getTime() - tt.daysToComplete * 86400000)
-      : null;
-
-    await prisma.task.create({
-      data: {
-        companyId: user.companyId,
-        templateId: template.id,
-        sectorId: template.sectorId,
-        title: tt.title,
-        description: tt.description,
-        priority: tt.priority,
-        assigneeId: resolvedAssignee,
-        createdById: user.userId,
-        dueDate,
-      },
-    });
-  }
+  await prisma.task.createMany({
+    data: template.templateTasks.map((tt) => ({
+      companyId: user.companyId,
+      templateId: template.id,
+      sectorId: template.sectorId,
+      title: tt.title,
+      description: tt.description,
+      priority: tt.priority,
+      assigneeId: resolvedAssignee,
+      createdById: user.userId,
+      dueDate: tt.daysToComplete
+        ? new Date(start.getTime() - tt.daysToComplete * 86400000)
+        : null,
+    })),
+  });
 
   await prisma.template.update({
     where: { id: templateId },

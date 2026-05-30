@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
 import { getClientSession } from "@/lib/client-session";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
-import { listAllCalendarIds, listCalendarEvents } from "@/lib/google-calendar";
+import { listCalendarEvents } from "@/lib/google-calendar";
 
 const TOLERANCE_MINUTES = 10;
 
@@ -64,9 +64,38 @@ export async function GET(
   const [y, mo, d] = date.split("-").map(Number);
   const dayOfWeek = new Date(y, mo - 1, d).getDay();
 
-  const availability = await prisma.calendarAvailability.findUnique({
-    where: { userId_dayOfWeek: { userId: user.id, dayOfWeek } },
-  });
+  // Live check no Google Calendar pra capturar eventos criados manualmente
+  // depois do último sync. Lê só agendas relevantes ao gestor (agenda própria
+  // mapeada via User.googleCalendarId, se houver).
+  const dayStart = new Date(`${date}T00:00:00-03:00`);
+  const dayEnd = new Date(`${date}T23:59:59-03:00`);
+
+  const [availability, bookedFromDb, gcalEvents] = await Promise.all([
+    prisma.calendarAvailability.findUnique({
+      where: { userId_dayOfWeek: { userId: user.id, dayOfWeek } },
+    }),
+    // Reuniões que bloqueiam slots desse gestor:
+    // - Próprias (reuniões de cliente atribuídas via Client.managerId)
+    // - Admin bucket (Daily Agência, Reunião de Gestores, etc — shared, bloqueia todos)
+    prisma.meeting.findMany({
+      where: {
+        date,
+        status: "confirmed",
+        OR: [
+          { userId: user.id },
+          { user: { calendarSlug: "admin" } },
+        ],
+      },
+      select: { startTime: true, endTime: true },
+    }),
+    user.googleCalendarId
+      ? listCalendarEvents({
+          timeMin: dayStart,
+          timeMax: dayEnd,
+          calendarIds: [user.googleCalendarId],
+        })
+      : Promise.resolve(null),
+  ]);
 
   if (!availability) {
     return NextResponse.json({ slots: [] });
@@ -74,34 +103,6 @@ export async function GET(
 
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
-
-  // Reuniões que bloqueiam slots desse gestor:
-  // - Próprias (reuniões de cliente atribuídas via Client.managerId)
-  // - Admin bucket (Daily Agência, Reunião de Gestores, etc — shared, bloqueia todos)
-  const bookedFromDb = await prisma.meeting.findMany({
-    where: {
-      date,
-      status: "confirmed",
-      OR: [
-        { userId: user.id },
-        { user: { calendarSlug: "admin" } },
-      ],
-    },
-    select: { startTime: true, endTime: true },
-  });
-
-  // Live check no Google Calendar pra capturar eventos criados manualmente
-  // depois do último sync. Lê só agendas relevantes ao gestor (agenda própria
-  // mapeada via User.googleCalendarId, se houver).
-  const dayStart = new Date(`${date}T00:00:00-03:00`);
-  const dayEnd = new Date(`${date}T23:59:59-03:00`);
-  const gcalEvents = user.googleCalendarId
-    ? await listCalendarEvents({
-        timeMin: dayStart,
-        timeMax: dayEnd,
-        calendarIds: [user.googleCalendarId],
-      })
-    : null;
 
   const bookedFromGcal = (gcalEvents ?? [])
     .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)

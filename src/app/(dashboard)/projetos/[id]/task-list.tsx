@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import { ChevronDown, ChevronRight, Plus, Loader2, CheckSquare, X, CheckCircle2, UserCheck, Trash2 } from "lucide-react";
 import { isBefore, isToday } from "date-fns";
 import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate, TaskInlineTitle } from "./task-inline-edit";
@@ -209,25 +209,191 @@ function BulkToolbar({
   );
 }
 
+type TaskRowProps = {
+  task: Task;
+  idx: number;
+  projectId: string;
+  users: UserLite[];
+  isCollapsed: boolean;
+  isSelected: boolean;
+  now: Date;
+  activeSubCount: number;
+  onSelect: (id: string) => void;
+  onCollapse: (id: string) => void;
+};
+
+const TaskRow = memo(function TaskRow({
+  task,
+  idx,
+  projectId,
+  users,
+  isCollapsed,
+  isSelected,
+  now,
+  activeSubCount,
+  onSelect,
+  onCollapse,
+}: TaskRowProps) {
+  const isOverdue = task.dueDate && isBefore(task.dueDate, now) && task.status !== "done";
+  const isDueToday = task.dueDate && isToday(task.dueDate);
+  const hasSub = activeSubCount > 0;
+  const activeSubtasks = hasSub ? task.subtasks.filter((s) => s.status !== "cancelled") : [];
+
+  return (
+    <div className={isSelected ? "bg-blue-50/60" : ""}>
+      {/* Main row */}
+      <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
+        {/* Index */}
+        <div className="w-6 shrink-0 text-xs text-neutral-300 font-medium text-center select-none">
+          {idx + 1}
+        </div>
+
+        {/* Selection checkbox */}
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onSelect(task.id)}
+          className="w-3.5 h-3.5 rounded border-neutral-300 accent-blue-600 cursor-pointer shrink-0"
+        />
+
+        {/* Chevron */}
+        <button
+          onClick={() => hasSub && onCollapse(task.id)}
+          className={`shrink-0 transition-colors ${
+            hasSub
+              ? "text-neutral-400 hover:text-neutral-700 cursor-pointer"
+              : "text-neutral-200 cursor-default pointer-events-none"
+          }`}
+          tabIndex={hasSub ? 0 : -1}
+          aria-label={isCollapsed ? "Expandir subtarefas" : "Recolher subtarefas"}
+        >
+          {hasSub && !isCollapsed
+            ? <ChevronDown className="w-4 h-4" />
+            : <ChevronRight className="w-4 h-4" />}
+        </button>
+
+        {/* Checkbox de status */}
+        <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
+
+        {/* Title */}
+        <TaskInlineTitle
+          taskId={task.id}
+          title={task.title}
+          href={`/tarefas/${task.id}?projectId=${projectId}`}
+          isDone={task.status === "done"}
+        />
+
+        {/* Colunas fixas */}
+        <div className="flex items-center shrink-0">
+          <div className="w-32 flex justify-end">
+            <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
+          </div>
+          <div className="w-24 flex justify-end">
+            <TaskInlineDueDate
+              taskId={task.id}
+              dueDate={task.dueDate}
+              isOverdue={!!isOverdue}
+              isDueToday={!!isDueToday}
+            />
+          </div>
+          <div className="w-28 flex justify-end pr-1">
+            <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${
+              STATUS_STYLES[task.status] ?? STATUS_STYLES.todo
+            }`}>
+              {STATUS_LABELS[task.status] ?? task.status}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Subtarefas */}
+      {hasSub && !isCollapsed && (
+        <div className="pl-[84px] pr-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-neutral-50">
+          {activeSubtasks.map((sub) => {
+            const subOverdue = sub.dueDate && isBefore(sub.dueDate, now) && sub.status !== "done";
+            const subToday = sub.dueDate && isToday(sub.dueDate);
+            return (
+              <div key={sub.id} className="flex items-center gap-2 group">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
+                <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
+                <TaskInlineTitle
+                  taskId={sub.id}
+                  title={sub.title}
+                  href={`/tarefas/${sub.id}?projectId=${projectId}`}
+                  isDone={sub.status === "done"}
+                  size="sm"
+                />
+                <div className="flex items-center shrink-0">
+                  <div className="w-32 flex justify-end">
+                    <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
+                  </div>
+                  <div className="w-24 flex justify-end">
+                    <TaskInlineDueDate
+                      taskId={sub.id}
+                      dueDate={sub.dueDate}
+                      isOverdue={!!subOverdue}
+                      isDueToday={!!subToday}
+                    />
+                  </div>
+                  <div className="w-28 flex justify-end pr-1">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${
+                      STATUS_STYLES[sub.status] ?? STATUS_STYLES.todo
+                    }`}>
+                      {STATUS_LABELS[sub.status] ?? sub.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <AddSubtaskInline parentTaskId={task.id} />
+        </div>
+      )}
+      {!hasSub && (
+        <div className="pl-[84px] pr-4 pb-2 pt-0.5">
+          <AddSubtaskInline parentTaskId={task.id} />
+        </div>
+      )}
+    </div>
+  );
+});
+
 export function TaskList({ tasks, users, projectId }: TaskListProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  function toggleCollapse(id: string) {
+  const now = new Date();
+
+  const toggleCollapse = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }
+  }, []);
 
-  function toggleSelect(id: string) {
+  const toggleSelect = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }
+  }, []);
+
+  const visible = useMemo(
+    () => tasks.filter((t) => t.status !== "cancelled"),
+    [tasks]
+  );
+
+  const subtaskCountByTask = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of tasks) {
+      let c = 0;
+      for (const s of t.subtasks) if (s.status !== "cancelled") c++;
+      m.set(t.id, c);
+    }
+    return m;
+  }, [tasks]);
 
   function toggleAll() {
     if (selected.size === visible.length) {
@@ -237,7 +403,6 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
     }
   }
 
-  const visible = tasks.filter((t) => t.status !== "cancelled");
   const allSelected = visible.length > 0 && selected.size === visible.length;
 
   return (
@@ -268,132 +433,21 @@ export function TaskList({ tasks, users, projectId }: TaskListProps) {
           </div>
         </div>
 
-        {visible.map((task, idx) => {
-          const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && task.status !== "done";
-          const isDueToday = task.dueDate && isToday(task.dueDate);
-          const activeSubtasks = task.subtasks.filter((s) => s.status !== "cancelled");
-          const hasSub = activeSubtasks.length > 0;
-          const isCollapsed = collapsedIds.has(task.id);
-          const isSelected = selected.has(task.id);
-
-          return (
-            <div key={task.id} className={isSelected ? "bg-blue-50/60" : ""}>
-              {/* Main row */}
-              <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors group">
-                {/* Index */}
-                <div className="w-6 shrink-0 text-xs text-neutral-300 font-medium text-center select-none">
-                  {idx + 1}
-                </div>
-
-                {/* Selection checkbox */}
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggleSelect(task.id)}
-                  className="w-3.5 h-3.5 rounded border-neutral-300 accent-blue-600 cursor-pointer shrink-0"
-                />
-
-                {/* Chevron */}
-                <button
-                  onClick={() => hasSub && toggleCollapse(task.id)}
-                  className={`shrink-0 transition-colors ${
-                    hasSub
-                      ? "text-neutral-400 hover:text-neutral-700 cursor-pointer"
-                      : "text-neutral-200 cursor-default pointer-events-none"
-                  }`}
-                  tabIndex={hasSub ? 0 : -1}
-                  aria-label={isCollapsed ? "Expandir subtarefas" : "Recolher subtarefas"}
-                >
-                  {hasSub && !isCollapsed
-                    ? <ChevronDown className="w-4 h-4" />
-                    : <ChevronRight className="w-4 h-4" />}
-                </button>
-
-                {/* Checkbox de status */}
-                <TaskCheckbox taskId={task.id} isDone={task.status === "done"} />
-
-                {/* Title */}
-                <TaskInlineTitle
-                  taskId={task.id}
-                  title={task.title}
-                  href={`/tarefas/${task.id}?projectId=${projectId}`}
-                  isDone={task.status === "done"}
-                />
-
-                {/* Colunas fixas */}
-                <div className="flex items-center shrink-0">
-                  <div className="w-32 flex justify-end">
-                    <TaskInlineAssignee taskId={task.id} assignee={task.assignee} users={users} />
-                  </div>
-                  <div className="w-24 flex justify-end">
-                    <TaskInlineDueDate
-                      taskId={task.id}
-                      dueDate={task.dueDate}
-                      isOverdue={!!isOverdue}
-                      isDueToday={!!isDueToday}
-                    />
-                  </div>
-                  <div className="w-28 flex justify-end pr-1">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${
-                      STATUS_STYLES[task.status] ?? STATUS_STYLES.todo
-                    }`}>
-                      {STATUS_LABELS[task.status] ?? task.status}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Subtarefas */}
-              {hasSub && !isCollapsed && (
-                <div className="pl-[84px] pr-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-neutral-50">
-                  {activeSubtasks.map((sub) => {
-                    const subOverdue = sub.dueDate && isBefore(sub.dueDate, new Date()) && sub.status !== "done";
-                    const subToday = sub.dueDate && isToday(sub.dueDate);
-                    return (
-                      <div key={sub.id} className="flex items-center gap-2 group">
-                        <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
-                        <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
-                        <TaskInlineTitle
-                          taskId={sub.id}
-                          title={sub.title}
-                          href={`/tarefas/${sub.id}?projectId=${projectId}`}
-                          isDone={sub.status === "done"}
-                          size="sm"
-                        />
-                        <div className="flex items-center shrink-0">
-                          <div className="w-32 flex justify-end">
-                            <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
-                          </div>
-                          <div className="w-24 flex justify-end">
-                            <TaskInlineDueDate
-                              taskId={sub.id}
-                              dueDate={sub.dueDate}
-                              isOverdue={!!subOverdue}
-                              isDueToday={!!subToday}
-                            />
-                          </div>
-                          <div className="w-28 flex justify-end pr-1">
-                            <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${
-                              STATUS_STYLES[sub.status] ?? STATUS_STYLES.todo
-                            }`}>
-                              {STATUS_LABELS[sub.status] ?? sub.status}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <AddSubtaskInline parentTaskId={task.id} />
-                </div>
-              )}
-              {!hasSub && (
-                <div className="pl-[84px] pr-4 pb-2 pt-0.5">
-                  <AddSubtaskInline parentTaskId={task.id} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {visible.map((task, idx) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            idx={idx}
+            projectId={projectId}
+            users={users}
+            isCollapsed={collapsedIds.has(task.id)}
+            isSelected={selected.has(task.id)}
+            now={now}
+            activeSubCount={subtaskCountByTask.get(task.id) ?? 0}
+            onSelect={toggleSelect}
+            onCollapse={toggleCollapse}
+          />
+        ))}
       </div>
     </>
   );

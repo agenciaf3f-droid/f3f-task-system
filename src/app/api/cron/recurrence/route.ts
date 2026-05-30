@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
     },
   });
 
-  let created = 0;
+  const payload: Prisma.TaskCreateManyInput[] = [];
 
   for (const task of recurringTasks) {
     const rule = parseRecurrenceRuleFromDb(task.recurrenceRule);
@@ -56,23 +57,25 @@ export async function GET(req: Request) {
     // Só cria se próxima ocorrência for hoje ou no futuro próximo (evita backfill infinito)
     if (nextDue < today) continue;
 
-    await prisma.task.create({
-      data: {
-        companyId: task.companyId,
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-        assigneeId: task.assigneeId,
-        sectorId: task.sectorId,
-        projectId: task.projectId,
-        createdById: task.createdById,
-        recurrenceRule: task.recurrenceRule ?? undefined,
-        recurrenceParentId: task.id,
-        dueDate: nextDue,
-      },
+    payload.push({
+      companyId: task.companyId,
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      assigneeId: task.assigneeId,
+      sectorId: task.sectorId,
+      projectId: task.projectId,
+      createdById: task.createdById,
+      recurrenceRule: task.recurrenceRule ?? undefined,
+      recurrenceParentId: task.id,
+      dueDate: nextDue,
     });
-    created++;
   }
+
+  if (payload.length > 0) {
+    await prisma.task.createMany({ data: payload });
+  }
+  const created = payload.length;
 
   // ─── Limpeza: séries DIÁRIAS mantêm só as N ocorrências mais recentes ──
   // Agrupa por (title, project_id) porque a cadeia recurrence_parent_id é linked-list

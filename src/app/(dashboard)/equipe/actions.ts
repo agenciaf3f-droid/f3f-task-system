@@ -148,6 +148,7 @@ export async function toggleUserActiveAction(targetUserId: string) {
 
   const target = await prisma.user.findFirst({
     where: { id: targetUserId, companyId: user.companyId },
+    select: { isActive: true },
   });
   if (!target) return;
 
@@ -181,21 +182,23 @@ export async function deleteUserAction(targetUserId: string): Promise<{ error?: 
   }
 
   // Reassign records with Restrict FK before hard delete
-  await prisma.task.updateMany({
-    where: { createdById: targetUserId },
-    data: { createdById: user.userId },
-  });
-  await prisma.project.updateMany({
-    where: { createdById: targetUserId },
-    data: { createdById: user.userId },
-  });
-  await prisma.template.updateMany({
-    where: { createdById: targetUserId },
-    data: { createdById: user.userId },
-  });
+  await prisma.$transaction([
+    prisma.task.updateMany({
+      where: { createdById: targetUserId },
+      data: { createdById: user.userId },
+    }),
+    prisma.project.updateMany({
+      where: { createdById: targetUserId },
+      data: { createdById: user.userId },
+    }),
+    prisma.template.updateMany({
+      where: { createdById: targetUserId },
+      data: { createdById: user.userId },
+    }),
+    prisma.sectorMember.deleteMany({ where: { userId: targetUserId } }),
+  ]);
 
   // Hard delete — remove completely from DB
-  await prisma.sectorMember.deleteMany({ where: { userId: targetUserId } });
   await prisma.user.delete({ where: { id: targetUserId } });
 
   revalidatePath("/equipe");

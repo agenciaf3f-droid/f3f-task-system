@@ -43,15 +43,16 @@ export async function PATCH(
     return NextResponse.json({ ok: false, error: "Data no passado." }, { status: 400 });
   }
 
-  const session = await getClientSession();
+  const [session, user] = await Promise.all([
+    getClientSession(),
+    prisma.user.findFirst({
+      where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
+      select: { id: true, name: true },
+    }),
+  ]);
   if (!session.clientEmail || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
-
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
-    select: { id: true, name: true },
-  });
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
 
   const meeting = await prisma.meeting.findFirst({
@@ -131,15 +132,16 @@ export async function DELETE(
 ) {
   const { token, id } = await params;
 
-  const session = await getClientSession();
+  const [session, user] = await Promise.all([
+    getClientSession(),
+    prisma.user.findFirst({
+      where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
+      select: { id: true },
+    }),
+  ]);
   if (!session.clientEmail || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
-
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
-    select: { id: true },
-  });
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
 
   const meeting = await prisma.meeting.findFirst({

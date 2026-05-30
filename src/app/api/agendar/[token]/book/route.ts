@@ -55,17 +55,19 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Data no passado." }, { status: 400 });
   }
 
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
-    select: { id: true, name: true, isActive: true },
-  });
+  const [user, session] = await Promise.all([
+    prisma.user.findFirst({
+      where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
+      select: { id: true, name: true, isActive: true },
+    }),
+    getClientSession(),
+  ]);
 
   if (!user || !user.isActive) {
     return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
   }
 
   // ─── Ler sessão do cliente ─────────────────────────────────────
-  const session = await getClientSession();
   if (!session.clientEmail || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida ou expirada" }, { status: 401 });
   }
@@ -216,35 +218,37 @@ export async function POST(
   });
   const parentId = parent.id;
 
-  const createdMeetings: { id: string; date: string }[] = [{ id: parentId, date: dates[0] }];
-  let skippedCount = 0;
+  const childDates = dates.slice(1);
+  const conflicts = await prisma.meeting.findMany({
+    where: { userId: user.id, date: { in: childDates }, startTime, status: "confirmed" },
+    select: { date: true },
+  });
+  const conflictSet = new Set(conflicts.map((c) => c.date));
+  const survivorDates = childDates.filter((d) => !conflictSet.has(d));
+  const skippedCount = childDates.length - survivorDates.length;
 
-  for (let i = 1; i < dates.length; i++) {
-    const childConflict = await prisma.meeting.findFirst({
-      where: { userId: user.id, date: dates[i], startTime, status: "confirmed" },
-      select: { id: true },
-    });
-    if (childConflict) {
-      skippedCount++;
-      continue;
-    }
-    const child = await prisma.meeting.create({
-      data: {
-        userId: user.id,
-        date: dates[i],
-        startTime,
-        endTime,
-        status: "confirmed",
-        recurrenceRule: rule as object,
-        recurrenceParentId: parentId,
-        clientName: session.clientName,
-        clientGroupId: session.clientGroupId,
-        clientPlan: session.clientPlan,
-      },
-      select: { id: true },
-    });
-    createdMeetings.push({ id: child.id, date: dates[i] });
-  }
+  const createdChildren = survivorDates.length
+    ? await prisma.meeting.createManyAndReturn({
+        data: survivorDates.map((d) => ({
+          userId: user.id,
+          date: d,
+          startTime,
+          endTime,
+          status: "confirmed",
+          recurrenceRule: rule as object,
+          recurrenceParentId: parentId,
+          clientName: session.clientName,
+          clientGroupId: session.clientGroupId,
+          clientPlan: session.clientPlan,
+        })),
+        select: { id: true, date: true },
+      })
+    : [];
+
+  const createdMeetings: { id: string; date: string }[] = [
+    { id: parentId, date: dates[0] },
+    ...createdChildren,
+  ];
 
   // Google Calendar em paralelo, fora da transação.
   const results = await Promise.allSettled(
@@ -257,15 +261,27 @@ export async function POST(
         clientName: session.clientName,
         clientGroupId: session.clientGroupId,
         calendarId,
-      })
-        .then((googleEventId) =>
-          googleEventId
-            ? prisma.meeting.update({ where: { id: m.id }, data: { googleEventId } })
-            : null,
-        ),
+      }).then((googleEventId) =>
+        googleEventId ? { id: m.id, googleEventId } : null,
+      ),
     ),
   );
-  const googleFailures = results.filter((r) => r.status === "rejected").length;
+  const successfulUpdates: { id: string; googleEventId: string }[] = [];
+  let googleFailures = 0;
+  for (const r of results) {
+    if (r.status === "rejected") {
+      googleFailures++;
+    } else if (r.value) {
+      successfulUpdates.push(r.value);
+    }
+  }
+  if (successfulUpdates.length > 0) {
+    await prisma.$transaction(
+      successfulUpdates.map((u) =>
+        prisma.meeting.update({ where: { id: u.id }, data: { googleEventId: u.googleEventId } }),
+      ),
+    );
+  }
   if (googleFailures > 0) {
     console.error(`[Booking] ${googleFailures} Google Calendar syncs falharam (DB OK).`);
   }

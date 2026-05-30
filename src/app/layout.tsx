@@ -12,9 +12,11 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://f3f-task-system.vercel.app'),
   title: { default: "F3F Task System", template: "%s | F3F Task System" },
   description: "Sistema de gestão de tarefas e processos internos",
-  icons: { icon: "/logo.png", shortcut: "/logo.png", apple: "/logo.png" },
+  robots: { index: false, follow: false },
+  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/favicon.ico" },
 };
 
 export default function RootLayout({

@@ -229,21 +229,24 @@ export async function createProjectAction(
             metadata: { templatePosition: tIdx },
           },
         });
-        for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
-          const ci = tt.checklistItems[cIdx];
-          if (!ci.title?.trim()) continue;
-          await prisma.task.create({
-            data: {
-              companyId: user.companyId,
-              projectId: project.id,
-              parentTaskId: parentTask.id,
-              title: ci.title.trim(),
-              priority: tt.priority,
-              createdById: user.userId,
-              metadata: { templatePosition: cIdx },
-            },
-          });
-        }
+        await Promise.all(
+          tt.checklistItems
+            .map((ci, cIdx) => ({ ci, cIdx }))
+            .filter(({ ci }) => ci.title?.trim())
+            .map(({ ci, cIdx }) =>
+              prisma.task.create({
+                data: {
+                  companyId: user.companyId,
+                  projectId: project.id,
+                  parentTaskId: parentTask.id,
+                  title: ci.title.trim(),
+                  priority: tt.priority,
+                  createdById: user.userId,
+                  metadata: { templatePosition: cIdx },
+                },
+              }),
+            ),
+        );
       }
       await prisma.template.update({
         where: { id: templateId },
@@ -361,62 +364,71 @@ export async function applyTemplatesToProjectAction(
         where: { id: projectId },
         data: { description: template.description.trim() },
       });
+      project.description = template.description.trim();
     }
-
-    for (let tIdx = 0; tIdx < template.templateTasks.length; tIdx++) {
-      const tt = template.templateTasks[tIdx];
-      const dueDate = tt.daysToComplete
-        ? new Date(start.getTime() + tt.daysToComplete * 86400000)
-        : null;
-
-      const parentTask = await prisma.task.create({
-        data: {
-          companyId: user.companyId,
-          projectId,
-          templateId: template.id,
-          sectorId: template.sectorId,
-          title: tt.title,
-          description: tt.description,
-          priority: tt.priority,
-          assigneeId: resolvedAssignee,
-          createdById: user.userId,
-          dueDate,
-          metadata: { templatePosition: tIdx },
-        },
-      });
-
-      for (let cIdx = 0; cIdx < tt.checklistItems.length; cIdx++) {
-        const ci = tt.checklistItems[cIdx];
-        if (!ci.title?.trim()) continue;
-        await prisma.task.create({
-          data: {
-            companyId: user.companyId,
-            projectId,
-            parentTaskId: parentTask.id,
-            title: ci.title.trim(),
-            priority: tt.priority,
-            assigneeId: resolvedAssignee,
-            createdById: user.userId,
-            metadata: { templatePosition: cIdx },
-          },
-        });
-      }
-    }
-
-    await prisma.template.update({
-      where: { id: template.id },
-      data: { useCount: { increment: 1 } },
-    });
-
-    await logActivity({
-      companyId: user.companyId,
-      userId: user.userId,
-      action: "project.template_applied",
-      resourceType: "project",
-      resourceId: projectId,
-      newValue: { templateName: template.name, tasksCreated: template.templateTasks.length },
-    });
   }
+
+  await Promise.all(
+    templates.map(async (template) => {
+      await Promise.all(
+        template.templateTasks.map(async (tt, tIdx) => {
+          const dueDate = tt.daysToComplete
+            ? new Date(start.getTime() + tt.daysToComplete * 86400000)
+            : null;
+
+          const parentTask = await prisma.task.create({
+            data: {
+              companyId: user.companyId,
+              projectId,
+              templateId: template.id,
+              sectorId: template.sectorId,
+              title: tt.title,
+              description: tt.description,
+              priority: tt.priority,
+              assigneeId: resolvedAssignee,
+              createdById: user.userId,
+              dueDate,
+              metadata: { templatePosition: tIdx },
+            },
+          });
+
+          await Promise.all(
+            tt.checklistItems
+              .map((ci, cIdx) => ({ ci, cIdx }))
+              .filter(({ ci }) => ci.title?.trim())
+              .map(({ ci, cIdx }) =>
+                prisma.task.create({
+                  data: {
+                    companyId: user.companyId,
+                    projectId,
+                    parentTaskId: parentTask.id,
+                    title: ci.title.trim(),
+                    priority: tt.priority,
+                    assigneeId: resolvedAssignee,
+                    createdById: user.userId,
+                    metadata: { templatePosition: cIdx },
+                  },
+                }),
+              ),
+          );
+        }),
+      );
+
+      await logActivity({
+        companyId: user.companyId,
+        userId: user.userId,
+        action: "project.template_applied",
+        resourceType: "project",
+        resourceId: projectId,
+        newValue: { templateName: template.name, tasksCreated: template.templateTasks.length },
+      });
+    }),
+  );
+
+  await prisma.template.updateMany({
+    where: { id: { in: templateIds } },
+    data: { useCount: { increment: 1 } },
+  });
 
   revalidatePath(`/projetos/${projectId}`);
   return {};

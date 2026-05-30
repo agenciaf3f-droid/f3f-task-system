@@ -230,6 +230,12 @@ model Task {
   @@index([status])
   @@index([dueDate])
   @@index([templateId])
+  @@index([companyId, assigneeId, deletedAt])
+  @@index([companyId, status, dueDate])
+  @@index([companyId, completedAt])
+  @@index([createdById])
+  @@index([recurrenceParentId])
+  @@index([parentTaskId])
   @@map("tasks")
 }
 
@@ -371,6 +377,7 @@ model Project {
 
   @@index([companyId])
   @@index([clientId])
+  @@index([createdById])
   @@map("projects")
 }
 

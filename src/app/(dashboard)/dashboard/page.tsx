@@ -61,12 +61,32 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
       select: {
         id: true, name: true,
         client: { select: { name: true, color: true } },
-        tasks: { where: { deletedAt: null, status: { notIn: ["cancelled"] } }, select: { status: true } },
       },
     }),
   ]);
 
-  return { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects };
+  const projectIds = recentProjects.map((p) => p.id);
+  const taskAgg = projectIds.length
+    ? await prisma.task.groupBy({
+        by: ["projectId", "status"],
+        where: {
+          projectId: { in: projectIds },
+          deletedAt: null,
+          status: { notIn: ["cancelled"] },
+        },
+        _count: true,
+      })
+    : [];
+  const aggByProject = new Map<string, { total: number; done: number }>();
+  for (const row of taskAgg) {
+    if (!row.projectId) continue;
+    const entry = aggByProject.get(row.projectId) ?? { total: 0, done: 0 };
+    entry.total += row._count;
+    if (row.status === "done") entry.done += row._count;
+    aggByProject.set(row.projectId, entry);
+  }
+
+  return { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects, aggByProject };
 }
 
 function getGreeting() {
@@ -96,7 +116,7 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const activeStatus = sp?.status;
 
-  const { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects } =
+  const { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects, aggByProject } =
     await getDashboardData(user.userId, user.companyId, activeStatus);
 
   const inProgressCount = myTasks.filter((t) => t.status === "in_progress").length;
@@ -232,8 +252,9 @@ export default async function DashboardPage({
             ) : (
               <div className="flex flex-col gap-3">
                 {recentProjects.map((p) => {
-                  const total = p.tasks.length;
-                  const done = p.tasks.filter((t) => t.status === "done").length;
+                  const agg = aggByProject.get(p.id);
+                  const total = agg?.total ?? 0;
+                  const done = agg?.done ?? 0;
                   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
                   return (
                     <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">

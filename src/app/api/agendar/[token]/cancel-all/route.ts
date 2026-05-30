@@ -12,15 +12,16 @@ export async function POST(
 ) {
   const { token } = await params;
 
-  const session = await getClientSession();
+  const [session, user] = await Promise.all([
+    getClientSession(),
+    prisma.user.findFirst({
+      where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
+      select: { id: true },
+    }),
+  ]);
   if (!session.clientEmail || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
-
-  const user = await prisma.user.findFirst({
-    where: { OR: [{ calendarSlug: token }, { calendarToken: token }] },
-    select: { id: true },
-  });
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
 
   const today = todayInBrazil();

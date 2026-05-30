@@ -237,12 +237,30 @@ export default async function ProjetosPage({
       id: true,
       status: true,
       client: { select: { id: true, name: true, color: true } },
-      tasks: {
-        where: { deletedAt: null, status: { notIn: ["cancelled"] }, parentTaskId: null },
-        select: { status: true },
-      },
     },
   });
+
+  const projectIds = allProjects.map((p) => p.id);
+  const taskAgg = projectIds.length
+    ? await prisma.task.groupBy({
+        by: ["projectId", "status"],
+        where: {
+          projectId: { in: projectIds },
+          deletedAt: null,
+          status: { notIn: ["cancelled"] },
+          parentTaskId: null,
+        },
+        _count: true,
+      })
+    : [];
+  const aggByProject = new Map<string, { total: number; done: number }>();
+  for (const row of taskAgg) {
+    if (!row.projectId) continue;
+    const entry = aggByProject.get(row.projectId) ?? { total: 0, done: 0 };
+    entry.total += row._count;
+    if (row.status === "done") entry.done += row._count;
+    aggByProject.set(row.projectId, entry);
+  }
 
   // Agrupar por cliente
   const clientMap = new Map<string, {
@@ -263,8 +281,9 @@ export default async function ProjetosPage({
     const entry = clientMap.get(c.id)!;
     entry.totalProjects++;
     if (project.status !== "archived" && project.status !== "cancelled") entry.activeProjects++;
-    entry.totalTasks += project.tasks.length;
-    entry.doneTasks += project.tasks.filter((t) => t.status === "done").length;
+    const agg = aggByProject.get(project.id);
+    entry.totalTasks += agg?.total ?? 0;
+    entry.doneTasks += agg?.done ?? 0;
   }
 
   const clients = Array.from(clientMap.values()).sort((a, b) => a.name.localeCompare(b.name));

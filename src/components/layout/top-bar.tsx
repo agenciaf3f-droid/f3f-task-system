@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useTransition } from "react";
+import { memo, useState, useRef, useEffect, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Search, X, Bell, AlertTriangle, Clock } from "lucide-react";
@@ -32,6 +32,80 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+interface BellDropdownProps {
+  upcomingTasks: UpcomingTask[];
+  bellOpen: boolean;
+  onClose: () => void;
+}
+
+const BellDropdown = memo(function BellDropdown({ upcomingTasks, bellOpen, onClose }: BellDropdownProps) {
+  const now = new Date();
+  const overdueCount = upcomingTasks.filter(
+    (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
+  ).length;
+
+  if (!bellOpen) return null;
+
+  return (
+            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
+                <p className="text-sm font-bold text-neutral-900">Tarefas próximas</p>
+                {overdueCount > 0 && (
+                  <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                    {overdueCount} atrasada{overdueCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+              {upcomingTasks.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
+                  <p className="text-xs text-neutral-400 mt-1">Nenhuma tarefa vencendo nas próximas 48h</p>
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto divide-y divide-neutral-50">
+                  {upcomingTasks.map((task) => {
+                    const due = task.dueDate ? new Date(task.dueDate) : null;
+                    const isOverdue = due && isBefore(due, now);
+                    const hoursLeft = due ? differenceInHours(due, now) : null;
+                    return (
+                      <Link
+                        key={task.id}
+                        href={`/tarefas/${task.id}`}
+                        onClick={() => onClose()}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
+                      >
+                        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isOverdue ? "bg-red-100" : "bg-amber-100"}`}>
+                          {isOverdue
+                            ? <AlertTriangle className="w-3 h-3 text-red-600" />
+                            : <Clock className="w-3 h-3 text-amber-600" />
+                          }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-neutral-900 truncate">{task.title}</p>
+                          {task.project && (
+                            <p className="text-[11px] text-neutral-400 truncate">{task.project.name}</p>
+                          )}
+                        </div>
+                        {due && (
+                          <div className="shrink-0 text-right">
+                            <p className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
+                              {isOverdue
+                                ? `${Math.abs(hoursLeft!)}h atraso`
+                                : hoursLeft! < 24
+                                ? `${hoursLeft}h`
+                                : format(due, "dd/MM", { locale: ptBR })}
+                            </p>
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+  );
+});
+
 export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = [] }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -44,7 +118,6 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
   const router = useRouter();
 
   const initials = getInitials(userName);
-  const now = new Date();
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -91,10 +164,14 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
     router.push(`/tarefas/${id}`);
   }
 
-  const overdueCount = upcomingTasks.filter(
-    (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
-  ).length;
-  const alertCount = overdueCount > 0 ? overdueCount : upcomingTasks.length;
+  const { overdueCount, alertCount } = useMemo(() => {
+    const now = new Date();
+    const overdueCount = upcomingTasks.filter(
+      (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
+    ).length;
+    const alertCount = overdueCount > 0 ? overdueCount : upcomingTasks.length;
+    return { overdueCount, alertCount };
+  }, [upcomingTasks]);
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between px-8 py-3 bg-white border-b border-neutral-200/80 backdrop-blur-sm">
@@ -164,64 +241,7 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
             )}
           </button>
 
-          {bellOpen && (
-            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-                <p className="text-sm font-bold text-neutral-900">Tarefas próximas</p>
-                {overdueCount > 0 && (
-                  <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
-                    {overdueCount} atrasada{overdueCount !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-              {upcomingTasks.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
-                  <p className="text-xs text-neutral-400 mt-1">Nenhuma tarefa vencendo nas próximas 48h</p>
-                </div>
-              ) : (
-                <div className="max-h-72 overflow-y-auto divide-y divide-neutral-50">
-                  {upcomingTasks.map((task) => {
-                    const due = task.dueDate ? new Date(task.dueDate) : null;
-                    const isOverdue = due && isBefore(due, now);
-                    const hoursLeft = due ? differenceInHours(due, now) : null;
-                    return (
-                      <Link
-                        key={task.id}
-                        href={`/tarefas/${task.id}`}
-                        onClick={() => setBellOpen(false)}
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
-                      >
-                        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isOverdue ? "bg-red-100" : "bg-amber-100"}`}>
-                          {isOverdue
-                            ? <AlertTriangle className="w-3 h-3 text-red-600" />
-                            : <Clock className="w-3 h-3 text-amber-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-neutral-900 truncate">{task.title}</p>
-                          {task.project && (
-                            <p className="text-[11px] text-neutral-400 truncate">{task.project.name}</p>
-                          )}
-                        </div>
-                        {due && (
-                          <div className="shrink-0 text-right">
-                            <p className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
-                              {isOverdue
-                                ? `${Math.abs(hoursLeft!)}h atraso`
-                                : hoursLeft! < 24
-                                ? `${hoursLeft}h`
-                                : format(due, "dd/MM", { locale: ptBR })}
-                            </p>
-                          </div>
-                        )}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+          <BellDropdown upcomingTasks={upcomingTasks} bellOpen={bellOpen} onClose={() => setBellOpen(false)} />
         </div>
 
         {/* Avatar */}

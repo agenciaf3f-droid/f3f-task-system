@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { use, useActionState } from "react";
 import { resetPasswordAction, type ResetState } from "./actions";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <img src="/logo.png" alt="F3F" className="w-10 h-10 object-contain" />
+            <Image src="/logo.png" alt="F3F" width={40} height={40} priority className="w-10 h-10 object-contain" />
             <span className="text-xl font-semibold tracking-tight text-neutral-900">F3F Tasks</span>
           </div>
           <p className="text-sm text-neutral-500">Criar nova senha</p>

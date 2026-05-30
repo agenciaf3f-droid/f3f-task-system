@@ -503,26 +503,29 @@ export async function addCommentAction(taskId: string, content: string) {
   const re = new RegExp(MENTION_RE.source, "gi");
   while ((m = re.exec(content)) !== null) {
     const [, , mentionedUserId] = m;
-    if (mentionedUserId !== user.userId && !mentionedIds.has(mentionedUserId)) {
+    if (mentionedUserId !== user.userId) {
       mentionedIds.add(mentionedUserId);
-      // Verify user belongs to same company before notifying
-      const target = await prisma.user.findFirst({
-        where: { id: mentionedUserId, companyId: user.companyId, isActive: true },
-        select: { id: true },
+    }
+  }
+  if (mentionedIds.size > 0) {
+    const targets = await prisma.user.findMany({
+      where: { id: { in: [...mentionedIds] }, companyId: user.companyId, isActive: true },
+      select: { id: true },
+    });
+    if (targets.length > 0) {
+      const body = `Em "${task.title}": ${content.replace(MENTION_RE, "@$1").slice(0, 120)}`;
+      const title = `${user.name.split(" ")[0]} mencionou você`;
+      await prisma.notification.createMany({
+        data: targets.map((t) => ({
+          companyId: user.companyId,
+          userId: t.id,
+          type: "mention" as const,
+          title,
+          body,
+          resourceType: "task",
+          resourceId: taskId,
+        })),
       });
-      if (target) {
-        await prisma.notification.create({
-          data: {
-            companyId: user.companyId,
-            userId: mentionedUserId,
-            type: "mention",
-            title: `${user.name.split(" ")[0]} mencionou você`,
-            body: `Em "${task.title}": ${content.replace(MENTION_RE, "@$1").slice(0, 120)}`,
-            resourceType: "task",
-            resourceId: taskId,
-          },
-        });
-      }
     }
   }
 
@@ -672,22 +675,24 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
     select: { id: true },
   });
 
-  for (const sub of task.subtasks) {
-    await prisma.task.create({
-      data: {
-        companyId: user.companyId,
-        title: sub.title,
-        description: sub.description,
-        priority: sub.priority,
-        assigneeId: sub.assigneeId,
-        dueDate: sub.dueDate,
-        projectId: task.projectId,
-        sectorId: task.sectorId,
-        parentTaskId: copy.id,
-        createdById: user.userId,
-      },
-    });
-  }
+  await Promise.all(
+    task.subtasks.map((sub) =>
+      prisma.task.create({
+        data: {
+          companyId: user.companyId,
+          title: sub.title,
+          description: sub.description,
+          priority: sub.priority,
+          assigneeId: sub.assigneeId,
+          dueDate: sub.dueDate,
+          projectId: task.projectId,
+          sectorId: task.sectorId,
+          parentTaskId: copy.id,
+          createdById: user.userId,
+        },
+      }),
+    ),
+  );
 
   await logActivity({
     companyId: user.companyId,
@@ -738,14 +743,8 @@ export async function bulkUpdateTaskStatusAction(
   const user = await requireAuth();
   if (!taskIds.length) return {};
 
-  const owned = await prisma.task.findMany({
-    where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
-    select: { id: true },
-  });
-  const safeIds = owned.map((t) => t.id);
-
   await prisma.task.updateMany({
-    where: { id: { in: safeIds } },
+    where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
     data: { status, completedAt: status === "done" ? new Date() : null },
   });
 
@@ -760,21 +759,14 @@ export async function bulkAssignAction(
   const user = await requireAuth();
   if (!taskIds.length) return {};
 
-  const [owned, assignee] = await Promise.all([
-    prisma.task.findMany({
-      where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
-      select: { id: true },
-    }),
-    prisma.user.findFirst({
-      where: { id: assigneeId, companyId: user.companyId },
-      select: { id: true },
-    }),
-  ]);
+  const assignee = await prisma.user.findFirst({
+    where: { id: assigneeId, companyId: user.companyId },
+    select: { id: true },
+  });
   if (!assignee) return { error: "Usuário não encontrado." };
 
-  const safeIds = owned.map((t) => t.id);
   await prisma.task.updateMany({
-    where: { id: { in: safeIds } },
+    where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
     data: { assigneeId },
   });
 
