@@ -34,13 +34,21 @@ export async function findClientByCredentials(
     const groupIdField = process.env.EXTERNAL_FIELD_GROUP_ID || "whatsapp_group_id";
     const gestorField = process.env.EXTERNAL_FIELD_MANAGER_ID || "gestor";
 
+    const emailNorm = email.trim().toLowerCase();
     const { data, error } = await externalSupabase
       .from(tableName)
       .select(`${emailField},${passwordField},${nameField},${planField},${groupIdField},${gestorField}`)
-      .eq(emailField, email)
-      .single();
+      .ilike(emailField, emailNorm)
+      .maybeSingle();
 
-    if (error || !data) return null;
+    if (error) {
+      console.error(`[external-db] query error for "${emailNorm}":`, error.message);
+      return null;
+    }
+    if (!data) {
+      console.warn(`[external-db] no row found for email="${emailNorm}" (table=${tableName}, field=${emailField})`);
+      return null;
+    }
 
     const storedPassword = data[passwordField as keyof typeof data];
     const defaultPassword = "123456";
