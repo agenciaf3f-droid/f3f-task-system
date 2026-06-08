@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting } from "@/lib/google-calendar";
 import { getClientSession } from "@/lib/client-session";
+import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import {
   generateMonthlyOccurrences,
   generateWeeklyOccurrences,
@@ -72,30 +73,12 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Sessão inválida ou expirada" }, { status: 401 });
   }
 
-  // Mapear plano para Google Calendar ID — normaliza pra suportar variantes
-  // do banco externo: "Iniciante", "iniciante ", "INICIANTES", "low-ticket", etc.
-  // Tenta forma normalizada (sem acento/espaço/dash) e fallback singular/plural.
-  let calendarId: string | undefined;
-  if (session.clientPlan) {
-    const norm = session.clientPlan
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .trim()
-      .toUpperCase()
-      .replace(/[\s\-]+/g, "_");
-    const candidates = [
-      `GOOGLE_CALENDAR_ID_${norm}`,
-      norm.endsWith("S") ? `GOOGLE_CALENDAR_ID_${norm.slice(0, -1)}` : `GOOGLE_CALENDAR_ID_${norm}S`,
-    ];
-    for (const key of candidates) {
-      if (process.env[key]) {
-        calendarId = process.env[key];
-        break;
-      }
-    }
-    if (!calendarId) {
-      console.warn(`[book] env GOOGLE_CALENDAR_ID_${norm} (e variantes) não encontrada. clientPlan="${session.clientPlan}". Fallback p/ primary.`);
-    }
+  // Mapear plano → Google Calendar ID via tabela de alias + agendas live.
+  // "Low-Ticket" → "Clientes - LT", "1/3 FASES" → "Clientes - F1", etc.
+  // undefined = sem agenda específica → cai no calendar primary "Clientes".
+  const calendarId = await resolvePlanCalendarId(session.clientPlan);
+  if (session.clientPlan && !calendarId) {
+    console.warn(`[book] sem agenda mapeada pro plano "${session.clientPlan}". Fallback p/ primary.`);
   }
 
   const [y, mo, d] = date.split("-").map(Number);

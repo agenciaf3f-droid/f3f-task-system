@@ -4,6 +4,7 @@ import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
 import { getClientSession } from "@/lib/client-session";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
 import { listCalendarEvents } from "@/lib/google-calendar";
+import { planUsesSharedCalendar, resolvePlanCalendarId } from "@/lib/plan-calendar";
 
 const TOLERANCE_MINUTES = 10;
 
@@ -70,7 +71,7 @@ export async function GET(
   const dayStart = new Date(`${date}T00:00:00-03:00`);
   const dayEnd = new Date(`${date}T23:59:59-03:00`);
 
-  const [availability, bookedFromDb, gcalEvents] = await Promise.all([
+  const [availability, bookedFromDb, gcalEvents, planCalEvents] = await Promise.all([
     prisma.calendarAvailability.findUnique({
       where: { userId_dayOfWeek: { userId: user.id, dayOfWeek } },
     }),
@@ -95,6 +96,16 @@ export async function GET(
           calendarIds: [user.googleCalendarId],
         })
       : Promise.resolve(null),
+    // Plano com especialista compartilhado (Low-Ticket/Premium): bloquear horários
+    // já ocupados na agenda DO PLANO — mesmo de outro gestor — pra não estourar
+    // o especialista (não atende 2 reuniões ao mesmo tempo).
+    planUsesSharedCalendar(session.clientPlan)
+      ? resolvePlanCalendarId(session.clientPlan).then((cid) =>
+          cid
+            ? listCalendarEvents({ timeMin: dayStart, timeMax: dayEnd, calendarIds: [cid] })
+            : null,
+        )
+      : Promise.resolve(null),
   ]);
 
   if (!availability) {
@@ -104,7 +115,7 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
-  const bookedFromGcal = (gcalEvents ?? [])
+  const bookedFromGcal = [...(gcalEvents ?? []), ...(planCalEvents ?? [])]
     .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)
     .map((ev) => ({ startTime: ev.startTime, endTime: ev.endTime }));
 
