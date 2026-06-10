@@ -151,17 +151,19 @@ export default async function TaskDetailPage({
           </div>
         </div>
 
-        {/* Checklist */}
-        <ChecklistSection
-          taskId={task.id}
-          items={task.checklistItems}
-        />
-
-        {/* Comments */}
+        {/* Comments — antes do checklist */}
         <CommentsSection
           taskId={task.id}
           comments={task.comments}
           currentUserName={user.name}
+          currentUserId={user.userId}
+          canModerate={user.role === "admin" || user.role === "manager"}
+        />
+
+        {/* Checklist */}
+        <ChecklistSection
+          taskId={task.id}
+          items={task.checklistItems}
         />
       </div>
     </div>

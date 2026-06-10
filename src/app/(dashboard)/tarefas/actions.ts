@@ -547,6 +547,63 @@ export async function addCommentAction(taskId: string, content: string) {
   revalidatePath(`/tarefas/${taskId}`);
 }
 
+export async function editCommentAction(commentId: string, content: string): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  const trimmed = content.trim();
+  if (!trimmed) return { error: "Comentário vazio." };
+
+  const comment = await prisma.taskComment.findFirst({
+    where: { id: commentId, deletedAt: null },
+    select: { id: true, userId: true, taskId: true, task: { select: { companyId: true } } },
+  });
+  if (!comment || comment.task.companyId !== user.companyId) return { error: "Comentário não encontrado." };
+
+  // Só o autor (ou admin/manager) edita
+  const canEdit = comment.userId === user.userId || user.role === "admin" || user.role === "manager";
+  if (!canEdit) return { error: "Sem permissão pra editar." };
+
+  await prisma.taskComment.update({
+    where: { id: commentId },
+    data: { content: trimmed, isEdited: true },
+  });
+
+  revalidatePath(`/tarefas/${comment.taskId}`);
+  return {};
+}
+
+/**
+ * Reordena tarefas/subtarefas via drag. Persiste o índice em
+ * metadata.templatePosition — campo que o sort do projeto já respeita.
+ * orderedIds = irmãos na nova ordem (todos tasks raiz, ou subtasks de 1 parent).
+ */
+export async function reorderTasksAction(orderedIds: string[]): Promise<void> {
+  const user = await requireAuth();
+  if (orderedIds.length === 0) return;
+
+  const tasks = await prisma.task.findMany({
+    where: { id: { in: orderedIds }, companyId: user.companyId, deletedAt: null },
+    select: { id: true, metadata: true, projectId: true },
+  });
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+
+  const updates = orderedIds
+    .map((id, index) => {
+      const t = byId.get(id);
+      if (!t) return null;
+      const meta = (t.metadata && typeof t.metadata === "object" ? t.metadata : {}) as Record<string, unknown>;
+      return prisma.task.update({
+        where: { id },
+        data: { metadata: { ...meta, templatePosition: index } },
+      });
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  if (updates.length > 0) await prisma.$transaction(updates);
+
+  const pid = tasks.find((t) => t.projectId)?.projectId;
+  if (pid) revalidatePath(`/projetos/${pid}`);
+}
+
 export async function getTaskDetailsAction(taskId: string): Promise<{
   id: string;
   title: string;

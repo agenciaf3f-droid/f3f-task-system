@@ -189,6 +189,16 @@ export default async function TaskModalPage({
         </div>
       </div>
 
+      {/* Comments — logo após o header, antes do checklist */}
+      <CommentsSection
+        taskId={task.id}
+        comments={task.comments}
+        currentUserName={user.name}
+        currentUserId={user.userId}
+        canModerate={user.role === "admin" || user.role === "manager"}
+        users={allUsers}
+      />
+
       {/* Checklist */}
       <ChecklistSection taskId={task.id} items={task.checklistItems} />
 
@@ -202,9 +212,6 @@ export default async function TaskModalPage({
 
       {/* Attachments */}
       <AttachmentsSection taskId={task.id} initialAttachments={task.attachments} canEdit={canEdit} />
-
-      {/* Comments */}
-      <CommentsSection taskId={task.id} comments={task.comments} currentUserName={user.name} users={allUsers} />
     </ModalClient>
   );
 }
