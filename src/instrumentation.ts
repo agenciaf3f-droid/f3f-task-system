@@ -16,20 +16,21 @@ export async function onRequestError(
   },
 ) {
   const e = err as { message?: string; stack?: string; digest?: string };
-  console.error(
-    "[onRequestError]",
-    JSON.stringify(
-      {
-        digest: e?.digest,
-        message: e?.message,
-        path: request?.path,
-        method: request?.method,
-        routePath: context?.routePath,
-        routeType: context?.routeType,
-        stack: e?.stack,
-      },
-      null,
-      2,
-    ),
-  );
+  const payload = {
+    digest: e?.digest ?? null,
+    message: e?.message ?? null,
+    path: request?.path ?? null,
+    route_path: context?.routePath ?? null,
+    route_type: context?.routeType ?? null,
+    stack: e?.stack ?? null,
+  };
+  console.error("[onRequestError]", JSON.stringify(payload, null, 2));
+
+  // Persiste no DB pra debug (lê via SQL depois). Best-effort.
+  try {
+    const { supabaseAdmin } = await import("@/lib/supabase/admin");
+    await supabaseAdmin.from("error_logs").insert(payload);
+  } catch (logErr) {
+    console.error("[onRequestError] falha ao gravar error_logs:", logErr);
+  }
 }
