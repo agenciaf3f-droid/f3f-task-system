@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare, Send, Loader2, Pencil, X, Check } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Linkify } from "@/components/ui/linkify";
 
 interface Comment {
   id: string;
@@ -25,7 +26,7 @@ function renderContent(content: string) {
   return parts.map((part, i) => {
     const m = part.match(/^@\[([^\]]+)\]\([^)]+\)$/);
     if (m) return <span key={i} className="text-blue-600 font-medium">@{m[1]}</span>;
-    return <span key={i}>{part}</span>;
+    return <Linkify key={i} text={part} />;
   });
 }
 

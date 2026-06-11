@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Paperclip, Trash2, Download, Loader2, Upload } from "lucide-react";
 import { uploadAttachmentAction, deleteAttachmentAction, getAttachmentSignedUrlAction } from "../attachment-actions";
 
@@ -28,6 +29,7 @@ export function AttachmentsSection({
   initialAttachments: Attachment[];
   canEdit: boolean;
 }) {
+  const router = useRouter();
   const [attachments, setAttachments] = useState(initialAttachments);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -46,8 +48,7 @@ export function AttachmentsSection({
       if (result.error) {
         setUploadError(result.error);
       } else {
-        // Re-fetch handled by revalidatePath — optimistic UI workaround:
-        // the server revalidates and the page re-renders with new data
+        router.refresh();
       }
     });
     // Reset input so the same file can be re-uploaded after delete

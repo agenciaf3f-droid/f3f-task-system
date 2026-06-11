@@ -15,6 +15,7 @@ import { AssigneesSection } from "@/app/(dashboard)/tarefas/[id]/assignees-secti
 import { DependenciesSection } from "@/app/(dashboard)/tarefas/[id]/dependencies-section";
 import { ProgressSlider } from "@/app/(dashboard)/tarefas/[id]/progress-slider";
 import { LinkButton } from "@/components/ui/link-button";
+import { Linkify } from "@/components/ui/linkify";
 import { ModalClient } from "./modal-client";
 import Link from "next/link";
 
@@ -166,7 +167,7 @@ export default async function TaskModalPage({
         {/* Description */}
         {task.description && (
           <div className="mt-5 pt-5 border-t border-neutral-100">
-            <p className="text-sm text-neutral-700 whitespace-pre-wrap">{task.description}</p>
+            <p className="text-sm text-neutral-700 whitespace-pre-wrap"><Linkify text={task.description} /></p>
           </div>
         )}
 

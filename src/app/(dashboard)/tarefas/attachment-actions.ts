@@ -44,7 +44,10 @@ export async function uploadAttachmentAction(
     .from(BUCKET)
     .upload(storagePath, arrayBuffer, { contentType: file.type });
 
-  if (uploadError) return { error: "Erro ao fazer upload." };
+  if (uploadError) {
+    console.error("[upload] Supabase storage error:", uploadError);
+    return { error: `Erro ao fazer upload: ${uploadError.message}` };
+  }
 
   await prisma.taskAttachment.create({
     data: {
@@ -94,6 +97,9 @@ export async function getAttachmentSignedUrlAction(
     .from(BUCKET)
     .createSignedUrl(attachment.fileUrl, 60); // 60s
 
-  if (error || !data) return { error: "Erro ao gerar link." };
+  if (error || !data) {
+    console.error("[download] signed URL error:", error);
+    return { error: `Erro ao gerar link: ${error?.message ?? "desconhecido"}` };
+  }
   return { url: data.signedUrl };
 }

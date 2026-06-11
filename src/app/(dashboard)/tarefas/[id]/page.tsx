@@ -12,6 +12,7 @@ import { ChecklistSection } from "./checklist-section";
 import { CommentsSection } from "./comments-section";
 import { ProgressSlider } from "./progress-slider";
 import { LinkButton } from "@/components/ui/link-button";
+import { Linkify } from "@/components/ui/linkify";
 
 export default async function TaskDetailPage({
   params,
@@ -122,7 +123,7 @@ export default async function TaskDetailPage({
           {task.description && (
             <div className="mt-5 pt-5 border-t border-neutral-100">
               <p className="text-sm text-neutral-700 whitespace-pre-wrap">
-                {task.description}
+                <Linkify text={task.description} />
               </p>
             </div>
           )}
