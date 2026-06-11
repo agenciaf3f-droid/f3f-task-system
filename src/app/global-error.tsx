@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 export default function GlobalError({
   error,
   reset,
@@ -7,6 +9,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    // Loga o erro completo no console do navegador pra debug
+    console.error("[GlobalError]", error, "\ndigest:", error?.digest, "\nstack:", error?.stack);
+  }, [error]);
+
   return (
     <html>
       <body style={{ margin: 0, fontFamily: "system-ui, sans-serif", background: "#f9fafb" }}>
@@ -29,13 +36,19 @@ export default function GlobalError({
             <h1 style={{ fontSize: "1.125rem", fontWeight: 700, color: "#111827", margin: "0 0 0.5rem" }}>
               Erro no servidor
             </h1>
-            <p style={{ fontSize: "0.875rem", color: "#6b7280", margin: "0 0 1.5rem", lineHeight: 1.6 }}>
-              Não foi possível carregar a página. Verifique se o banco de dados está ativo.
+            <p style={{ fontSize: "0.875rem", color: "#6b7280", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
+              Algo deu errado ao processar sua ação.
             </p>
-            {error?.digest && (
-              <p style={{ fontSize: "0.75rem", color: "#9ca3af", margin: "0 0 1.5rem", fontFamily: "monospace" }}>
-                ID: {error.digest}
-              </p>
+            {(error?.message || error?.digest) && (
+              <pre style={{
+                fontSize: "0.75rem", color: "#b91c1c", background: "#fef2f2",
+                border: "1px solid #fecaca", borderRadius: "0.5rem", padding: "0.75rem",
+                margin: "0 0 1.25rem", textAlign: "left", whiteSpace: "pre-wrap",
+                wordBreak: "break-word", maxHeight: "200px", overflow: "auto", fontFamily: "monospace",
+              }}>
+                {error?.message || "Erro no servidor"}
+                {error?.digest ? `\n\nID: ${error.digest}` : ""}
+              </pre>
             )}
             <button
               onClick={reset}

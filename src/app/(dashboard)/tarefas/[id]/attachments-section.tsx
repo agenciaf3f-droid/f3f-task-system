@@ -35,17 +35,27 @@ export function AttachmentsSection({
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fetchedRef = useRef<Set<string>>(new Set());
 
   // Gera signed URL pras imagens pra mostrar preview inline.
+  // fetchedRef garante 1 fetch por anexo (evita loop quando o array re-renderiza).
   useEffect(() => {
     const imgs = attachments.filter(
-      (a) => a.mimeType.startsWith("image/") && !previews[a.id],
+      (a) => a.mimeType.startsWith("image/") && !fetchedRef.current.has(a.id),
     );
     if (imgs.length === 0) return;
+    imgs.forEach((a) => fetchedRef.current.add(a.id));
     let cancelled = false;
     (async () => {
       const entries = await Promise.all(
-        imgs.map(async (a) => [a.id, (await getAttachmentSignedUrlAction(a.id)).url] as const),
+        imgs.map(async (a) => {
+          try {
+            return [a.id, (await getAttachmentSignedUrlAction(a.id)).url] as const;
+          } catch (err) {
+            console.error("[preview] signed URL falhou:", a.id, err);
+            return [a.id, undefined] as const;
+          }
+        }),
       );
       if (cancelled) return;
       setPreviews((prev) => {
@@ -55,7 +65,7 @@ export function AttachmentsSection({
       });
     })();
     return () => { cancelled = true; };
-  }, [attachments, previews]);
+  }, [attachments]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
