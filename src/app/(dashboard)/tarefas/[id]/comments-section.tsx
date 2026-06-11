@@ -177,14 +177,14 @@ function CommentItem({
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              rows={2}
+              rows={Math.min(12, Math.max(3, draft.split("\n").length))}
               autoFocus
               disabled={isPending}
               onKeyDown={(e) => {
                 if (e.key === "Escape") { setEditing(false); setDraft(comment.content); }
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(); }
               }}
-              className="flex-1 text-sm border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-neutral-900 resize-none"
+              className="flex-1 text-sm border border-neutral-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-neutral-900 resize-y min-h-[5rem]"
             />
             <div className="flex flex-col gap-1 shrink-0">
               <button onClick={save} disabled={isPending} className="p-1 rounded bg-neutral-900 text-white hover:bg-neutral-700 disabled:opacity-50" title="Salvar (Cmd+Enter)">

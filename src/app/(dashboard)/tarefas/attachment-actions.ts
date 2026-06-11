@@ -95,7 +95,7 @@ export async function getAttachmentSignedUrlAction(
 
   const { data, error } = await supabaseAdmin.storage
     .from(BUCKET)
-    .createSignedUrl(attachment.fileUrl, 60); // 60s
+    .createSignedUrl(attachment.fileUrl, 3600); // 1h (cobre preview de imagem + download)
 
   if (error || !data) {
     console.error("[download] signed URL error:", error);

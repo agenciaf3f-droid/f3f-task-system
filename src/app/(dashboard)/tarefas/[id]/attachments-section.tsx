@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Paperclip, Trash2, Download, Loader2, Upload } from "lucide-react";
 import { uploadAttachmentAction, deleteAttachmentAction, getAttachmentSignedUrlAction } from "../attachment-actions";
@@ -32,8 +32,30 @@ export function AttachmentsSection({
   const router = useRouter();
   const [attachments, setAttachments] = useState(initialAttachments);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [isPending, startTransition] = useTransition();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Gera signed URL pras imagens pra mostrar preview inline.
+  useEffect(() => {
+    const imgs = attachments.filter(
+      (a) => a.mimeType.startsWith("image/") && !previews[a.id],
+    );
+    if (imgs.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        imgs.map(async (a) => [a.id, (await getAttachmentSignedUrlAction(a.id)).url] as const),
+      );
+      if (cancelled) return;
+      setPreviews((prev) => {
+        const next = { ...prev };
+        for (const [id, url] of entries) if (url) next[id] = url;
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [attachments, previews]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -112,9 +134,17 @@ export function AttachmentsSection({
         <p className="text-sm text-neutral-400">Nenhum anexo ainda.</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {attachments.map((a) => (
-            <li key={a.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-neutral-50 group">
-              <Paperclip className="w-4 h-4 text-neutral-300 shrink-0" />
+          {attachments.map((a) => {
+            const isImage = a.mimeType.startsWith("image/");
+            const preview = previews[a.id];
+            return (
+            <li key={a.id} className="flex flex-col gap-2 p-2 rounded-lg hover:bg-neutral-50 group">
+              <div className="flex items-center gap-3">
+              {isImage && preview ? (
+                <img src={preview} alt={a.fileName} className="w-9 h-9 rounded object-cover border border-neutral-200 shrink-0" />
+              ) : (
+                <Paperclip className="w-4 h-4 text-neutral-300 shrink-0" />
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-neutral-900 truncate">{a.fileName}</p>
                 <p className="text-xs text-neutral-400">{formatBytes(a.fileSize)} · {a.user.name.split(" ")[0]}</p>
@@ -138,8 +168,19 @@ export function AttachmentsSection({
                   </button>
                 )}
               </div>
+              </div>
+              {isImage && preview && (
+                <a href={preview} target="_blank" rel="noopener noreferrer" className="block">
+                  <img
+                    src={preview}
+                    alt={a.fileName}
+                    className="max-h-64 w-auto rounded-lg border border-neutral-200 object-contain hover:opacity-90 transition-opacity"
+                  />
+                </a>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>
