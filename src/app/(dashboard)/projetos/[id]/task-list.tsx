@@ -262,7 +262,7 @@ function SubtaskRow({
   const subToday = sub.dueDate && isToday(sub.dueDate);
 
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-2 group/row">
+    <div ref={setNodeRef} style={style} className="group flex items-center gap-2 group/row">
       <DragHandle attributes={attributes} listeners={listeners} />
       <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0" />
       <TaskCheckbox taskId={sub.id} isDone={sub.status === "done"} />
@@ -349,8 +349,8 @@ const TaskRow = memo(function TaskRow({
 
   return (
     <div ref={setNodeRef} style={style} className={`group/row ${isSelected ? "bg-blue-50/60" : ""}`}>
-      {/* Main row */}
-      <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
+      {/* Main row — `group` (plain) p/ o lápis Renomear e edits inline (group-hover) */}
+      <div className="group flex items-center gap-2 px-4 py-2.5 hover:bg-neutral-50/60 transition-colors">
         {/* Drag handle */}
         <DragHandle attributes={attributes} listeners={listeners} />
 
