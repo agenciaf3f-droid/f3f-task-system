@@ -74,7 +74,7 @@ const STATUS_TINT: Record<string, string> = {
   done:        "bg-emerald-50/60",
 };
 
-const KanbanCard = memo(function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
+const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { task: Task; isDragging?: boolean; overlay?: boolean }) {
   const overdue = task.dueDate && !isToday(task.dueDate) && isBefore(task.dueDate, new Date()) && task.status !== "done";
 
   const doneItems = task.subtasks.filter((s) => s.status === "done").length;
@@ -82,7 +82,11 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging }: { task: Task; 
 
   return (
     <div className={`bg-white border rounded-lg p-2.5 select-none cursor-grab active:cursor-grabbing transition-all ${
-      isDragging ? "shadow-lg ring-1 ring-blue-300 rotate-[1.5deg]" : "border-neutral-200/80 hover:border-neutral-300 hover:shadow-sm"
+      overlay
+        ? "shadow-xl ring-1 ring-blue-300 animate-card-wiggle"
+        : isDragging
+        ? "opacity-40 border-dashed border-neutral-300"
+        : "border-neutral-200/80 hover:border-neutral-300 hover:shadow-sm hover:-translate-y-0.5"
     }`}>
       <div className="flex items-start gap-2">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-[7px] ${PRIORITY_DOT[task.priority] ?? "bg-neutral-300"}`} />
@@ -233,7 +237,7 @@ export function KanbanView({
         ))}
       </div>
       <DragOverlay>
-        {activeTask ? <KanbanCard task={activeTask} isDragging /> : null}
+        {activeTask ? <KanbanCard task={activeTask} isDragging overlay /> : null}
       </DragOverlay>
     </DndContext>
   );

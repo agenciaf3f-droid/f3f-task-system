@@ -231,3 +231,15 @@
     @apply font-sans;
   }
 }
+
+/* Kanban: card "segurado" no drag balança (wiggle) + leve zoom. Respeita reduced-motion. */
+@keyframes card-wiggle {
+  0%, 100% { transform: rotate(-1.6deg) scale(1.03); }
+  50%      { transform: rotate(1.6deg)  scale(1.03); }
+}
+.animate-card-wiggle {
+  animation: card-wiggle 0.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-wiggle { animation: none; }
+}
