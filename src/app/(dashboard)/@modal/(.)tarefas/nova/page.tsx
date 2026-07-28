@@ -31,7 +31,7 @@ export default async function NovaTaskModalPage({
   ]);
 
   return (
-    <ModalClient projectId={project?.id}>
+    <ModalClient matchPathname="/tarefas/nova" projectId={project?.id}>
       <NewTaskForm sectors={sectors} users={users} project={project ?? null} keepOpenAfterCreate />
     </ModalClient>
   );

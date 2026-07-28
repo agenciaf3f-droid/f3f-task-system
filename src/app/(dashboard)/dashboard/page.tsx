@@ -2,15 +2,34 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, TaskStatus } from "@prisma/client";
-import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame } from "lucide-react";
+import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame, LayoutList, Kanban } from "lucide-react";
 import { format, isBefore } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
 import { DashboardTaskRow } from "./dashboard-task-row";
 
-async function getDashboardData(userId: string, companyId: string, statusFilter?: string) {
+// Shape rico que o KanbanView espera (assignee, sector, contadores, subtasks).
+const boardTaskSelect = {
+  id: true, title: true, status: true, priority: true, dueDate: true,
+  assignee: { select: { id: true, name: true, avatarUrl: true } },
+  sector: { select: { name: true, color: true } },
+  project: { select: { name: true, client: { select: { name: true } } } },
+  _count: { select: { checklistItems: true, comments: true } },
+  subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
+} satisfies Prisma.TaskSelect;
+
+// 3 colunas no board da home (subset das 5 do projeto).
+const DASHBOARD_COLUMNS = [
+  { id: "todo",        label: "A fazer",            color: "text-neutral-600", bg: "bg-neutral-50" },
+  { id: "in_progress", label: "Em andamento",       color: "text-blue-600",    bg: "bg-blue-50"    },
+  { id: "done",        label: "Concluído · 7 dias", color: "text-emerald-600", bg: "bg-emerald-50" },
+];
+
+async function getDashboardData(userId: string, companyId: string) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+  const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 7);
 
   // "Minhas tarefas" = onde sou assignee primário ou multi-assignee.
   // Não inclui creator/watcher pra evitar poluir o dashboard de admins/managers que criam muito.
@@ -21,35 +40,34 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
     ],
   };
 
-  const taskWhere: Prisma.TaskWhereInput = {
-    companyId,
-    deletedAt: null,
-    archivedAt: null,
-    AND: myTasksOR,
-    ...(statusFilter
-      ? { status: statusFilter as TaskStatus }
-      : { status: { notIn: ["done", "cancelled"] as TaskStatus[] } }),
-  };
-
-  const [myTasks, overdueCount, todayCount, completedTodayCount, recentProjects] = await Promise.all([
+  const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects] = await Promise.all([
+    // Pendentes minhas: todas menos done/cancelled (todo, in_progress, review, blocked).
+    // review/blocked ficam sob "Em andamento" no board via statusColumnMap → coerente com os KPIs.
     prisma.task.findMany({
-      where: taskWhere,
+      where: { companyId, deletedAt: null, archivedAt: null, AND: myTasksOR, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
       orderBy: [{ dueDate: "asc" }],
-      take: 20,
-      select: {
-        id: true, title: true, status: true, dueDate: true, progress: true,
-        sector: { select: { name: true, color: true } },
-        project: { select: { name: true, client: { select: { name: true } } } },
-      },
+      take: 100,
+      select: boardTaskSelect,
+    }),
+    // Board: Concluído — só recentes (7 dias), senão a coluna cresce sem limite
+    prisma.task.findMany({
+      where: { companyId, deletedAt: null, archivedAt: null, AND: myTasksOR, status: "done", completedAt: { gte: sevenDaysAgo } },
+      orderBy: [{ completedAt: "desc" }],
+      take: 50,
+      select: boardTaskSelect,
     }),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, AND: myTasksOR },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: myTasksOR },
     }),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, AND: myTasksOR },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, archivedAt: null, AND: myTasksOR },
     }),
     prisma.task.count({
       where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: myTasksOR },
+    }),
+    // KPI "Em andamento" via count() dedicado (não derivar do array truncado em take:100)
+    prisma.task.count({
+      where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: myTasksOR },
     }),
     prisma.project.findMany({
       where: {
@@ -64,6 +82,8 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
       },
     }),
   ]);
+
+  const myTasks = [...activeMine, ...doneMine];
 
   const projectIds = recentProjects.map((p) => p.id);
   const taskAgg = projectIds.length
@@ -86,7 +106,7 @@ async function getDashboardData(userId: string, companyId: string, statusFilter?
     aggByProject.set(row.projectId, entry);
   }
 
-  return { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects, aggByProject };
+  return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects, aggByProject };
 }
 
 function getGreeting() {
@@ -100,26 +120,19 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-const TASK_FILTERS = [
-  { label: "Minhas tarefas", status: undefined },
-  { label: "A fazer",        status: "todo" },
-  { label: "Em revisão",     status: "review" },
-  { label: "Concluído",      status: "done" },
-] as const;
-
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ status?: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
-  const activeStatus = sp?.status;
+  const view = sp?.view === "list" ? "list" : "board";
 
-  const { myTasks, overdueCount, todayCount, completedTodayCount, recentProjects, aggByProject } =
-    await getDashboardData(user.userId, user.companyId, activeStatus);
+  const { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects, aggByProject } =
+    await getDashboardData(user.userId, user.companyId);
 
-  const inProgressCount = myTasks.filter((t) => t.status === "in_progress").length;
+  const pendingTasks = myTasks.filter((t) => t.status !== "done");
 
   const stats = [
     {
@@ -194,93 +207,86 @@ export default async function DashboardPage({
         })}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* My Tasks */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
+      {/* Minhas tarefas — lista ou board (toggle). Board: arraste o card pra mudar status */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
+          <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
+            <Link
+              href="/dashboard?view=list"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "list" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
+              title="Visão lista"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+            </Link>
+            <Link
+              href="/dashboard?view=board"
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "board" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
+              title="Visão board"
+            >
+              <Kanban className="w-3.5 h-3.5" />
+            </Link>
           </div>
+        </div>
+        {(view === "board" ? myTasks.length === 0 : pendingTasks.length === 0) ? (
+          <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl bg-white">
+            <CheckCircle2 className="w-10 h-10 mb-3 text-emerald-300" />
+            <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
+            <p className="text-xs mt-1 text-neutral-400">Nenhuma tarefa pendente. Bom trabalho.</p>
+          </div>
+        ) : view === "board" ? (
+          <KanbanView
+            tasks={myTasks}
+            columns={DASHBOARD_COLUMNS}
+            statusColumnMap={{ review: "in_progress", blocked: "in_progress" }}
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            {pendingTasks.map((task) => (
+              <DashboardTaskRow key={task.id} task={task} />
+            ))}
+          </div>
+        )}
+      </div>
 
-          {/* Filtros rápidos */}
-          <div className="flex flex-wrap gap-2">
-            {TASK_FILTERS.map((f) => {
-              const isActive = activeStatus === f.status;
-              const href = isActive || f.status === undefined
-                ? "/dashboard"
-                : `/dashboard?status=${f.status}`;
+      {/* Projetos ativos */}
+      <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
+          <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
+        </div>
+        {recentProjects.length === 0 ? (
+          <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+            {recentProjects.map((p) => {
+              const agg = aggByProject.get(p.id);
+              const total = agg?.total ?? 0;
+              const done = agg?.done ?? 0;
+              const progress = total > 0 ? Math.round((done / total) * 100) : 0;
               return (
-                <Link
-                  key={f.label}
-                  href={href}
-                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-colors ${
-                    (f.status === undefined && !activeStatus) || isActive
-                      ? "bg-neutral-900 text-white border-neutral-900"
-                      : "bg-white text-neutral-600 border-neutral-200 hover:border-neutral-400"
-                  }`}
-                >
-                  {f.label}
+                <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                      style={{ backgroundColor: p.client.color ?? "#6366f1" }}
+                    >
+                      {getInitials(p.client.name)}
+                    </div>
+                    <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
+                    <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
+                  </div>
+                  <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-blue-500 transition-all"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
                 </Link>
               );
             })}
           </div>
-
-          {myTasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl bg-white">
-              <CheckCircle2 className="w-10 h-10 mb-3 text-emerald-300" />
-              <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
-              <p className="text-xs mt-1 text-neutral-400">Nenhuma tarefa pendente. Bom trabalho.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {myTasks.map((task) => (
-                <DashboardTaskRow key={task.id} task={task} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-4">
-          {/* Recent Projects */}
-          <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
-              <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
-            </div>
-            {recentProjects.length === 0 ? (
-              <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {recentProjects.map((p) => {
-                  const agg = aggByProject.get(p.id);
-                  const total = agg?.total ?? 0;
-                  const done = agg?.done ?? 0;
-                  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-                  return (
-                    <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                          style={{ backgroundColor: p.client.color ?? "#6366f1" }}
-                        >
-                          {getInitials(p.client.name)}
-                        </div>
-                        <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
-                        <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
-                      </div>
-                      <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

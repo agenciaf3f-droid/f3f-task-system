@@ -1,16 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 
 interface ModalClientProps {
   children: React.ReactNode;
+  matchPathname: string;
   projectId?: string;
 }
 
-export function ModalClient({ children }: ModalClientProps) {
+export function ModalClient({ children, matchPathname }: ModalClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const onClose = useCallback(() => {
     // ModalClient só monta via soft nav (intercepting route) — sempre há history para voltar.
@@ -25,6 +27,11 @@ export function ModalClient({ children }: ModalClientProps) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // Slot @modal persiste em soft-nav: ao sair da rota da tarefa (ex: clicar no
+  // link do projeto), o conteúdo do modal continua montado e fica preso na frente.
+  // Se a URL não é mais a desta tarefa, não renderiza o modal.
+  if (pathname !== matchPathname) return null;
 
   return (
     <>

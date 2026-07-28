@@ -93,7 +93,7 @@ export default async function TaskModalPage({
     task.createdById === user.userId;
 
   return (
-    <ModalClient projectId={projectId || undefined}>
+    <ModalClient matchPathname={`/tarefas/${task.id}`} projectId={projectId || undefined}>
       {/* Header card */}
       <div className="bg-white border border-neutral-200 rounded-xl p-6">
         <div className="flex items-start justify-between gap-4 mb-4">

@@ -130,7 +130,17 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
   );
 }
 
-export function KanbanView({ tasks }: { tasks: Task[] }) {
+export function KanbanView({
+  tasks,
+  columns = COLUMNS,
+  statusColumnMap = {},
+}: {
+  tasks: Task[];
+  columns?: Column[];
+  // Mapeia status sem coluna própria pra uma coluna existente (ex: dashboard 3 colunas:
+  // review/blocked → "in_progress"). Só afeta a exibição; o drag grava o status real da coluna alvo.
+  statusColumnMap?: Record<string, string>;
+}) {
   const [taskList, setTaskList] = useState(tasks);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -140,10 +150,14 @@ export function KanbanView({ tasks }: { tasks: Task[] }) {
 
   function groupByStatus() {
     const groups: Record<string, Task[]> = {};
-    for (const col of COLUMNS) groups[col.id] = [];
+    for (const col of columns) groups[col.id] = [];
     for (const t of taskList) {
-      if (groups[t.status]) groups[t.status].push(t);
-      else groups["todo"].push(t);
+      const colId = statusColumnMap[t.status] ?? t.status;
+      if (groups[colId]) groups[colId].push(t);
+      // Colunas custom (ex: dashboard, subset de status): descarta task cujo status
+      // não tem coluna — senão ela cairia na 1ª coluna e um drag reescreveria o
+      // status errado. Default (projeto, 5 colunas): mantém legacy (órfão → 1ª coluna).
+      else if (columns === COLUMNS) groups[columns[0].id].push(t);
     }
     return groups;
   }
@@ -158,7 +172,7 @@ export function KanbanView({ tasks }: { tasks: Task[] }) {
     if (!over) return;
     const taskId = String(active.id);
     const newStatus = String(over.id);
-    if (!COLUMNS.find((c) => c.id === newStatus)) return;
+    if (!columns.find((c) => c.id === newStatus)) return;
 
     const task = taskList.find((t) => t.id === taskId);
     if (!task || task.status === newStatus) return;
@@ -176,7 +190,7 @@ export function KanbanView({ tasks }: { tasks: Task[] }) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div className="flex gap-4 overflow-x-auto pb-4">
-        {COLUMNS.map((col) => (
+        {columns.map((col) => (
           <KanbanColumn key={col.id} column={col} tasks={groups[col.id]} />
         ))}
       </div>

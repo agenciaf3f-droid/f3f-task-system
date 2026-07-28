@@ -3,9 +3,10 @@
 import { memo, useState, useRef, useEffect, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, X, Bell, AlertTriangle, Clock } from "lucide-react";
-import { format, isBefore, differenceInHours } from "date-fns";
+import { Search, X, Bell, AlertTriangle, Clock, CheckCheck } from "lucide-react";
+import { format, isBefore, differenceInHours, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { markAllReadAction, markOneReadAction } from "@/app/(dashboard)/notificacoes/actions";
 
 interface SearchResult {
   id: string;
@@ -21,97 +22,172 @@ interface UpcomingTask {
   project: { name: string } | null;
 }
 
+interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  isRead: boolean;
+  resourceType: string | null;
+  resourceId: string | null;
+  createdAt: Date | string;
+}
+
 interface TopBarProps {
   userName: string;
   unreadCount?: number;
+  notifications?: NotificationItem[];
   userAvatar?: string | null;
   upcomingTasks?: UpcomingTask[];
 }
+
+// Cor por tipo de notificação — família indigo/violeta pra distinguir do vermelho das tarefas.
+const NOTIF_ACCENT: Record<string, string> = {
+  task_assigned: "bg-indigo-500",
+  comment: "bg-violet-500",
+  mention: "bg-blue-500",
+  task_due: "bg-amber-500",
+  task_overdue: "bg-red-500",
+  system: "bg-neutral-400",
+};
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
+function notifHref(n: NotificationItem) {
+  return n.resourceType === "task" && n.resourceId ? `/tarefas/${n.resourceId}` : "/notificacoes";
+}
+
 interface BellDropdownProps {
+  notifications: NotificationItem[];
   upcomingTasks: UpcomingTask[];
   bellOpen: boolean;
   onClose: () => void;
+  onNotifClick: (n: NotificationItem) => void;
+  onMarkAll: () => void;
 }
 
-const BellDropdown = memo(function BellDropdown({ upcomingTasks, bellOpen, onClose }: BellDropdownProps) {
+const BellDropdown = memo(function BellDropdown({
+  notifications, upcomingTasks, bellOpen, onClose, onNotifClick, onMarkAll,
+}: BellDropdownProps) {
   const now = new Date();
   const overdueCount = upcomingTasks.filter(
     (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
   ).length;
+  const unreadNotifs = notifications.filter((n) => !n.isRead).length;
 
   if (!bellOpen) return null;
 
   return (
-            <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
-                <p className="text-sm font-bold text-neutral-900">Tarefas próximas</p>
-                {overdueCount > 0 && (
-                  <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
-                    {overdueCount} atrasada{overdueCount !== 1 ? "s" : ""}
-                  </span>
-                )}
+    <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-neutral-200 rounded-xl shadow-xl z-50 overflow-hidden">
+      {/* Notificações */}
+      <div className="px-4 py-3 border-b border-neutral-100 flex items-center justify-between">
+        <p className="text-sm font-bold text-neutral-900">Notificações</p>
+        {unreadNotifs > 0 && (
+          <button
+            onClick={onMarkAll}
+            className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700"
+          >
+            <CheckCheck className="w-3.5 h-3.5" />
+            Marcar lidas
+          </button>
+        )}
+      </div>
+      {notifications.length === 0 ? (
+        <div className="px-4 py-6 text-center">
+          <p className="text-xs text-neutral-400">Nenhuma notificação</p>
+        </div>
+      ) : (
+        <div className="max-h-64 overflow-y-auto divide-y divide-neutral-50">
+          {notifications.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => onNotifClick(n)}
+              className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors ${
+                n.isRead ? "hover:bg-neutral-50" : "bg-indigo-50/60 hover:bg-indigo-50"
+              }`}
+            >
+              <span className={`mt-1.5 shrink-0 w-2 h-2 rounded-full ${NOTIF_ACCENT[n.type] ?? "bg-neutral-400"}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-neutral-900 truncate">{n.title}</p>
+                {n.body && <p className="text-[11px] text-neutral-500 truncate mt-0.5">{n.body}</p>}
+                <p className="text-[10px] text-neutral-400 mt-0.5">
+                  {formatDistanceToNow(new Date(n.createdAt), { locale: ptBR, addSuffix: true })}
+                </p>
               </div>
-              {upcomingTasks.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
-                  <p className="text-xs text-neutral-400 mt-1">Nenhuma tarefa vencendo nas próximas 48h</p>
+              {!n.isRead && <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Tarefas próximas */}
+      <div className="px-4 py-3 border-y border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+        <p className="text-sm font-bold text-neutral-900">Tarefas próximas</p>
+        {overdueCount > 0 && (
+          <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+            {overdueCount} atrasada{overdueCount !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+      {upcomingTasks.length === 0 ? (
+        <div className="px-4 py-6 text-center">
+          <p className="text-xs text-neutral-400">Nenhuma tarefa vencendo nas próximas 48h</p>
+        </div>
+      ) : (
+        <div className="max-h-64 overflow-y-auto divide-y divide-neutral-50">
+          {upcomingTasks.map((task) => {
+            const due = task.dueDate ? new Date(task.dueDate) : null;
+            const isOverdue = due && isBefore(due, now);
+            const hoursLeft = due ? differenceInHours(due, now) : null;
+            return (
+              <Link
+                key={task.id}
+                href={`/tarefas/${task.id}`}
+                onClick={() => onClose()}
+                className="flex items-start gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
+              >
+                <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isOverdue ? "bg-red-100" : "bg-amber-100"}`}>
+                  {isOverdue
+                    ? <AlertTriangle className="w-3 h-3 text-red-600" />
+                    : <Clock className="w-3 h-3 text-amber-600" />
+                  }
                 </div>
-              ) : (
-                <div className="max-h-72 overflow-y-auto divide-y divide-neutral-50">
-                  {upcomingTasks.map((task) => {
-                    const due = task.dueDate ? new Date(task.dueDate) : null;
-                    const isOverdue = due && isBefore(due, now);
-                    const hoursLeft = due ? differenceInHours(due, now) : null;
-                    return (
-                      <Link
-                        key={task.id}
-                        href={`/tarefas/${task.id}`}
-                        onClick={() => onClose()}
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
-                      >
-                        <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isOverdue ? "bg-red-100" : "bg-amber-100"}`}>
-                          {isOverdue
-                            ? <AlertTriangle className="w-3 h-3 text-red-600" />
-                            : <Clock className="w-3 h-3 text-amber-600" />
-                          }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-neutral-900 truncate">{task.title}</p>
-                          {task.project && (
-                            <p className="text-[11px] text-neutral-400 truncate">{task.project.name}</p>
-                          )}
-                        </div>
-                        {due && (
-                          <div className="shrink-0 text-right">
-                            <p className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
-                              {isOverdue
-                                ? `${Math.abs(hoursLeft!)}h atraso`
-                                : hoursLeft! < 24
-                                ? `${hoursLeft}h`
-                                : format(due, "dd/MM", { locale: ptBR })}
-                            </p>
-                          </div>
-                        )}
-                      </Link>
-                    );
-                  })}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-900 truncate">{task.title}</p>
+                  {task.project && (
+                    <p className="text-[11px] text-neutral-400 truncate">{task.project.name}</p>
+                  )}
                 </div>
-              )}
-            </div>
+                {due && (
+                  <div className="shrink-0 text-right">
+                    <p className={`text-xs font-bold ${isOverdue ? "text-red-600" : "text-amber-600"}`}>
+                      {isOverdue
+                        ? `${Math.abs(hoursLeft!)}h atraso`
+                        : hoursLeft! < 24
+                        ? `${hoursLeft}h`
+                        : format(due, "dd/MM", { locale: ptBR })}
+                    </p>
+                  </div>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 });
 
-export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = [] }: TopBarProps) {
+export function TopBar({ userName, unreadCount = 0, notifications = [], userAvatar, upcomingTasks = [] }: TopBarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [, startTransition] = useTransition();
+  const [notifs, setNotifs] = useState<NotificationItem[]>(notifications);
+  const [unread, setUnread] = useState(unreadCount);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLDivElement>(null);
@@ -148,6 +224,65 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // SSE — notificações novas chegam sem reload (~4s). Reconecta em erro fatal (ex: 401 após
+  // cookie expirar) e refaz o snapshot a cada (re)conexão pra fechar gaps da janela de reconexão.
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const mergeItems = (incoming: NotificationItem[]) =>
+      setNotifs((prev) => {
+        const byId = new Map(prev.map((n) => [n.id, n]));
+        for (const it of incoming) byId.set(it.id, it);
+        return [...byId.values()]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 30);
+      });
+
+    async function refetch() {
+      try {
+        const res = await fetch("/api/notifications/recent");
+        if (!res.ok) return;
+        const data = (await res.json()) as { items: NotificationItem[]; unread: number };
+        mergeItems(data.items);
+        setUnread(data.unread);
+      } catch {
+        // ignora
+      }
+    }
+
+    function connect() {
+      if (stopped) return;
+      es = new EventSource("/api/notifications/stream");
+      es.addEventListener("open", () => { refetch(); });
+      es.addEventListener("notifications", (e) => {
+        try {
+          const data = JSON.parse((e as MessageEvent).data) as { items: NotificationItem[]; unread: number };
+          mergeItems(data.items);
+          setUnread(data.unread);
+        } catch {
+          // payload inválido — ignora
+        }
+      });
+      es.onerror = () => {
+        // readyState CLOSED = erro fatal (ex: 401), EventSource NÃO reconecta sozinho → reconecta manual c/ backoff.
+        // readyState CONNECTING = transitório, EventSource reconecta sozinho → não intervir.
+        if (es && es.readyState === EventSource.CLOSED && !stopped) {
+          es.close();
+          retry = setTimeout(connect, 10000);
+        }
+      };
+    }
+
+    connect();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      es?.close();
+    };
+  }, []);
+
   useEffect(() => {
     if (!query.trim() || query.length < 2) { setResults([]); return; }
     const timeout = setTimeout(() => {
@@ -164,14 +299,35 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
     router.push(`/tarefas/${id}`);
   }
 
-  const { overdueCount, alertCount } = useMemo(() => {
+  function handleNotifClick(n: NotificationItem) {
+    if (!n.isRead) {
+      setNotifs((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
+      setUnread((u) => Math.max(0, u - 1));
+      markOneReadAction(n.id);
+    }
+    setBellOpen(false);
+    router.push(notifHref(n));
+  }
+
+  function handleMarkAll() {
+    setNotifs((prev) => prev.map((x) => ({ ...x, isRead: true })));
+    setUnread(0);
+    markAllReadAction();
+  }
+
+  const { alertCount } = useMemo(() => {
     const now = new Date();
     const overdueCount = upcomingTasks.filter(
       (t) => t.dueDate && isBefore(new Date(t.dueDate), now)
     ).length;
     const alertCount = overdueCount > 0 ? overdueCount : upcomingTasks.length;
-    return { overdueCount, alertCount };
+    return { alertCount };
   }, [upcomingTasks]);
+
+  // Badge: notificações (indigo + pisca) têm prioridade; senão tarefas atrasando (vermelho).
+  const showNotif = unread > 0;
+  const badgeCount = showNotif ? unread : alertCount;
+  const badgeColor = showNotif ? "bg-indigo-500" : "bg-red-500";
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between px-8 py-3 bg-white border-b border-neutral-200/80 backdrop-blur-sm">
@@ -234,14 +390,26 @@ export function TopBar({ userName, unreadCount = 0, userAvatar, upcomingTasks = 
             className="relative flex items-center justify-center w-8 h-8 rounded-lg text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 transition-colors"
           >
             <Bell className="w-4 h-4" />
-            {alertCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
-                {alertCount > 9 ? "9+" : alertCount}
+            {badgeCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4">
+                {showNotif && (
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75 animate-ping" />
+                )}
+                <span className={`relative inline-flex items-center justify-center w-4 h-4 rounded-full ${badgeColor} text-white text-[10px] font-bold leading-none`}>
+                  {badgeCount > 9 ? "9+" : badgeCount}
+                </span>
               </span>
             )}
           </button>
 
-          <BellDropdown upcomingTasks={upcomingTasks} bellOpen={bellOpen} onClose={() => setBellOpen(false)} />
+          <BellDropdown
+            notifications={notifs}
+            upcomingTasks={upcomingTasks}
+            bellOpen={bellOpen}
+            onClose={() => setBellOpen(false)}
+            onNotifClick={handleNotifClick}
+            onMarkAll={handleMarkAll}
+          />
         </div>
 
         {/* Avatar */}

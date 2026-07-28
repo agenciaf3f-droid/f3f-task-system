@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { dispatchWebhook } from "@/lib/webhook";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, notifyTaskAssigned } from "@/lib/notifications";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 import { taskVisibilityFilter, projectVisibilityFilter } from "@/lib/task-visibility";
@@ -57,6 +57,20 @@ const taskSchema = z.object({
   dueDate: optStr,
 });
 
+// Garante que o responsável pertence à empresa do ator — evita assign/notificação
+// cross-tenant (assigneeId vem do cliente e User é FK global, sem constraint de company).
+async function resolveCompanyAssignee(
+  assigneeId: string | null | undefined,
+  companyId: string,
+): Promise<string | null> {
+  if (!assigneeId) return null;
+  const u = await prisma.user.findFirst({
+    where: { id: assigneeId, companyId, isActive: true, deletedAt: null },
+    select: { id: true },
+  });
+  return u?.id ?? null;
+}
+
 export async function createTaskAction(
   _prev: { error?: string; success?: boolean },
   formData: FormData,
@@ -82,6 +96,7 @@ export async function createTaskAction(
 
   const { title, description, priority, assigneeId, sectorId, projectId, dueDate } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
+  const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
@@ -91,7 +106,7 @@ export async function createTaskAction(
       title,
       description: description || null,
       priority: safePriority,
-      assigneeId: assigneeId || null,
+      assigneeId: validAssigneeId,
       sectorId: sectorId || null,
       projectId: projectId || null,
       createdById: user.userId,
@@ -106,12 +121,12 @@ export async function createTaskAction(
     action: "task.created",
     resourceType: "task",
     resourceId: task.id,
-    newValue: { title, priority, assigneeId },
+    newValue: { title, priority, assigneeId: validAssigneeId },
   });
 
-  if (assigneeId && assigneeId !== user.userId) {
+  if (validAssigneeId && validAssigneeId !== user.userId) {
     const [assignee, project] = await Promise.all([
-      prisma.user.findUnique({ where: { id: assigneeId }, select: { name: true, email: true } }),
+      prisma.user.findUnique({ where: { id: validAssigneeId }, select: { name: true, email: true } }),
       projectId ? prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }) : null,
     ]);
     const webhookPayload = {
@@ -125,6 +140,13 @@ export async function createTaskAction(
       createdBy: user.name,
     };
     dispatchWebhook(user.companyId, "task.assigned", webhookPayload);
+    await notifyTaskAssigned({
+      companyId: user.companyId,
+      assigneeId: validAssigneeId,
+      actorName: user.name,
+      taskId: task.id,
+      taskTitle: title,
+    });
   }
 
   revalidatePath("/dashboard");
@@ -281,6 +303,7 @@ export async function updateTaskAction(
 
   const { title, description, priority, assigneeId, sectorId, dueDate } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
+  const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
@@ -296,7 +319,7 @@ export async function updateTaskAction(
       title,
       description: description || null,
       priority: safePriority,
-      assigneeId: assigneeId || null,
+      assigneeId: validAssigneeId,
       sectorId: sectorId || null,
       dueDate: parseDateInput(dueDate),
       recurrenceRule: recurrenceRule ?? undefined,
@@ -309,12 +332,12 @@ export async function updateTaskAction(
     action: "task.updated",
     resourceType: "task",
     resourceId: taskId,
-    newValue: { title, priority, assigneeId },
+    newValue: { title, priority, assigneeId: validAssigneeId },
   });
 
-  if (assigneeId && assigneeId !== old.assigneeId && assigneeId !== user.userId) {
+  if (validAssigneeId && validAssigneeId !== old.assigneeId && validAssigneeId !== user.userId) {
     const assignee = await prisma.user.findUnique({
-      where: { id: assigneeId },
+      where: { id: validAssigneeId },
       select: { name: true, email: true },
     });
     dispatchWebhook(user.companyId, "task.assigned", {
@@ -325,6 +348,13 @@ export async function updateTaskAction(
       assigneeEmail: assignee?.email,
       dueDate: dueDate || null,
       createdBy: user.name,
+    });
+    await notifyTaskAssigned({
+      companyId: user.companyId,
+      assigneeId: validAssigneeId,
+      actorName: user.name,
+      taskId,
+      taskTitle: title,
     });
   }
 
@@ -341,13 +371,24 @@ export async function updateTaskAssigneeAction(taskId: string, assigneeId: strin
   const user = await requireAuth();
   const task = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
-    select: { title: true, projectId: true, dueDate: true },
+    select: { title: true, projectId: true, dueDate: true, assigneeId: true },
   });
   if (!task) return;
+  const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
-    data: { assigneeId: assigneeId || null },
+    data: { assigneeId: validAssigneeId },
   });
+
+  if (validAssigneeId && validAssigneeId !== task.assigneeId && validAssigneeId !== user.userId) {
+    await notifyTaskAssigned({
+      companyId: user.companyId,
+      assigneeId: validAssigneeId,
+      actorName: user.name,
+      taskId,
+      taskTitle: task.title,
+    });
+  }
 
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
@@ -527,6 +568,19 @@ export async function addCommentAction(taskId: string, content: string) {
         })),
       });
     }
+  }
+
+  // Notifica o responsável pela tarefa (se não comentou ele mesmo e não foi @mencionado)
+  if (task.assigneeId && task.assigneeId !== user.userId && !mentionedIds.has(task.assigneeId)) {
+    await createNotification({
+      companyId: user.companyId,
+      userId: task.assigneeId,
+      type: "comment",
+      title: `${user.name.split(" ")[0]} comentou na sua tarefa`,
+      body: `Em "${task.title}": ${content.replace(MENTION_RE, "@$1").slice(0, 120)}`,
+      resourceType: "task",
+      resourceId: taskId,
+    });
   }
 
   await logActivity({
@@ -822,10 +876,26 @@ export async function bulkAssignAction(
   });
   if (!assignee) return { error: "Usuário não encontrado." };
 
+  // Só conta as que realmente MUDAM de responsável (evita notificar reassign no-op)
+  const affected = await prisma.task.findMany({
+    where: { id: { in: taskIds }, deletedAt: null, assigneeId: { not: assigneeId }, AND: taskVisibilityFilter(user) },
+    select: { id: true },
+  });
+
   await prisma.task.updateMany({
     where: { id: { in: taskIds }, deletedAt: null, AND: taskVisibilityFilter(user) },
     data: { assigneeId },
   });
+
+  // Uma notificação-resumo (evita spam de N notificações num assign em massa)
+  if (assigneeId !== user.userId && affected.length > 0) {
+    await createNotification({
+      companyId: user.companyId,
+      userId: assigneeId,
+      type: "task_assigned",
+      title: `${user.name.split(" ")[0]} atribuiu ${affected.length} tarefa${affected.length !== 1 ? "s" : ""} a você`,
+    });
+  }
 
   revalidatePath("/dashboard");
   return {};

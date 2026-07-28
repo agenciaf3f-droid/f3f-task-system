@@ -2,6 +2,17 @@ import { google } from "googleapis";
 
 const TIMEZONE = process.env.GOOGLE_CALENDAR_TIMEZONE ?? "America/Sao_Paulo";
 
+/**
+ * Normaliza o group id pra descrição do evento no formato `<digits>-group`.
+ * Aceita `...@g.us`, `...-group` e lixo `Group ID: ...` — extrai os dígitos
+ * e devolve sempre `<digits>-group`. Sem dígitos → devolve o valor cru.
+ */
+function toGroupIdDescription(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const digits = raw.match(/\d+/)?.[0];
+  return digits ? `${digits}-group` : raw;
+}
+
 type CalendarClient = {
   calendar: ReturnType<typeof google.calendar>;
   calendarId: string;
@@ -43,7 +54,7 @@ export async function createCalendarMeeting({
 
   try {
     const summary = clientName ? `${clientName} — ${startTime}` : `Reunião — ${ownerName}`;
-    const description = clientGroupId || undefined;
+    const description = toGroupIdDescription(clientGroupId);
     const targetCalendarId = customCalendarId || client.calendarId;
 
     const res = await client.calendar.events.insert({

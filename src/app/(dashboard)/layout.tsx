@@ -1,14 +1,15 @@
 import { Suspense } from "react";
 import { requireAuth } from "@/lib/auth";
-import { getUnreadCount } from "@/lib/notifications";
+import { getUnreadCount, getRecentNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 
 // Async server component — fetches unread count without blocking layout
 async function TopBarLoader({ userName, userId, userAvatar }: { userName: string; userId: string; userAvatar?: string | null }) {
-  const [unreadCount, upcomingTasks] = await Promise.all([
+  const [unreadCount, notifications, upcomingTasks] = await Promise.all([
     getUnreadCount(userId),
+    getRecentNotifications(userId, 15),
     prisma.task.findMany({
       where: {
         OR: [
@@ -27,7 +28,7 @@ async function TopBarLoader({ userName, userId, userAvatar }: { userName: string
       },
     }),
   ]);
-  return <TopBar userName={userName} unreadCount={unreadCount} userAvatar={userAvatar} upcomingTasks={upcomingTasks} />;
+  return <TopBar userName={userName} unreadCount={unreadCount} notifications={notifications} userAvatar={userAvatar} upcomingTasks={upcomingTasks} />;
 }
 
 export default async function DashboardLayout({
