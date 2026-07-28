@@ -6,6 +6,7 @@ import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
 import { DeleteUserButton } from "./delete-user-button";
 import { GoogleCalendarPicker } from "./google-calendar-picker";
+import { RoleSelect } from "./role-select";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -102,11 +103,15 @@ export default async function EquipePage() {
                     <Clock className="w-3 h-3" />
                     Pendente
                   </span>
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[u.role]}`}
-                  >
-                    {ROLE_LABELS[u.role]}
-                  </span>
+                  {currentUser.role === "admin" ? (
+                    <RoleSelect userId={u.id} current={u.role} />
+                  ) : (
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[u.role]}`}
+                    >
+                      {ROLE_LABELS[u.role]}
+                    </span>
+                  )}
                   {currentUser.role === "admin" && (
                     <DeleteUserButton userId={u.id} userName={u.name} />
                   )}
@@ -137,11 +142,15 @@ export default async function EquipePage() {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[u.role]}`}
-              >
-                {ROLE_LABELS[u.role]}
-              </span>
+              {currentUser.role === "admin" && u.id !== currentUser.userId ? (
+                <RoleSelect userId={u.id} current={u.role} />
+              ) : (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_COLORS[u.role]}`}
+                >
+                  {ROLE_LABELS[u.role]}
+                </span>
+              )}
 
               {u._count.assignedTasks > 0 && (
                 <span className="text-xs text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full">

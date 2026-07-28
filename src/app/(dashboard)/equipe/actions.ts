@@ -108,6 +108,42 @@ export async function createUserAction(
   return { success: true };
 }
 
+const roleEnum = z.enum(["admin", "manager", "supervisor", "member"]);
+
+export async function updateUserRoleAction(
+  targetUserId: string,
+  role: string,
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await requireRole(["admin"]);
+
+  const parsed = roleEnum.safeParse(role);
+  if (!parsed.success) return { error: "Cargo inválido." };
+  const newRole = parsed.data;
+
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, companyId: user.companyId, deletedAt: null },
+    select: { id: true, role: true },
+  });
+  if (!target) return { error: "Usuário não encontrado." };
+  if (target.role === newRole) return { success: true };
+
+  // Nunca deixar a empresa sem nenhum admin
+  if (target.role === "admin" && newRole !== "admin") {
+    const otherAdmins = await prisma.user.count({
+      where: { companyId: user.companyId, role: "admin", isActive: true, deletedAt: null, id: { not: targetUserId } },
+    });
+    if (otherAdmins === 0) return { error: "A empresa precisa de pelo menos um admin." };
+  }
+
+  await prisma.user.update({
+    where: { id: targetUserId },
+    data: { role: newRole },
+  });
+
+  revalidatePath("/equipe");
+  return { success: true };
+}
+
 export async function setUserGoogleCalendarAction(
   targetUserId: string,
   googleCalendarId: string | null,
