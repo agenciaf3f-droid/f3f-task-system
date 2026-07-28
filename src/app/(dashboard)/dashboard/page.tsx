@@ -207,86 +207,91 @@ export default async function DashboardPage({
         })}
       </div>
 
-      {/* Minhas tarefas — lista ou board (toggle). Board: arraste o card pra mudar status */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
-          <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
-            <Link
-              href="/dashboard?view=list"
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "list" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
-              title="Visão lista"
-            >
-              <LayoutList className="w-3.5 h-3.5" />
-            </Link>
-            <Link
-              href="/dashboard?view=board"
-              className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "board" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
-              title="Visão board"
-            >
-              <Kanban className="w-3.5 h-3.5" />
-            </Link>
+      {/* Minhas tarefas (toggle lista/board) + Projetos ativos (sidebar direita) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
+        <div className="lg:col-span-2 flex flex-col gap-4 min-w-0">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-neutral-900">Minhas tarefas</h2>
+            <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
+              <Link
+                href="/dashboard?view=list"
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "list" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
+                title="Visão lista"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+              </Link>
+              <Link
+                href="/dashboard?view=board"
+                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "board" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
+                title="Visão board"
+              >
+                <Kanban className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
+          {(view === "board" ? myTasks.length === 0 : pendingTasks.length === 0) ? (
+            <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl bg-white">
+              <CheckCircle2 className="w-10 h-10 mb-3 text-emerald-300" />
+              <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
+              <p className="text-xs mt-1 text-neutral-400">Nenhuma tarefa pendente. Bom trabalho.</p>
+            </div>
+          ) : view === "board" ? (
+            <KanbanView
+              tasks={myTasks}
+              columns={DASHBOARD_COLUMNS}
+              statusColumnMap={{ review: "in_progress", blocked: "in_progress" }}
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {pendingTasks.map((task) => (
+                <DashboardTaskRow key={task.id} task={task} />
+              ))}
+            </div>
+          )}
         </div>
-        {(view === "board" ? myTasks.length === 0 : pendingTasks.length === 0) ? (
-          <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl bg-white">
-            <CheckCircle2 className="w-10 h-10 mb-3 text-emerald-300" />
-            <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>
-            <p className="text-xs mt-1 text-neutral-400">Nenhuma tarefa pendente. Bom trabalho.</p>
-          </div>
-        ) : view === "board" ? (
-          <KanbanView
-            tasks={myTasks}
-            columns={DASHBOARD_COLUMNS}
-            statusColumnMap={{ review: "in_progress", blocked: "in_progress" }}
-          />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {pendingTasks.map((task) => (
-              <DashboardTaskRow key={task.id} task={task} />
-            ))}
-          </div>
-        )}
-      </div>
 
-      {/* Projetos ativos */}
-      <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
-          <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
-        </div>
-        {recentProjects.length === 0 ? (
-          <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
-            {recentProjects.map((p) => {
-              const agg = aggByProject.get(p.id);
-              const total = agg?.total ?? 0;
-              const done = agg?.done ?? 0;
-              const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-              return (
-                <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                      style={{ backgroundColor: p.client.color ?? "#6366f1" }}
-                    >
-                      {getInitials(p.client.name)}
-                    </div>
-                    <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
-                    <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
-                  </div>
-                  <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-blue-500 transition-all"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </Link>
-              );
-            })}
+        {/* Projetos ativos — sidebar direita (single column, como antes) */}
+        <div className="flex flex-col gap-4">
+          <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
+              <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
+            </div>
+            {recentProjects.length === 0 ? (
+              <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {recentProjects.map((p) => {
+                  const agg = aggByProject.get(p.id);
+                  const total = agg?.total ?? 0;
+                  const done = agg?.done ?? 0;
+                  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return (
+                    <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                          style={{ backgroundColor: p.client.color ?? "#6366f1" }}
+                        >
+                          {getInitials(p.client.name)}
+                        </div>
+                        <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
+                        <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

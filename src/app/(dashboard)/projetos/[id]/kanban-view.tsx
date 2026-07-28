@@ -48,55 +48,69 @@ const PRIORITY_DOT: Record<string, string> = {
   low:    "bg-neutral-300",
 };
 
+// Ponto colorido do cabeçalho da coluna — acento discreto por status.
+const STATUS_DOT: Record<string, string> = {
+  todo:        "bg-neutral-400",
+  in_progress: "bg-blue-500",
+  review:      "bg-amber-500",
+  blocked:     "bg-red-500",
+  done:        "bg-emerald-500",
+};
+
 const KanbanCard = memo(function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
   const overdue = task.dueDate && !isToday(task.dueDate) && isBefore(task.dueDate, new Date()) && task.status !== "done";
 
+  const doneItems = task.subtasks.filter((s) => s.status === "done").length;
+  const hasMeta = task.assignee || task.dueDate || task.sector || task._count.checklistItems > 0;
+
   return (
-    <div className={`bg-white border rounded-xl p-3 select-none cursor-grab active:cursor-grabbing shadow-sm transition-shadow ${
-      isDragging ? "shadow-lg opacity-80 rotate-1" : "border-neutral-200 hover:shadow-md"
+    <div className={`bg-white border rounded-lg p-2.5 select-none cursor-grab active:cursor-grabbing transition-all ${
+      isDragging ? "shadow-lg ring-1 ring-blue-300 rotate-[1.5deg]" : "border-neutral-200/80 hover:border-neutral-300 hover:shadow-sm"
     }`}>
-      <div className="flex items-start gap-2 mb-2">
-        <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${PRIORITY_DOT[task.priority] ?? "bg-neutral-300"}`} />
+      <div className="flex items-start gap-2">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-[7px] ${PRIORITY_DOT[task.priority] ?? "bg-neutral-300"}`} />
         <Link
           href={`/tarefas/${task.id}`}
           onClick={(e) => e.stopPropagation()}
-          className="text-sm font-medium text-neutral-900 leading-snug hover:text-blue-600 transition-colors line-clamp-2"
+          className="text-[13px] font-medium text-neutral-800 leading-snug hover:text-blue-600 transition-colors line-clamp-2"
         >
           {task.title}
         </Link>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap pl-4">
-        {task.assignee && (
-          <span className="flex items-center gap-1 text-xs text-neutral-500">
-            <User className="w-3 h-3" />
-            {task.assignee.name.split(" ")[0]}
-          </span>
-        )}
-        {task.dueDate && (
-          <span className={`flex items-center gap-1 text-xs ${overdue ? "text-red-600 font-medium" : "text-neutral-400"}`}>
-            {overdue ? <AlertCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-            {format(task.dueDate, "dd/MM")}
-          </span>
-        )}
-        {task.sector && (
-          <span
-            className="text-xs px-1.5 py-0.5 rounded-full border"
-            style={{
-              color: task.sector.color ?? "#6b7280",
-              borderColor: task.sector.color ?? "#e5e7eb",
-              backgroundColor: task.sector.color ? `${task.sector.color}15` : "#f9fafb",
-            }}
-          >
-            {task.sector.name}
-          </span>
-        )}
-        {task._count.checklistItems > 0 && (
-          <span className="text-xs text-neutral-400">
-            ✓ {task.subtasks.filter((s) => s.status === "done").length}/{task._count.checklistItems}
-          </span>
-        )}
-      </div>
+      {hasMeta && (
+        <div className="flex items-center gap-2.5 flex-wrap mt-2 pl-3.5">
+          {task.assignee && (
+            <span className="flex items-center gap-1 text-[11px] text-neutral-500">
+              <User className="w-3 h-3" />
+              {task.assignee.name.split(" ")[0]}
+            </span>
+          )}
+          {task.dueDate && (
+            <span className={`flex items-center gap-1 text-[11px] ${overdue ? "text-red-600 font-semibold" : "text-neutral-400"}`}>
+              {overdue ? <AlertCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+              {format(task.dueDate, "dd/MM")}
+            </span>
+          )}
+          {task.sector && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium"
+              style={{
+                color: task.sector.color ?? "#6b7280",
+                borderColor: task.sector.color ? `${task.sector.color}40` : "#e5e7eb",
+                backgroundColor: task.sector.color ? `${task.sector.color}12` : "#f9fafb",
+              }}
+            >
+              {task.sector.name}
+            </span>
+          )}
+          {task._count.checklistItems > 0 && (
+            <span className="text-[11px] text-neutral-400 tabular-nums">
+              ✓ {doneItems}/{task._count.checklistItems}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -113,18 +127,25 @@ const DraggableCard = memo(function DraggableCard({ task }: { task: Task }) {
 function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   return (
-    <div className="flex flex-col min-w-[260px] w-[260px]">
-      <div className="flex items-center gap-2 mb-3 px-1">
-        <span className={`text-xs font-semibold uppercase tracking-wide ${column.color}`}>{column.label}</span>
-        <span className="text-xs text-neutral-400 bg-neutral-100 rounded-full px-1.5 py-0.5">{tasks.length}</span>
+    <div className="flex flex-col flex-1 min-w-[230px] max-w-[360px]">
+      <div className="flex items-center gap-2 mb-2.5 px-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[column.id] ?? "bg-neutral-400"}`} />
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{column.label}</span>
+        <span className="text-[11px] font-semibold text-neutral-400 bg-neutral-100 rounded-full px-1.5 min-w-[1.25rem] text-center tabular-nums">{tasks.length}</span>
       </div>
       <div
         ref={setNodeRef}
-        className={`flex flex-col gap-2 flex-1 min-h-[80px] p-2 rounded-xl transition-colors ${
-          isOver ? "bg-blue-50 border-2 border-blue-200 border-dashed" : column.bg
+        className={`flex flex-col gap-2 p-2 rounded-xl min-h-[64px] max-h-[60vh] overflow-y-auto transition-colors ${
+          isOver ? "bg-blue-50 ring-2 ring-inset ring-blue-200" : "bg-neutral-100/60"
         }`}
       >
-        {tasks.map((t) => <DraggableCard key={t.id} task={t} />)}
+        {tasks.length === 0 ? (
+          <div className="flex items-center justify-center h-16 text-[11px] text-neutral-300 select-none">
+            Sem tarefas
+          </div>
+        ) : (
+          tasks.map((t) => <DraggableCard key={t.id} task={t} />)
+        )}
       </div>
     </div>
   );
@@ -189,7 +210,7 @@ export function KanbanView({
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex items-start gap-3 overflow-x-auto pb-2">
         {columns.map((col) => (
           <KanbanColumn key={col.id} column={col} tasks={groups[col.id]} />
         ))}
