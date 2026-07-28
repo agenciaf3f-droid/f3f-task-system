@@ -48,13 +48,30 @@ const PRIORITY_DOT: Record<string, string> = {
   low:    "bg-neutral-300",
 };
 
-// Ponto colorido do cabeçalho da coluna — acento discreto por status.
+// Cor por status: dot + label + tint sutil da coluna. Como as colunas têm altura
+// natural (items-start) o tint claro vira color-coding elegante, não bloco cheio.
 const STATUS_DOT: Record<string, string> = {
-  todo:        "bg-neutral-400",
+  todo:        "bg-slate-400",
   in_progress: "bg-blue-500",
   review:      "bg-amber-500",
-  blocked:     "bg-red-500",
+  blocked:     "bg-rose-500",
   done:        "bg-emerald-500",
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  todo:        "text-slate-500",
+  in_progress: "text-blue-600",
+  review:      "text-amber-600",
+  blocked:     "text-rose-600",
+  done:        "text-emerald-600",
+};
+
+const STATUS_TINT: Record<string, string> = {
+  todo:        "bg-slate-50",
+  in_progress: "bg-blue-50/60",
+  review:      "bg-amber-50/60",
+  blocked:     "bg-rose-50/60",
+  done:        "bg-emerald-50/60",
 };
 
 const KanbanCard = memo(function KanbanCard({ task, isDragging }: { task: Task; isDragging?: boolean }) {
@@ -130,13 +147,13 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
     <div className="flex flex-col flex-1 min-w-[230px] max-w-[360px]">
       <div className="flex items-center gap-2 mb-2.5 px-1.5">
         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[column.id] ?? "bg-neutral-400"}`} />
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">{column.label}</span>
+        <span className={`text-[11px] font-semibold uppercase tracking-wider ${STATUS_TEXT[column.id] ?? "text-neutral-500"}`}>{column.label}</span>
         <span className="text-[11px] font-semibold text-neutral-400 bg-neutral-100 rounded-full px-1.5 min-w-[1.25rem] text-center tabular-nums">{tasks.length}</span>
       </div>
       <div
         ref={setNodeRef}
         className={`flex flex-col gap-2 p-2 rounded-xl min-h-[64px] max-h-[60vh] overflow-y-auto transition-colors ${
-          isOver ? "bg-blue-50 ring-2 ring-inset ring-blue-200" : "bg-neutral-100/60"
+          isOver ? "bg-blue-100 ring-2 ring-inset ring-blue-300" : (STATUS_TINT[column.id] ?? "bg-neutral-100/60")
         }`}
       >
         {tasks.length === 0 ? (
