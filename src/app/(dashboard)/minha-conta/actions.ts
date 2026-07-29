@@ -21,21 +21,24 @@ export async function forceChangePasswordAction(
   if (!newPassword || newPassword.length < 6) return { error: "Mínimo 6 caracteres." };
   if (newPassword !== confirmPassword) return { error: "As senhas não coincidem." };
 
+  // Central PRIMEIRO: com o central habilitado, o login valida lá — gravar só
+  // localmente e falhar no central deixaria a pessoa trancada pra fora
+  // (senha nova local, senha velha no central). Central falhou → nada muda.
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(user.email, newPassword);
+    if (!sync.ok) {
+      console.error("[minha-conta/senha] sync central:", sync.warning);
+      return { error: "Não foi possível salvar a senha agora. Tente de novo em instantes." };
+    }
+    if (sync.warning) console.error("[minha-conta/senha] sync central:", sync.warning);
+  }
+
   const passwordHash = await hash(newPassword, 10);
 
   await prisma.user.update({
     where: { id: user.userId },
     data: { passwordHash, mustChangePassword: false },
   });
-
-  // Propaga para o login central F3F (senha única entre os sistemas).
-  // Hash local acima é mantido só como fallback enquanto o central não é a única fonte.
-  if (centralEnabled()) {
-    const sync = await centralSetPasswordEverywhere(user.email, newPassword);
-    if (!sync.ok || sync.warning) {
-      console.error("[minha-conta/senha] sync central:", sync.warning);
-    }
-  }
 
   redirect("/dashboard");
 }

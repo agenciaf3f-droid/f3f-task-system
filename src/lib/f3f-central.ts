@@ -90,6 +90,20 @@ export async function centralSetPasswordEverywhere(
   email: string,
   newPassword: string,
 ): Promise<{ ok: boolean; warning?: string }> {
+  try {
+    return await setPasswordInner(email, newPassword);
+  } catch (err) {
+    // Erro de infra (ex.: listUsers fora do ar) vira {ok:false} controlado —
+    // o caller decide abortar a troca, nunca exceção não tratada.
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, warning: msg };
+  }
+}
+
+async function setPasswordInner(
+  email: string,
+  newPassword: string,
+): Promise<{ ok: boolean; warning?: string }> {
   const admin = serviceClient();
   if (!admin) return { ok: false, warning: "F3F_CENTRAL_SERVICE_ROLE_KEY ausente" };
 

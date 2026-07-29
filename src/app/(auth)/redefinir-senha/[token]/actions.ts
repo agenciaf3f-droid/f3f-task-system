@@ -47,6 +47,21 @@ export async function resetPasswordAction(
     return { error: "Este link já foi utilizado." };
   }
 
+  // Central PRIMEIRO: com o central habilitado, o login valida lá — gravar só
+  // localmente e falhar no central trancaria a pessoa pra fora. Central falhou →
+  // nada muda e o token continua válido pra nova tentativa.
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(
+      resetToken.user.email,
+      parsed.data.password,
+    );
+    if (!sync.ok) {
+      console.error("[redefinir-senha] sync central:", sync.warning);
+      return { error: "Não foi possível salvar a senha agora. Tente de novo em instantes." };
+    }
+    if (sync.warning) console.error("[redefinir-senha] sync central:", sync.warning);
+  }
+
   // Hash da nova senha
   const passwordHash = await hash(parsed.data.password, 10);
 
@@ -64,17 +79,6 @@ export async function resetPasswordAction(
       data: { usedAt: new Date() },
     }),
   ]);
-
-  // Propaga para o login central F3F (senha única entre os sistemas).
-  if (centralEnabled()) {
-    const sync = await centralSetPasswordEverywhere(
-      resetToken.user.email,
-      parsed.data.password,
-    );
-    if (!sync.ok || sync.warning) {
-      console.error("[redefinir-senha] sync central:", sync.warning);
-    }
-  }
 
   redirect("/login");
 }
