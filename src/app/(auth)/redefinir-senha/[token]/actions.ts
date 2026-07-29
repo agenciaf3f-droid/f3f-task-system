@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { centralEnabled, centralSetPasswordEverywhere } from "@/lib/f3f-central";
 
 const schema = z.object({
   password: z.string().min(8, "Mínimo 8 caracteres"),
@@ -44,6 +45,21 @@ export async function resetPasswordAction(
   // Verificar se já foi usado
   if (resetToken.usedAt) {
     return { error: "Este link já foi utilizado." };
+  }
+
+  // Central PRIMEIRO: com o central habilitado, o login valida lá — gravar só
+  // localmente e falhar no central trancaria a pessoa pra fora. Central falhou →
+  // nada muda e o token continua válido pra nova tentativa.
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(
+      resetToken.user.email,
+      parsed.data.password,
+    );
+    if (!sync.ok) {
+      console.error("[redefinir-senha] sync central:", sync.warning);
+      return { error: "Não foi possível salvar a senha agora. Tente de novo em instantes." };
+    }
+    if (sync.warning) console.error("[redefinir-senha] sync central:", sync.warning);
   }
 
   // Hash da nova senha

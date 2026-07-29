@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { compare } from "bcryptjs";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { centralEnabled, centralVerifyPassword } from "@/lib/f3f-central";
 import type { UserRole } from "@prisma/client";
 
 export async function getAuthUser() {
@@ -60,8 +61,25 @@ export async function loginUser(email: string, password: string) {
 
   if (!user) return { error: "Credenciais inválidas." };
 
-  const passwordOk = await compare(password, user.passwordHash);
-  if (!passwordOk) return { error: "Credenciais inválidas." };
+  // Login central F3F: senha vive em auth.users do Supabase principal.
+  // Cargo/empresa continuam vindo da linha local acima. Sem as envs do
+  // central configuradas, cai no bcrypt local (comportamento legado).
+  if (centralEnabled()) {
+    let central: Awaited<ReturnType<typeof centralVerifyPassword>>;
+    try {
+      central = await centralVerifyPassword(email.toLowerCase().trim(), password);
+    } catch (err) {
+      console.error("[login] central indisponível:", err);
+      return { error: "Login temporariamente indisponível. Tente de novo em instantes." };
+    }
+    if (!central.ok) {
+      if (central.reason === "credenciais") return { error: "Credenciais inválidas." };
+      return { error: "Seu acesso ao Tasks está desativado. Fale com um admin." };
+    }
+  } else {
+    const passwordOk = await compare(password, user.passwordHash);
+    if (!passwordOk) return { error: "Credenciais inválidas." };
+  }
 
   const session = await getSession();
   session.userId = user.id;
