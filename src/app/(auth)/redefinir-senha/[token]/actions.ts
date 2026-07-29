@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { centralEnabled, centralSetPasswordEverywhere } from "@/lib/f3f-central";
 
 const schema = z.object({
   password: z.string().min(8, "Mínimo 8 caracteres"),
@@ -63,6 +64,17 @@ export async function resetPasswordAction(
       data: { usedAt: new Date() },
     }),
   ]);
+
+  // Propaga para o login central F3F (senha única entre os sistemas).
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(
+      resetToken.user.email,
+      parsed.data.password,
+    );
+    if (!sync.ok || sync.warning) {
+      console.error("[redefinir-senha] sync central:", sync.warning);
+    }
+  }
 
   redirect("/login");
 }

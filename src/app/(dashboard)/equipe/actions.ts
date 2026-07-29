@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { sendInviteEmail } from "@/lib/email";
 import { listAllCalendarSummaries } from "@/lib/google-calendar";
+import { centralEnabled, centralProvisionTaskUser } from "@/lib/f3f-central";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -83,6 +84,27 @@ export async function createUserAction(
     },
   });
 
+  // Provisionar no login central F3F. Se a pessoa já tem conta central
+  // (veio de outro sistema da agência), a senha dela NÃO muda — o convite
+  // então diz "use sua senha F3F" em vez de mandar senha temporária.
+  let existedCentrally = false;
+  if (centralEnabled()) {
+    try {
+      const central = await centralProvisionTaskUser({
+        email: emailLower,
+        name: parsed.data.name,
+        tempPassword,
+        localUserId: newUser.id,
+      });
+      existedCentrally = central.existedCentrally;
+    } catch (error) {
+      await prisma.sectorMember.deleteMany({ where: { userId: newUser.id } });
+      await prisma.user.delete({ where: { id: newUser.id } });
+      console.error("[invite] Central error:", error);
+      return { error: "Erro ao criar login central. Tente novamente." };
+    }
+  }
+
   // Enviar convite via Resend
   try {
     await sendInviteEmail({
@@ -91,6 +113,7 @@ export async function createUserAction(
       tempPassword,
       invitedByName: user.name,
       companyName: company?.name || "sua empresa",
+      existingCentralAccount: existedCentrally,
     });
   } catch (error) {
     await prisma.user.delete({ where: { id: newUser.id } });

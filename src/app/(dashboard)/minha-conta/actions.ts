@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, requireAuth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { centralEnabled, centralSetPasswordEverywhere } from "@/lib/f3f-central";
 
 export async function forceChangePasswordAction(
   _prev: { error?: string },
@@ -26,6 +27,15 @@ export async function forceChangePasswordAction(
     where: { id: user.userId },
     data: { passwordHash, mustChangePassword: false },
   });
+
+  // Propaga para o login central F3F (senha única entre os sistemas).
+  // Hash local acima é mantido só como fallback enquanto o central não é a única fonte.
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(user.email, newPassword);
+    if (!sync.ok || sync.warning) {
+      console.error("[minha-conta/senha] sync central:", sync.warning);
+    }
+  }
 
   redirect("/dashboard");
 }
