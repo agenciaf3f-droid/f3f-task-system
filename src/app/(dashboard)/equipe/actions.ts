@@ -97,6 +97,14 @@ export async function createUserAction(
         localUserId: newUser.id,
       });
       existedCentrally = central.existedCentrally;
+      // Quem já tem senha F3F não deve ser forçado a trocá-la no 1º acesso —
+      // a troca forçada propagaria e mudaria a senha da pessoa em TODOS os sistemas.
+      if (existedCentrally) {
+        await prisma.user.update({
+          where: { id: newUser.id },
+          data: { mustChangePassword: false },
+        });
+      }
     } catch (error) {
       await prisma.sectorMember.deleteMany({ where: { userId: newUser.id } });
       await prisma.user.delete({ where: { id: newUser.id } });

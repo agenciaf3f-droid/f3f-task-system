@@ -54,7 +54,13 @@ export async function centralVerifyPassword(
 ): Promise<{ ok: true } | { ok: false; reason: "credenciais" | "sem_acesso" | "desativado" }> {
   const client = anonClient();
   const { data, error } = await client.auth.signInWithPassword({ email, password });
-  if (error || !data.session) return { ok: false, reason: "credenciais" };
+  if (error || !data.session) {
+    // 429/5xx não é senha errada — é infra; deixa o caller mostrar "tente de novo".
+    if (error && typeof error.status === "number" && (error.status === 429 || error.status >= 500)) {
+      throw new Error(`central signIn HTTP ${error.status}`);
+    }
+    return { ok: false, reason: "credenciais" };
+  }
 
   const res = await fetch(`${centralUrl()}/functions/v1/f3f-auth-check`, {
     method: "POST",
