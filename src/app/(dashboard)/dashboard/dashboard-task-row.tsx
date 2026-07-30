@@ -17,10 +17,12 @@ interface DashboardTaskRowProps {
     dueDate: Date | null;
     project: { name: string; client: { name: string } } | null;
     sector: { name: string; color: string | null } | null;
+    assignee?: { name: string } | null;
   };
+  showAssignee?: boolean;
 }
 
-export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
+export function DashboardTaskRow({ task, showAssignee }: DashboardTaskRowProps) {
   const [isPending, startTransition] = useTransition();
   const [isDone, setIsDone] = useState(task.status === "done");
 
@@ -82,6 +84,12 @@ export function DashboardTaskRow({ task }: DashboardTaskRowProps) {
             </p>
           )}
         </div>
+
+        {showAssignee && task.assignee && (
+          <span className="text-[11px] font-medium text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full shrink-0 truncate max-w-[100px]">
+            {task.assignee.name.split(" ")[0]}
+          </span>
+        )}
 
         <StatusBadge status={task.status} />
 
