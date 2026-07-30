@@ -62,12 +62,15 @@ export async function sendInviteEmail({
   tempPassword,
   invitedByName,
   companyName,
+  existingCentralAccount = false,
 }: {
   toEmail: string;
   toName: string;
   tempPassword: string;
   invitedByName: string;
   companyName: string;
+  /** Pessoa já tem login F3F (veio de outro sistema): não mandamos senha nova. */
+  existingCentralAccount?: boolean;
 }) {
   const config = getEmailConfig();
   if (!config.ok) {
@@ -76,12 +79,16 @@ export async function sendInviteEmail({
   }
   const { client, from } = config;
 
-  const html = emailWrapper(emailBody(`
-    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Olá, ${toName}!</h1>
-    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
-      <strong>${invitedByName}</strong> convidou você para acessar o <strong>${companyName}</strong> no F3F Tasks.
-    </p>
-    ${infoBox(`
+  const credentials = existingCentralAccount
+    ? infoBox(`
+      <p style="margin:0 0 12px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;">Seu acesso</p>
+      <div>
+        <span style="font-size:12px;color:#9ca3af;">E-mail</span>
+        <p style="margin:2px 0 10px;font-size:14px;font-weight:600;color:#111827;">${toEmail}</p>
+        <p style="margin:2px 0 0;font-size:14px;color:#111827;">Use a <strong>mesma senha F3F</strong> que você já usa nos outros sistemas da agência.</p>
+      </div>
+    `)
+    : infoBox(`
       <p style="margin:0 0 12px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#9ca3af;">Suas credenciais de acesso</p>
       <div>
         <span style="font-size:12px;color:#9ca3af;">E-mail</span>
@@ -89,8 +96,15 @@ export async function sendInviteEmail({
         <span style="font-size:12px;color:#9ca3af;">Senha temporária</span>
         <p style="margin:2px 0 0;font-size:18px;font-weight:700;color:#2563eb;font-family:'Courier New',monospace;letter-spacing:0.08em;">${tempPassword}</p>
       </div>
-    `)}
-    ${warningBox("Você será solicitado a trocar a senha no primeiro acesso.")}
+    `);
+
+  const html = emailWrapper(emailBody(`
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">Olá, ${toName}!</h1>
+    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
+      <strong>${invitedByName}</strong> convidou você para acessar o <strong>${companyName}</strong> no F3F Tasks.
+    </p>
+    ${credentials}
+    ${existingCentralAccount ? "" : warningBox("Você será solicitado a trocar a senha no primeiro acesso.")}
     ${primaryButton(`${APP_URL}/login`, "Acessar o sistema")}
   `));
 

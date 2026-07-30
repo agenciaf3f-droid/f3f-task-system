@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser, requireAuth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { centralEnabled, centralSetPasswordEverywhere } from "@/lib/f3f-central";
 
 export async function forceChangePasswordAction(
   _prev: { error?: string },
@@ -19,6 +20,18 @@ export async function forceChangePasswordAction(
 
   if (!newPassword || newPassword.length < 6) return { error: "Mínimo 6 caracteres." };
   if (newPassword !== confirmPassword) return { error: "As senhas não coincidem." };
+
+  // Central PRIMEIRO: com o central habilitado, o login valida lá — gravar só
+  // localmente e falhar no central deixaria a pessoa trancada pra fora
+  // (senha nova local, senha velha no central). Central falhou → nada muda.
+  if (centralEnabled()) {
+    const sync = await centralSetPasswordEverywhere(user.email, newPassword);
+    if (!sync.ok) {
+      console.error("[minha-conta/senha] sync central:", sync.warning);
+      return { error: "Não foi possível salvar a senha agora. Tente de novo em instantes." };
+    }
+    if (sync.warning) console.error("[minha-conta/senha] sync central:", sync.warning);
+  }
 
   const passwordHash = await hash(newPassword, 10);
 
