@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { NewUserDialog } from "./new-user-dialog";
 import { ToggleUserButton } from "./toggle-user-button";
 import { DeleteUserButton } from "./delete-user-button";
+import { UnassignTasksButton } from "./unassign-tasks-button";
 import { GoogleCalendarPicker } from "./google-calendar-picker";
 import { RoleSelect } from "./role-select";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -165,6 +166,9 @@ export default async function EquipePage() {
 
               {currentUser.role === "admin" && u.id !== currentUser.userId && (
                 <>
+                  {u._count.assignedTasks > 0 && (
+                    <UnassignTasksButton userId={u.id} userName={u.name} />
+                  )}
                   <ToggleUserButton userId={u.id} isActive={u.isActive} />
                   <DeleteUserButton userId={u.id} userName={u.name} />
                 </>

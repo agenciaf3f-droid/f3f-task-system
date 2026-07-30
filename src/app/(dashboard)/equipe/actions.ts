@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { sendInviteEmail } from "@/lib/email";
 import { listAllCalendarSummaries } from "@/lib/google-calendar";
+import { logActivity } from "@/lib/activity";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -194,6 +196,49 @@ export async function toggleUserActiveAction(targetUserId: string) {
   });
 
   revalidatePath("/equipe");
+}
+
+// Desatribui (não deleta) as tarefas ATIVAS de um membro — como assignee primário
+// e como multi-assignee. Não mexe em tarefas done/cancelled (preserva histórico de
+// quem fez o quê). Usado antes de excluir/offboarding um membro (deleteUserAction
+// bloqueia exclusão se há tarefa ativa atribuída — mesmo critério aqui).
+export async function unassignAllTasksAction(
+  targetUserId: string,
+): Promise<{ error?: string; success?: boolean; count?: number }> {
+  const user = await requireRole(["admin"]);
+
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, companyId: user.companyId, deletedAt: null },
+    select: { id: true, name: true },
+  });
+  if (!target) return { error: "Usuário não encontrado." };
+
+  const activeStatus: Prisma.TaskWhereInput["status"] = { notIn: ["done", "cancelled"] };
+
+  const [primary, multi] = await prisma.$transaction([
+    prisma.task.updateMany({
+      where: { assigneeId: targetUserId, companyId: user.companyId, deletedAt: null, status: activeStatus },
+      data: { assigneeId: null },
+    }),
+    prisma.taskAssignee.deleteMany({
+      where: { userId: targetUserId, task: { companyId: user.companyId, deletedAt: null, status: activeStatus } },
+    }),
+  ]);
+
+  const count = primary.count + multi.count;
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "user.tasks_unassigned",
+    resourceType: "user",
+    resourceId: targetUserId,
+    newValue: { targetName: target.name, primaryCount: primary.count, multiCount: multi.count },
+  });
+
+  revalidatePath("/equipe");
+  revalidatePath("/dashboard");
+  return { success: true, count };
 }
 
 export async function deleteUserAction(targetUserId: string): Promise<{ error?: string }> {

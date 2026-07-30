@@ -1,0 +1,40 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Users } from "lucide-react";
+
+interface MemberFilterProps {
+  members: { id: string; name: string }[];
+  selected: string; // "" = eu mesmo
+  view: string;
+}
+
+// Exceção de visibilidade: cargos elevados podem trocar de "minhas tarefas"
+// pra ver/filtrar as tarefas de qualquer membro da empresa (server valida).
+export function MemberFilter({ members, selected, view }: MemberFilterProps) {
+  const router = useRouter();
+
+  function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const value = e.target.value;
+    const params = new URLSearchParams({ view });
+    if (value) params.set("member", value);
+    router.push(`/dashboard?${params.toString()}`);
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 border border-neutral-200 rounded-lg px-2 py-1.5 bg-white">
+      <Users className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+      <select
+        value={selected}
+        onChange={onChange}
+        aria-label="Ver tarefas de"
+        className="text-xs text-neutral-700 bg-transparent outline-none cursor-pointer max-w-[140px]"
+      >
+        <option value="">Eu mesmo</option>
+        {members.map((m) => (
+          <option key={m.id} value={m.id}>{m.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
