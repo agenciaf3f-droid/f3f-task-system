@@ -5,7 +5,7 @@ import { NewTaskForm } from "./form";
 export default async function NovaTaskPage({
   searchParams,
 }: {
-  searchParams: Promise<{ projectId?: string }>;
+  searchParams: Promise<{ projectId?: string; self?: string }>;
 }) {
   const user = await requireAuth();
   const params = await searchParams;
@@ -29,5 +29,14 @@ export default async function NovaTaskPage({
       : null,
   ]);
 
-  return <NewTaskForm sectors={sectors} users={users} project={project ?? null} />;
+  return (
+    <NewTaskForm
+      sectors={sectors}
+      users={users}
+      project={project ?? null}
+      // Tarefa avulsa (?self=1): pré-seleciona o próprio usuário — sem responsável
+      // ela não apareceria no board/KPIs da home, que filtram por assignee.
+      defaultAssigneeId={params.self === "1" ? user.userId : undefined}
+    />
+  );
 }

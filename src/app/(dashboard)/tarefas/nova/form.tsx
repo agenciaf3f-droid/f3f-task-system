@@ -18,11 +18,14 @@ export function NewTaskForm({
   users,
   project,
   keepOpenAfterCreate = false,
+  defaultAssigneeId,
 }: {
   sectors: Sector[];
   users: User[];
   project: Project | null;
   keepOpenAfterCreate?: boolean;
+  /** Pré-seleciona o responsável (ex.: tarefa avulsa da home → o próprio usuário). */
+  defaultAssigneeId?: string;
 }) {
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
@@ -111,6 +114,7 @@ export function NewTaskForm({
           <select
             id="assigneeId"
             name="assigneeId"
+            defaultValue={defaultAssigneeId ?? ""}
             disabled={isPending}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >

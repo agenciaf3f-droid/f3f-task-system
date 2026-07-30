@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, TaskStatus } from "@prisma/client";
-import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame, LayoutList, Kanban } from "lucide-react";
+import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame, LayoutList, Kanban, Plus } from "lucide-react";
+import { LinkButton } from "@/components/ui/link-button";
 import { format, isBefore } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
@@ -40,7 +41,7 @@ async function getDashboardData(userId: string | null, companyId: string) {
     ? { OR: [{ assigneeId: userId }, { assignees: { some: { userId } } }] }
     : {};
 
-  const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects] = await Promise.all([
+  const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
     // Pendentes minhas: todas menos done/cancelled (todo, in_progress, review, blocked).
     // review/blocked ficam sob "Em andamento" no board via statusColumnMap → coerente com os KPIs.
     prisma.task.findMany({
@@ -69,44 +70,11 @@ async function getDashboardData(userId: string | null, companyId: string) {
     prisma.task.count({
       where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: myTasksOR },
     }),
-    prisma.project.findMany({
-      where: {
-        companyId, deletedAt: null, status: "active",
-        tasks: { some: { deletedAt: null, ...myTasksOR } },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 4,
-      select: {
-        id: true, name: true,
-        client: { select: { name: true, color: true } },
-      },
-    }),
   ]);
 
   const myTasks = [...activeMine, ...doneMine];
 
-  const projectIds = recentProjects.map((p) => p.id);
-  const taskAgg = projectIds.length
-    ? await prisma.task.groupBy({
-        by: ["projectId", "status"],
-        where: {
-          projectId: { in: projectIds },
-          deletedAt: null,
-          status: { notIn: ["cancelled"] },
-        },
-        _count: true,
-      })
-    : [];
-  const aggByProject = new Map<string, { total: number; done: number }>();
-  for (const row of taskAgg) {
-    if (!row.projectId) continue;
-    const entry = aggByProject.get(row.projectId) ?? { total: 0, done: 0 };
-    entry.total += row._count;
-    if (row.status === "done") entry.done += row._count;
-    aggByProject.set(row.projectId, entry);
-  }
-
-  return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects, aggByProject };
+  return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount };
 }
 
 function getGreeting() {
@@ -114,10 +82,6 @@ function getGreeting() {
   if (h < 12) return "Bom dia";
   if (h < 18) return "Boa tarde";
   return "Boa noite";
-}
-
-function getInitials(name: string) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
 export default async function DashboardPage({
@@ -155,7 +119,7 @@ export default async function DashboardPage({
   const viewingUserId = viewingAll ? null : (viewingUser?.id ?? user.userId);
   const memberParam = viewingAll ? "&member=all" : viewingUser ? `&member=${viewingUser.id}` : "";
 
-  const { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount, recentProjects, aggByProject } =
+  const { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
     await getDashboardData(viewingUserId, user.companyId);
 
   const pendingTasks = myTasks.filter((t) => t.status !== "done");
@@ -207,12 +171,20 @@ export default async function DashboardPage({
             {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
-        {overdueCount > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
-            <Flame className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-semibold text-red-700">{overdueCount} tarefa{overdueCount !== 1 ? "s" : ""} atrasada{overdueCount !== 1 ? "s" : ""}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {overdueCount > 0 && (
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+              <Flame className="w-4 h-4 text-red-500" />
+              <span className="text-sm font-semibold text-red-700">{overdueCount} tarefa{overdueCount !== 1 ? "s" : ""} atrasada{overdueCount !== 1 ? "s" : ""}</span>
+            </div>
+          )}
+          {/* Tarefa avulsa: sem projeto de cliente, pré-atribuída ao próprio usuário (?self=1).
+              Soft nav → rota interceptada (.)tarefas/nova abre como modal sobre a home. */}
+          <LinkButton href="/tarefas/nova?self=1" className="gap-1.5">
+            <Plus className="w-4 h-4" />
+            Nova tarefa
+          </LinkButton>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -233,10 +205,8 @@ export default async function DashboardPage({
         })}
       </div>
 
-      {/* Minhas tarefas (toggle lista/board) + Projetos ativos (sidebar direita) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
-        <div className="lg:col-span-2 flex flex-col gap-4 min-w-0">
+      {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
+      <div className="flex flex-col gap-4 min-w-0">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h2 className="text-base font-bold text-neutral-900">
               {viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
@@ -284,49 +254,6 @@ export default async function DashboardPage({
               ))}
             </div>
           )}
-        </div>
-
-        {/* Projetos ativos — sidebar direita (single column, como antes) */}
-        <div className="flex flex-col gap-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-neutral-800">Projetos ativos</h3>
-              <Link href="/projetos" className="text-xs text-blue-600 hover:text-blue-700 font-medium">Ver todos</Link>
-            </div>
-            {recentProjects.length === 0 ? (
-              <p className="text-xs text-neutral-400 py-3 text-center">Nenhum projeto ativo</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {recentProjects.map((p) => {
-                  const agg = aggByProject.get(p.id);
-                  const total = agg?.total ?? 0;
-                  const done = agg?.done ?? 0;
-                  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
-                  return (
-                    <Link key={p.id} href={`/projetos/${p.id}`} className="flex flex-col gap-1.5 group">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                          style={{ backgroundColor: p.client.color ?? "#6366f1" }}
-                        >
-                          {getInitials(p.client.name)}
-                        </div>
-                        <span className="text-xs font-semibold text-neutral-700 group-hover:text-blue-600 truncate transition-colors">{p.name}</span>
-                        <span className="text-xs font-bold text-neutral-500 ml-auto shrink-0">{progress}%</span>
-                      </div>
-                      <div className="h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
