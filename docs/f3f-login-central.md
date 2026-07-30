@@ -55,3 +55,5 @@ npx tsx scripts/migrate-users-to-central.ts             # importa hashes → sen
 - [ ] `active=false` no central → login recusado.
 - [ ] Cargo continua funcionando (admin vê /equipe; member não).
 - [ ] `npx tsc --noEmit` limpo.
+
+> **Conceder acesso ≠ resetar senha (2026-07-30):** quem JÁ tem login F3F e ganha acesso a um sistema novo mantém a senha de sempre — o `f3f-auth-provision` copia o hash bcrypt pro espelho (rpc `f3f_get_password_hash`, service_role only) e manda email de notificação SEM senha. Senha provisória só existe pra quem nunca teve login F3F. Chamadas service-to-service autenticam com header `x-f3f-service-secret` (= `F3F_SERVICE_SECRET`, secret nos dois projetos).
