@@ -16,7 +16,7 @@ export default async function EditarTaskPage({
   const sp = await searchParams;
   const returnTo = typeof sp.returnTo === "string" && sp.returnTo.startsWith("/") ? sp.returnTo : undefined;
 
-  const [task, sectors, users] = await Promise.all([
+  const [task, sectors, users, clients] = await Promise.all([
     prisma.task.findFirst({
       where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
       select: {
@@ -26,6 +26,8 @@ export default async function EditarTaskPage({
         priority: true,
         assigneeId: true,
         sectorId: true,
+        clientId: true,
+        projectId: true,
         dueDate: true,
         recurrenceRule: true,
         createdById: true,
@@ -41,6 +43,11 @@ export default async function EditarTaskPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   if (!task) notFound();
@@ -53,5 +60,5 @@ export default async function EditarTaskPage({
 
   if (!canEdit) notFound();
 
-  return <EditTaskForm task={task} sectors={sectors} users={users} returnTo={returnTo} />;
+  return <EditTaskForm task={task} sectors={sectors} users={users} clients={clients} returnTo={returnTo} />;
 }

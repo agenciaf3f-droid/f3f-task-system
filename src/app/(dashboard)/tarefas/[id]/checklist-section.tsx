@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
-import { addChecklistItemAction, toggleChecklistItemAction } from "../actions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { addChecklistItemAction, toggleChecklistItemAction, updateChecklistItemTitleAction } from "../actions";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus, Loader2, CheckSquare } from "lucide-react";
+import { Plus, Loader2, CheckSquare, Pencil, Check, X } from "lucide-react";
 import type { TaskChecklistItem } from "@prisma/client";
 
 export function ChecklistSection({
@@ -17,6 +16,13 @@ export function ChecklistSection({
   const [isPending, startTransition] = useTransition();
   const [showInput, setShowInput] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const [editingItem, setEditingItem] = useState<{ id: string; title: string } | null>(null);
+
+  useEffect(() => {
+    editInputRef.current?.focus();
+    editInputRef.current?.select();
+  }, [editingItem]);
 
   function handleAddItem(e: React.FormEvent) {
     e.preventDefault();
@@ -31,6 +37,17 @@ export function ChecklistSection({
   function handleToggle(itemId: string, isDone: boolean) {
     startTransition(async () => {
       await toggleChecklistItemAction(itemId, taskId, isDone);
+    });
+  }
+
+  function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingItem) return;
+    const title = editInputRef.current?.value.trim() ?? "";
+    if (!title) return;
+    startTransition(async () => {
+      const result = await updateChecklistItemTitleAction(editingItem.id, taskId, title);
+      if (!result.error) setEditingItem(null);
     });
   }
 
@@ -68,9 +85,9 @@ export function ChecklistSection({
 
       <div className="flex flex-col gap-2">
         {items.map((item) => (
-          <label
+          <div
             key={item.id}
-            className="flex items-center gap-3 cursor-pointer group"
+            className="flex items-center gap-3 group"
           >
             <input
               type="checkbox"
@@ -79,16 +96,49 @@ export function ChecklistSection({
               disabled={isPending}
               className="w-4 h-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
             />
-            <span
-              className={`text-sm transition-colors ${
-                item.isDone
-                  ? "line-through text-neutral-400"
-                  : "text-neutral-700 group-hover:text-neutral-900"
-              }`}
-            >
-              {item.title}
-            </span>
-          </label>
+            {editingItem?.id === item.id ? (
+              <form onSubmit={handleSaveEdit} className="flex flex-1 items-center gap-1">
+                <input
+                  ref={editInputRef}
+                  defaultValue={editingItem.title}
+                  disabled={isPending}
+                  onKeyDown={(e) => e.key === "Escape" && setEditingItem(null)}
+                  className="min-w-0 flex-1 border-b border-neutral-300 bg-transparent py-1 text-sm text-neutral-900 outline-none focus:border-neutral-900"
+                  aria-label="Editar nome do item"
+                />
+                <Button type="submit" variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} title="Salvar">
+                  <Check className="w-3.5 h-3.5" />
+                </Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingItem(null)} disabled={isPending} title="Cancelar">
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </form>
+            ) : (
+              <>
+                <span
+                  className={`flex-1 text-sm transition-colors ${
+                    item.isDone
+                      ? "line-through text-neutral-400"
+                      : "text-neutral-700 group-hover:text-neutral-900"
+                  }`}
+                >
+                  {item.title}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-neutral-400 hover:text-neutral-900"
+                  onClick={() => setEditingItem({ id: item.id, title: item.title })}
+                  disabled={isPending}
+                  title="Editar item"
+                  aria-label={`Editar ${item.title}`}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
         ))}
 
         {showInput && (

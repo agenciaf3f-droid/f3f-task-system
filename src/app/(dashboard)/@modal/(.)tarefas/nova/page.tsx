@@ -11,7 +11,7 @@ export default async function NovaTaskModalPage({
   const user = await requireAuth();
   const params = await searchParams;
 
-  const [sectors, users, project] = await Promise.all([
+  const [sectors, users, clients, project] = await Promise.all([
     prisma.sector.findMany({
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
@@ -19,6 +19,11 @@ export default async function NovaTaskModalPage({
     }),
     prisma.user.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -35,6 +40,7 @@ export default async function NovaTaskModalPage({
       <NewTaskForm
         sectors={sectors}
         users={users}
+        clients={clients}
         project={project ?? null}
         keepOpenAfterCreate
         // Tarefa avulsa (?self=1): pré-seleciona o próprio usuário — sem responsável

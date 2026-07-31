@@ -19,6 +19,7 @@ export function MemberFilter({ members, selected, view }: MemberFilterProps) {
     const params = new URLSearchParams({ view });
     if (value) params.set("member", value);
     router.push(`/dashboard?${params.toString()}`);
+    router.refresh();
   }
 
   return (

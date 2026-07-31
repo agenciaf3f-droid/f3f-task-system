@@ -52,6 +52,7 @@ const taskSchema = z.object({
   description: optStr,
   assigneeId: optUuid,
   sectorId: optUuid,
+  clientId: optUuid,
   projectId: optUuid,
   priority: optStr,
   dueDate: optStr,
@@ -71,6 +72,18 @@ async function resolveCompanyAssignee(
   return u?.id ?? null;
 }
 
+async function resolveCompanyClient(
+  clientId: string | null | undefined,
+  companyId: string,
+): Promise<string | null> {
+  if (!clientId) return null;
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, companyId, deletedAt: null },
+    select: { id: true },
+  });
+  return client?.id ?? null;
+}
+
 export async function createTaskAction(
   _prev: { error?: string; success?: boolean },
   formData: FormData,
@@ -85,6 +98,7 @@ export async function createTaskAction(
     description: formData.get("description"),
     assigneeId: formData.get("assigneeId"),
     sectorId: formData.get("sectorId"),
+    clientId: formData.get("clientId"),
     projectId: formData.get("projectId"),
     priority: formData.get("priority"),
     dueDate: formData.get("dueDate"),
@@ -94,9 +108,19 @@ export async function createTaskAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { title, description, priority, assigneeId, sectorId, projectId, dueDate } = parsed.data;
+  const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
+  const project = projectId
+    ? await prisma.project.findFirst({
+        where: { id: projectId, companyId: user.companyId, deletedAt: null },
+        select: { id: true, clientId: true },
+      })
+    : null;
+  if (projectId && !project) return { error: "Projeto não encontrado." };
+  const validClientId = project
+    ? project.clientId
+    : await resolveCompanyClient(clientId, user.companyId);
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
@@ -108,7 +132,8 @@ export async function createTaskAction(
       priority: safePriority,
       assigneeId: validAssigneeId,
       sectorId: sectorId || null,
-      projectId: projectId || null,
+      projectId: project?.id ?? null,
+      clientId: validClientId,
       createdById: user.userId,
       dueDate: parseDateInput(dueDate),
       recurrenceRule: recurrenceRule ?? undefined,
@@ -163,7 +188,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
-    select: { status: true, assigneeId: true, title: true, projectId: true, sectorId: true, dueDate: true, recurrenceRule: true, description: true, priority: true, createdById: true },
+    select: { status: true, assigneeId: true, title: true, projectId: true, clientId: true, sectorId: true, dueDate: true, recurrenceRule: true, description: true, priority: true, createdById: true },
   });
   if (!old) return;
 
@@ -220,6 +245,7 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
           priority: old.priority,
           assigneeId: old.assigneeId,
           sectorId: old.sectorId,
+          clientId: old.clientId,
           projectId: old.projectId,
           createdById: old.createdById,
           recurrenceRule: old.recurrenceRule ?? undefined,
@@ -293,6 +319,7 @@ export async function updateTaskAction(
     description: formData.get("description"),
     assigneeId: formData.get("assigneeId"),
     sectorId: formData.get("sectorId"),
+    clientId: formData.get("clientId"),
     priority: formData.get("priority"),
     dueDate: formData.get("dueDate"),
   });
@@ -301,15 +328,19 @@ export async function updateTaskAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { title, description, priority, assigneeId, sectorId, dueDate } = parsed.data;
+  const { title, description, priority, assigneeId, sectorId, clientId, dueDate } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
-    select: { assigneeId: true, title: true },
+    select: { assigneeId: true, title: true, project: { select: { clientId: true } } },
   });
   if (!old) return { error: "Tarefa não encontrada." };
+
+  const validClientId = old.project
+    ? old.project.clientId
+    : await resolveCompanyClient(clientId, user.companyId);
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
@@ -321,6 +352,7 @@ export async function updateTaskAction(
       priority: safePriority,
       assigneeId: validAssigneeId,
       sectorId: sectorId || null,
+      clientId: validClientId,
       dueDate: parseDateInput(dueDate),
       recurrenceRule: recurrenceRule ?? undefined,
     },
@@ -444,7 +476,7 @@ export async function addSubtaskAction(
 
   const parent = await prisma.task.findFirst({
     where: { id: parentTaskId, deletedAt: null, AND: taskVisibilityFilter(user) },
-    select: { id: true, projectId: true, sectorId: true },
+    select: { id: true, projectId: true, clientId: true, sectorId: true },
   });
   if (!parent) return { error: "Tarefa pai não encontrada." };
 
@@ -455,6 +487,7 @@ export async function addSubtaskAction(
       priority: "medium",
       parentTaskId: parent.id,
       projectId: parent.projectId,
+      clientId: parent.clientId,
       sectorId: parent.sectorId,
       createdById: user.userId,
     },
@@ -506,6 +539,31 @@ export async function toggleChecklistItemAction(
   });
   await recalcProgress(taskId, user.companyId);
   revalidatePath(`/tarefas/${taskId}`);
+}
+
+export async function updateChecklistItemTitleAction(
+  itemId: string,
+  taskId: string,
+  title: string,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  const trimmed = title.trim();
+  if (!trimmed) return { error: "Nome do item obrigatório." };
+  if (trimmed.length > 500) return { error: "Nome do item muito longo." };
+
+  const item = await prisma.taskChecklistItem.findFirst({
+    where: { id: itemId, taskId, task: taskVisibilityFilter(user) },
+    select: { id: true, title: true },
+  });
+  if (!item) return { error: "Item não encontrado." };
+  if (item.title === trimmed) return {};
+
+  await prisma.taskChecklistItem.update({
+    where: { id: itemId },
+    data: { title: trimmed },
+  });
+  revalidatePath(`/tarefas/${taskId}`);
+  return {};
 }
 
 async function recalcProgress(taskId: string, companyId: string) {
@@ -718,21 +776,23 @@ export async function moveTaskToProjectAction(
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
-    select: { projectId: true, title: true },
+    select: { projectId: true, clientId: true, title: true },
   });
   if (!task) return { error: "Tarefa não encontrada." };
 
+  let targetClientId = task.clientId;
   if (projectId) {
     const project = await prisma.project.findFirst({
       where: { id: projectId, deletedAt: null, AND: projectVisibilityFilter(user) },
-      select: { id: true },
+      select: { id: true, clientId: true },
     });
     if (!project) return { error: "Projeto não encontrado." };
+    targetClientId = project.clientId;
   }
 
   await prisma.task.update({
     where: { id: taskId },
-    data: { projectId: projectId || null },
+    data: { projectId: projectId || null, clientId: targetClientId ?? null },
   });
 
   await logActivity({
@@ -758,7 +818,7 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
     where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: {
       title: true, description: true, priority: true, assigneeId: true,
-      sectorId: true, projectId: true, dueDate: true,
+      sectorId: true, clientId: true, projectId: true, dueDate: true,
       checklistItems: { select: { title: true, position: true } },
       subtasks: {
         where: { deletedAt: null },
@@ -776,6 +836,7 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
       priority: task.priority,
       assigneeId: task.assigneeId,
       sectorId: task.sectorId,
+      clientId: task.clientId,
       projectId: task.projectId,
       dueDate: task.dueDate,
       createdById: user.userId,
@@ -797,6 +858,7 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
           assigneeId: sub.assigneeId,
           dueDate: sub.dueDate,
           projectId: task.projectId,
+          clientId: task.clientId,
           sectorId: task.sectorId,
           parentTaskId: copy.id,
           createdById: user.userId,

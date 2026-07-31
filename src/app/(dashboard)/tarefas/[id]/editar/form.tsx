@@ -14,6 +14,7 @@ import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurr
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
+interface Client { id: string; name: string }
 
 interface Task {
   id: string;
@@ -22,6 +23,8 @@ interface Task {
   priority: TaskPriority;
   assigneeId: string | null;
   sectorId: string | null;
+  clientId: string | null;
+  projectId: string | null;
   dueDate: Date | null;
   recurrenceRule: unknown;
 }
@@ -30,11 +33,13 @@ export function EditTaskForm({
   task,
   sectors,
   users,
+  clients,
   returnTo,
 }: {
   task: Task;
   sectors: Sector[];
   users: User[];
+  clients: Client[];
   returnTo?: string;
 }) {
   const boundAction = updateTaskAction.bind(null, task.id);
@@ -78,6 +83,24 @@ export function EditTaskForm({
             autoFocus
           />
         </div>
+
+        {!task.projectId && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="clientId">Cliente</Label>
+            <select
+              id="clientId"
+              name="clientId"
+              defaultValue={task.clientId ?? ""}
+              disabled={isPending}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">Sem cliente</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>{client.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Description */}
         <div className="flex flex-col gap-1.5">

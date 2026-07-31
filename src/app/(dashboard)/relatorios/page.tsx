@@ -1,34 +1,56 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { BarChart3, TrendingUp, Users, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { BarChart3, TrendingUp, Users, CheckCircle2, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { subDays, startOfDay } from "date-fns";
+import { endOfDay, startOfDay, startOfMonth, subDays } from "date-fns";
+import { ReportPeriodFilter } from "./period-filter";
 
-export default async function RelatoriosPage() {
+const PERIODS = ["today", "yesterday", "last7", "month"] as const;
+type Period = (typeof PERIODS)[number];
+
+function getPeriodRange(period: Period, now: Date) {
+  const end = endOfDay(now);
+  switch (period) {
+    case "today":
+      return { start: startOfDay(now), end, label: "Hoje" };
+    case "yesterday": {
+      const yesterday = subDays(now, 1);
+      return { start: startOfDay(yesterday), end: endOfDay(yesterday), label: "Ontem" };
+    }
+    case "last7":
+      return { start: startOfDay(subDays(now, 6)), end, label: "Últimos 7 dias" };
+    default:
+      return { start: startOfMonth(now), end, label: "Este mês" };
+  }
+}
+
+export default async function RelatoriosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   const user = await requireRole(["admin", "manager"]);
   const companyId = user.companyId;
+  const sp = await searchParams;
+  const period: Period = PERIODS.includes(sp.period as Period) ? sp.period as Period : "month";
 
   const now = new Date();
-  const thirtyDaysAgo = subDays(startOfDay(now), 30);
-  const sevenDaysAgo = subDays(startOfDay(now), 7);
+  const { start, end, label: periodLabel } = getPeriodRange(period, now);
+  const createdInPeriod = { gte: start, lte: end };
 
   // Global stats
   const [
     totalTasks,
     doneTasks,
     overdueTasks,
-    doneLast30,
-    createdLast30,
-    createdLast7,
-    doneLast7,
+    doneInPeriod,
+    createdInPeriodCount,
   ] = await Promise.all([
-    prisma.task.count({ where: { companyId, deletedAt: null, status: { notIn: ["cancelled"] } } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, status: "done" } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: now } } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, status: "done", completedAt: { gte: thirtyDaysAgo } } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: { gte: thirtyDaysAgo } } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: { gte: sevenDaysAgo } } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, status: "done", completedAt: { gte: sevenDaysAgo } } }),
+    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: { notIn: ["cancelled"] } } }),
+    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
+    prisma.task.count({ where: { companyId, deletedAt: null, dueDate: { gte: start, lte: end }, status: { notIn: ["done", "cancelled"] } } }),
+    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
+    prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod } }),
   ]);
 
   const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
@@ -42,7 +64,7 @@ export default async function RelatoriosPage() {
       name: true,
       role: true,
       assignedTasks: {
-        where: { deletedAt: null, status: { notIn: ["cancelled"] } },
+        where: { deletedAt: null, createdAt: createdInPeriod, status: { notIn: ["cancelled"] } },
         select: { status: true, dueDate: true },
       },
     },
@@ -69,7 +91,7 @@ export default async function RelatoriosPage() {
       name: true,
       color: true,
       tasks: {
-        where: { deletedAt: null, status: { notIn: ["cancelled"] } },
+        where: { deletedAt: null, createdAt: createdInPeriod, status: { notIn: ["cancelled"] } },
         select: { status: true, dueDate: true },
       },
     },
@@ -92,10 +114,15 @@ export default async function RelatoriosPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold text-neutral-900">Relatórios</h1>
-        <p className="text-sm text-neutral-500 mt-0.5">
-          Visão geral de produtividade e operação
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-neutral-900">Relatórios</h1>
+            <p className="text-sm text-neutral-500 mt-0.5">
+              Visão geral de produtividade e operação
+            </p>
+          </div>
+          <ReportPeriodFilter value={period} />
+        </div>
       </div>
 
       {/* Global KPIs */}
@@ -106,7 +133,7 @@ export default async function RelatoriosPage() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-neutral-900">{totalTasks}</p>
-            <p className="text-xs text-neutral-400 mt-1">{createdLast30} nos últimos 30 dias</p>
+            <p className="text-xs text-neutral-400 mt-1">{createdInPeriodCount} em {periodLabel.toLowerCase()}</p>
           </CardContent>
         </Card>
 
@@ -137,12 +164,12 @@ export default async function RelatoriosPage() {
         <Card className="border-neutral-200 shadow-none">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-neutral-500 uppercase tracking-wide flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5" />Últimos 7 dias
+              <TrendingUp className="w-3.5 h-3.5" />{periodLabel}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-neutral-900">{doneLast7}</p>
-            <p className="text-xs text-neutral-400 mt-1">{createdLast7} criadas · {doneLast7} concluídas</p>
+            <p className="text-3xl font-bold text-neutral-900">{doneInPeriod}</p>
+            <p className="text-xs text-neutral-400 mt-1">{createdInPeriodCount} criadas · {doneInPeriod} concluídas</p>
           </CardContent>
         </Card>
       </div>
@@ -150,20 +177,20 @@ export default async function RelatoriosPage() {
       {/* Progress bar global */}
       <Card className="border-neutral-200 shadow-none">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-neutral-900">Progresso geral — últimos 30 dias</CardTitle>
+          <CardTitle className="text-sm font-semibold text-neutral-900">Progresso geral — {periodLabel.toLowerCase()}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between text-xs text-neutral-500">
-            <span>{doneLast30} concluídas de {createdLast30} criadas</span>
+            <span>{doneInPeriod} concluídas de {createdInPeriodCount} criadas</span>
             <span className="font-medium">
-              {createdLast30 > 0 ? Math.round((doneLast30 / createdLast30) * 100) : 0}%
+              {createdInPeriodCount > 0 ? Math.round((doneInPeriod / createdInPeriodCount) * 100) : 0}%
             </span>
           </div>
           <div className="h-3 bg-neutral-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-neutral-900 rounded-full transition-all"
               style={{
-                width: `${createdLast30 > 0 ? Math.min(100, Math.round((doneLast30 / createdLast30) * 100)) : 0}%`,
+                width: `${createdInPeriodCount > 0 ? Math.min(100, Math.round((doneInPeriod / createdInPeriodCount) * 100)) : 0}%`,
               }}
             />
           </div>

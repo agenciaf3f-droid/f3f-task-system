@@ -11,17 +11,20 @@ import { RecurrencePicker } from "@/components/tasks/recurrence-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
+interface Client { id: string; name: string }
 interface Project { id: string; name: string; client: { name: string } }
 
 export function NewTaskForm({
   sectors,
   users,
+  clients,
   project,
   keepOpenAfterCreate = false,
   defaultAssigneeId,
 }: {
   sectors: Sector[];
   users: User[];
+  clients: Client[];
   project: Project | null;
   keepOpenAfterCreate?: boolean;
   /** Pré-seleciona o responsável (ex.: tarefa avulsa da home → o próprio usuário). */
@@ -94,6 +97,23 @@ export function NewTaskForm({
             autoFocus
           />
         </div>
+
+        {!project && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="clientId">Cliente</Label>
+            <select
+              id="clientId"
+              name="clientId"
+              disabled={isPending}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">Sem cliente</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>{client.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Description */}
         <div className="flex flex-col gap-1.5">

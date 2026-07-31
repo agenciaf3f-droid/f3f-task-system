@@ -144,7 +144,13 @@ export async function deleteClientAction(clientId: string) {
 
   await prisma.$transaction([
     prisma.task.updateMany({
-      where: { projectId: { in: projectIds }, deletedAt: null },
+      where: {
+        OR: [
+          { projectId: { in: projectIds } },
+          { clientId },
+        ],
+        deletedAt: null,
+      },
       data: { deletedAt: now },
     }),
     prisma.project.updateMany({
@@ -219,6 +225,7 @@ export async function createProjectAction(
           data: {
             companyId: user.companyId,
             projectId: project.id,
+            clientId,
             templateId: template.id,
             sectorId: template.sectorId,
             title: tt.title,
@@ -238,6 +245,7 @@ export async function createProjectAction(
                 data: {
                   companyId: user.companyId,
                   projectId: project.id,
+                  clientId,
                   parentTaskId: parentTask.id,
                   title: ci.title.trim(),
                   priority: tt.priority,
@@ -380,6 +388,7 @@ export async function applyTemplatesToProjectAction(
             data: {
               companyId: user.companyId,
               projectId,
+              clientId: project.clientId,
               templateId: template.id,
               sectorId: template.sectorId,
               title: tt.title,
@@ -401,6 +410,7 @@ export async function applyTemplatesToProjectAction(
                   data: {
                     companyId: user.companyId,
                     projectId,
+                    clientId: project.clientId,
                     parentTaskId: parentTask.id,
                     title: ci.title.trim(),
                     priority: tt.priority,
