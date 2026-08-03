@@ -10,8 +10,10 @@ import { getTaskDetailsAction } from "@/app/(dashboard)/tarefas/actions";
 type TaskDetails = Awaited<ReturnType<typeof getTaskDetailsAction>> | null;
 
 const STATUS_LABELS: Record<string, string> = {
-  todo: "A fazer",
+  todo: "A ser iniciado",
   in_progress: "Em andamento",
+  review: "Revisão",
+  blocked: "Ajustes",
   done: "Concluído",
   cancelled: "Cancelado",
 };
@@ -19,6 +21,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_STYLES: Record<string, string> = {
   todo: "bg-neutral-100 text-neutral-600 border-neutral-200",
   in_progress: "bg-blue-50 text-blue-700 border-blue-200",
+  review: "bg-amber-50 text-amber-700 border-amber-200",
+  blocked: "bg-rose-50 text-rose-700 border-rose-200",
   done: "bg-emerald-50 text-emerald-700 border-emerald-200",
   cancelled: "bg-neutral-50 text-neutral-400 border-neutral-200",
 };

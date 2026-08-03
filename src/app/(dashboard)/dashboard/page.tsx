@@ -21,11 +21,13 @@ const boardTaskSelect = {
   subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
 } satisfies Prisma.TaskSelect;
 
-// 3 colunas no board da home (subset das 5 do projeto).
+// Fluxo operacional exibido na home.
 const DASHBOARD_COLUMNS = [
-  { id: "todo",        label: "A fazer",            color: "text-neutral-600", bg: "bg-neutral-50" },
-  { id: "in_progress", label: "Em andamento",       color: "text-blue-600",    bg: "bg-blue-50"    },
-  { id: "done",        label: "Concluído · 7 dias", color: "text-emerald-600", bg: "bg-emerald-50" },
+  { id: "todo",        label: "A ser iniciado",     color: "text-neutral-600", bg: "bg-neutral-50"  },
+  { id: "in_progress", label: "Em andamento",        color: "text-blue-600",    bg: "bg-blue-50"     },
+  { id: "review",      label: "Revisão",             color: "text-amber-600",   bg: "bg-amber-50"    },
+  { id: "blocked",     label: "Ajustes",             color: "text-rose-600",    bg: "bg-rose-50"     },
+  { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
 ];
 
 async function getDashboardData(userId: string | null, companyId: string) {
@@ -42,8 +44,7 @@ async function getDashboardData(userId: string | null, companyId: string) {
     : {};
 
   const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
-    // Pendentes minhas: todas menos done/cancelled (todo, in_progress, review, blocked).
-    // review/blocked ficam sob "Em andamento" no board via statusColumnMap → coerente com os KPIs.
+    // Pendentes minhas: todas menos done/cancelled.
     prisma.task.findMany({
       where: { companyId, deletedAt: null, archivedAt: null, AND: myTasksOR, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
       orderBy: [{ dueDate: "asc" }],
@@ -245,7 +246,6 @@ export default async function DashboardPage({
             <KanbanView
               tasks={myTasks}
               columns={DASHBOARD_COLUMNS}
-              statusColumnMap={{ review: "in_progress", blocked: "in_progress" }}
             />
           ) : (
             <div className="flex flex-col gap-2">

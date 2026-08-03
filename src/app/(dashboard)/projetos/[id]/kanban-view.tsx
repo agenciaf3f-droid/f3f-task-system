@@ -34,10 +34,10 @@ type Task = {
 type Column = { id: string; label: string; color: string; bg: string };
 
 const COLUMNS: Column[] = [
-  { id: "todo",        label: "A fazer",       color: "text-neutral-600", bg: "bg-neutral-50"  },
+  { id: "todo",        label: "A ser iniciado", color: "text-neutral-600", bg: "bg-neutral-50"  },
   { id: "in_progress", label: "Em andamento",  color: "text-blue-600",    bg: "bg-blue-50"     },
-  { id: "review",      label: "Em revisão",    color: "text-amber-600",   bg: "bg-amber-50"    },
-  { id: "blocked",     label: "Bloqueado",     color: "text-red-600",     bg: "bg-red-50"      },
+  { id: "review",      label: "Revisão",       color: "text-amber-600",   bg: "bg-amber-50"    },
+  { id: "blocked",     label: "Ajustes",       color: "text-rose-600",    bg: "bg-rose-50"     },
   { id: "done",        label: "Concluído",     color: "text-emerald-600", bg: "bg-emerald-50"  },
 ];
 

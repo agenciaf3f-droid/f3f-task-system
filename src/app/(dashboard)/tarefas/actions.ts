@@ -58,6 +58,14 @@ const taskSchema = z.object({
   dueDate: optStr,
 });
 
+const createTaskSchema = taskSchema.extend({
+  assigneeId: z.string().uuid("Responsável obrigatório"),
+  dueDate: z.string().min(1, "Prazo obrigatório").refine(
+    (value) => !Number.isNaN(parseDateInput(value)?.getTime()),
+    "Prazo inválido",
+  ),
+});
+
 // Garante que o responsável pertence à empresa do ator — evita assign/notificação
 // cross-tenant (assigneeId vem do cliente e User é FK global, sem constraint de company).
 async function resolveCompanyAssignee(
@@ -93,7 +101,7 @@ export async function createTaskAction(
   // Quando keepOpen=1 (modal "criar várias"), retornamos { success } em vez de redirect
   const keepOpen = formData.get("keepOpen") === "1";
 
-  const parsed = taskSchema.safeParse({
+  const parsed = createTaskSchema.safeParse({
     title: formData.get("title"),
     description: formData.get("description"),
     assigneeId: formData.get("assigneeId"),
@@ -111,6 +119,9 @@ export async function createTaskAction(
   const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
+  if (!validAssigneeId) return { error: "Responsável inválido." };
+  const parsedDueDate = parseDateInput(dueDate);
+  if (!parsedDueDate) return { error: "Prazo inválido." };
   const project = projectId
     ? await prisma.project.findFirst({
         where: { id: projectId, companyId: user.companyId, deletedAt: null },
@@ -135,7 +146,7 @@ export async function createTaskAction(
       projectId: project?.id ?? null,
       clientId: validClientId,
       createdById: user.userId,
-      dueDate: parseDateInput(dueDate),
+      dueDate: parsedDueDate,
       recurrenceRule: recurrenceRule ?? undefined,
     },
   });

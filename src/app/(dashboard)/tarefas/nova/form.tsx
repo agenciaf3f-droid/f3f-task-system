@@ -130,15 +130,16 @@ export function NewTaskForm({
 
         {/* Row: Assignee */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="assigneeId">Responsável</Label>
+          <Label htmlFor="assigneeId">Responsável <span className="text-red-500">*</span></Label>
           <select
             id="assigneeId"
             name="assigneeId"
             defaultValue={defaultAssigneeId ?? ""}
+            required
             disabled={isPending}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <option value="">Sem responsável</option>
+            <option value="" disabled>Selecione o responsável</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
@@ -147,8 +148,8 @@ export function NewTaskForm({
 
         {/* Row: Due date */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="dueDate">Prazo</Label>
-          <Input id="dueDate" name="dueDate" type="date" disabled={isPending} />
+          <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+          <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
         </div>
 
         <div className="flex flex-col gap-1.5">

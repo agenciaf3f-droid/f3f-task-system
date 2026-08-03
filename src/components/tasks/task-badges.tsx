@@ -2,10 +2,10 @@ import { cn } from "@/lib/utils";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 
 const STATUS_CONFIG: Record<TaskStatus, { label: string; className: string }> = {
-  todo:        { label: "A fazer",      className: "bg-slate-200 text-slate-800 border-slate-300 font-semibold" },
+  todo:        { label: "A ser iniciado", className: "bg-slate-200 text-slate-800 border-slate-300 font-semibold" },
   in_progress: { label: "Em andamento", className: "bg-blue-200 text-blue-900 border-blue-400 font-semibold" },
-  review:      { label: "Em revisão",   className: "bg-blue-200 text-blue-900 border-blue-400 font-semibold" },
-  blocked:     { label: "Bloqueado",    className: "bg-orange-200 text-orange-900 border-orange-400 font-semibold" },
+  review:      { label: "Revisão",      className: "bg-amber-200 text-amber-900 border-amber-400 font-semibold" },
+  blocked:     { label: "Ajustes",      className: "bg-rose-200 text-rose-900 border-rose-400 font-semibold" },
   done:        { label: "Concluído",    className: "bg-emerald-200 text-emerald-900 border-emerald-400 font-semibold" },
   cancelled:   { label: "Cancelado",   className: "bg-neutral-200 text-neutral-600 border-neutral-300 line-through font-semibold" },
 };

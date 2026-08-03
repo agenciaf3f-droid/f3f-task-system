@@ -78,8 +78,10 @@ function AddSubtaskInline({ parentTaskId }: { parentTaskId: string }) {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  todo: "A fazer",
+  todo: "A ser iniciado",
   in_progress: "Em andamento",
+  review: "Revisão",
+  blocked: "Ajustes",
   done: "Concluído",
   cancelled: "Cancelado",
 };
@@ -87,6 +89,8 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_STYLES: Record<string, string> = {
   todo: "text-neutral-500 bg-neutral-100 border-neutral-200",
   in_progress: "text-blue-600 bg-blue-50 border-blue-200",
+  review: "text-amber-600 bg-amber-50 border-amber-200",
+  blocked: "text-rose-600 bg-rose-50 border-rose-200",
   done: "text-emerald-600 bg-emerald-50 border-emerald-200",
   cancelled: "text-neutral-400 bg-neutral-50 border-neutral-200",
 };
