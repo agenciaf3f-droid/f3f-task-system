@@ -5,7 +5,7 @@
   "description": "F3F Task System — sistema interno de gestão de tarefas e processos",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && prisma generate && next build",
+    "build": "DIRECT_URL=\"$DATABASE_URL\" prisma migrate deploy && prisma generate && next build",
     "start": "prisma migrate deploy && next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
