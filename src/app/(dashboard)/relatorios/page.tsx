@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { BarChart3, TrendingUp, Users, CheckCircle2, AlertCircle } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { endOfDay, startOfDay, startOfMonth, subDays } from "date-fns";
 import { ReportPeriodFilter } from "./period-filter";
@@ -35,6 +36,7 @@ export default async function RelatoriosPage({
   const period: Period = PERIODS.includes(sp.period as Period) ? sp.period as Period : "month";
 
   const now = new Date();
+  const todayStart = startOfDay(now);
   const { start, end, label: periodLabel } = getPeriodRange(period, now);
   const createdInPeriod = { gte: start, lte: end };
 
@@ -48,7 +50,8 @@ export default async function RelatoriosPage({
   ] = await Promise.all([
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: { notIn: ["cancelled"] } } }),
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
-    prisma.task.count({ where: { companyId, deletedAt: null, dueDate: { gte: start, lte: end }, status: { notIn: ["done", "cancelled"] } } }),
+    // A tarefa vence no próprio dia do prazo; só é atrasada a partir do dia seguinte.
+    prisma.task.count({ where: { companyId, deletedAt: null, archivedAt: null, dueDate: { lt: todayStart }, status: { notIn: ["done", "cancelled"] } } }),
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod } }),
   ]);
@@ -74,7 +77,7 @@ export default async function RelatoriosPage({
     const tasks = u.assignedTasks;
     const done = tasks.filter((t) => t.status === "done").length;
     const overdue = tasks.filter(
-      (t) => t.dueDate && t.dueDate < now && t.status !== "done",
+      (t) => t.dueDate && t.dueDate < todayStart && t.status !== "done",
     ).length;
     const active = tasks.filter((t) => !["done", "cancelled"].includes(t.status)).length;
     const rate = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
@@ -103,7 +106,7 @@ export default async function RelatoriosPage({
       const done = tasks.filter((t) => t.status === "done").length;
       const active = tasks.filter((t) => !["done", "cancelled"].includes(t.status)).length;
       const overdue = tasks.filter(
-        (t) => t.dueDate && t.dueDate < now && t.status !== "done",
+        (t) => t.dueDate && t.dueDate < todayStart && t.status !== "done",
       ).length;
       const rate = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
       return { ...s, done, active, overdue, total: tasks.length, rate };
@@ -149,7 +152,8 @@ export default async function RelatoriosPage({
           </CardContent>
         </Card>
 
-        <Card className="border-red-200 bg-red-50 shadow-none">
+        <Link href="/relatorios/atrasadas" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400">
+        <Card className="border-red-200 bg-red-50 shadow-none h-full transition-all hover:border-red-300 hover:shadow-sm">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-red-600 uppercase tracking-wide flex items-center gap-1">
               <AlertCircle className="w-3.5 h-3.5" />Atrasadas
@@ -157,9 +161,10 @@ export default async function RelatoriosPage({
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold text-red-700">{overdueTasks}</p>
-            <p className="text-xs text-red-500 mt-1">precisam de atenção</p>
+            <p className="text-xs text-red-500 mt-1">Ver lista de tarefas atrasadas</p>
           </CardContent>
         </Card>
+        </Link>
 
         <Card className="border-neutral-200 shadow-none">
           <CardHeader className="pb-1">
