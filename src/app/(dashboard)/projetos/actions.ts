@@ -167,6 +167,57 @@ export async function deleteClientAction(clientId: string) {
   revalidatePath("/projetos");
 }
 
+export async function archiveClientAction(clientId: string): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (user.role === "member") return { error: "Sem permissão." };
+
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, companyId: user.companyId, deletedAt: null },
+    select: { id: true, name: true },
+  });
+  if (!client) return { error: "Cliente não encontrado." };
+
+  await prisma.client.update({
+    where: { id: client.id },
+    data: { deletedAt: new Date() },
+  });
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "client.archived",
+    resourceType: "client",
+    resourceId: client.id,
+    oldValue: { name: client.name },
+  });
+
+  revalidatePath("/clientes");
+  return {};
+}
+
+export async function restoreClientAction(clientId: string): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (user.role === "member") return { error: "Sem permissão." };
+
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, companyId: user.companyId, deletedAt: { not: null } },
+    select: { id: true, name: true },
+  });
+  if (!client) return { error: "Cliente não encontrado." };
+
+  await prisma.client.update({ where: { id: client.id }, data: { deletedAt: null } });
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "client.restored",
+    resourceType: "client",
+    resourceId: client.id,
+    newValue: { name: client.name },
+  });
+
+  revalidatePath("/clientes");
+  return {};
+}
+
 // ─── Project ──────────────────────────────────────────────────
 
 export async function createProjectAction(

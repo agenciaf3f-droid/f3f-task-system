@@ -8,9 +8,9 @@ export const metadata = { title: "Clientes" };
 export default async function ClientesPage() {
   const user = await requireAuth();
 
-  const [clients, managers] = await Promise.all([
+  const [allClients, managers] = await Promise.all([
     prisma.client.findMany({
-      where: { companyId: user.companyId, deletedAt: null },
+      where: { companyId: user.companyId },
       orderBy: { name: "asc" },
       include: {
         manager: { select: { id: true, name: true } },
@@ -36,10 +36,12 @@ export default async function ClientesPage() {
     }),
   ]);
 
-  const clientsWithTaskCount = clients.map((c) => ({
+  const clientsWithTaskCount = allClients.map((c) => ({
     ...c,
     activeTasks: c.projects.reduce((sum, p) => sum + p._count.tasks, 0),
   }));
+  const clients = clientsWithTaskCount.filter((client) => !client.deletedAt);
+  const archivedClients = clientsWithTaskCount.filter((client) => client.deletedAt);
 
   // Computa IDs dos "meus clientes":
   //  - clientes onde o user logado é o manager (Client.managerId)
@@ -78,7 +80,8 @@ export default async function ClientesPage() {
       </div>
 
       <ClientList
-        clients={clientsWithTaskCount}
+        clients={clients}
+        archivedClients={archivedClients}
         userRole={user.role}
         myClientIds={myClientIds}
         managers={managers}
