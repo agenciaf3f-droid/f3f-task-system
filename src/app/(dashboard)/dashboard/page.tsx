@@ -16,6 +16,7 @@ const boardTaskSelect = {
   id: true, title: true, status: true, priority: true, dueDate: true,
   assignee: { select: { id: true, name: true, avatarUrl: true } },
   sector: { select: { name: true, color: true } },
+  client: { select: { name: true } },
   project: { select: { name: true, client: { select: { name: true } } } },
   _count: { select: { checklistItems: true, comments: true } },
   subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },

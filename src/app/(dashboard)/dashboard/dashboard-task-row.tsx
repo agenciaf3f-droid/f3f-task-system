@@ -15,6 +15,7 @@ interface DashboardTaskRowProps {
     title: string;
     status: TaskStatus;
     dueDate: Date | null;
+    client?: { name: string } | null;
     project: { name: string; client: { name: string } } | null;
     sector: { name: string; color: string | null } | null;
     assignee?: { name: string } | null;
@@ -28,6 +29,7 @@ export function DashboardTaskRow({ task, showAssignee }: DashboardTaskRowProps) 
 
   const isOverdue = task.dueDate && isBefore(task.dueDate, new Date()) && !isDone;
   const isDueToday = task.dueDate && isToday(task.dueDate);
+  const clientName = task.client?.name ?? task.project?.client.name;
 
   function handleToggle(e: React.MouseEvent) {
     e.preventDefault();
@@ -78,9 +80,9 @@ export function DashboardTaskRow({ task, showAssignee }: DashboardTaskRowProps) 
           <p className={`text-sm font-semibold truncate leading-tight ${isDone ? "line-through text-neutral-400" : "text-neutral-800 group-hover:text-neutral-900"}`}>
             {task.title}
           </p>
-          {task.project && (
+          {clientName && (
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mt-0.5 truncate">
-              {task.project.client.name} · {task.project.name}
+              {clientName}{task.project ? ` · ${task.project.name}` : ""}
             </p>
           )}
         </div>

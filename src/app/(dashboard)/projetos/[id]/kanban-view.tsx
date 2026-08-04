@@ -14,7 +14,7 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import Link from "next/link";
 import { isBefore, isToday, format } from "date-fns";
-import { Calendar, User, AlertCircle } from "lucide-react";
+import { BriefcaseBusiness, Calendar, User, AlertCircle } from "lucide-react";
 import { updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 
 type Assignee = { id: string; name: string; avatarUrl: string | null } | null;
@@ -25,6 +25,8 @@ type Task = {
   status: string;
   priority: string;
   dueDate: Date | null;
+  client?: { name: string } | null;
+  project?: { name: string; client: { name: string } } | null;
   assignee: Assignee;
   sector: { name: string; color: string | null } | null;
   _count: { checklistItems: number; comments: number };
@@ -76,9 +78,10 @@ const STATUS_TINT: Record<string, string> = {
 
 const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { task: Task; isDragging?: boolean; overlay?: boolean }) {
   const overdue = task.dueDate && !isToday(task.dueDate) && isBefore(task.dueDate, new Date()) && task.status !== "done";
+  const clientName = task.client?.name ?? task.project?.client.name;
 
   const doneItems = task.subtasks.filter((s) => s.status === "done").length;
-  const hasMeta = task.assignee || task.dueDate || task.sector || task._count.checklistItems > 0;
+  const hasMeta = clientName || task.assignee || task.dueDate || task.sector || task._count.checklistItems > 0;
 
   return (
     <div className={`bg-white border rounded-lg p-2.5 select-none cursor-grab active:cursor-grabbing transition-all ${
@@ -101,6 +104,12 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
 
       {hasMeta && (
         <div className="flex items-center gap-2.5 flex-wrap mt-2 pl-3.5">
+          {clientName && (
+            <span className="flex items-center gap-1 text-[11px] text-neutral-500 max-w-full">
+              <BriefcaseBusiness className="w-3 h-3 shrink-0" />
+              <span className="truncate">{clientName}</span>
+            </span>
+          )}
           {task.assignee && (
             <span className="flex items-center gap-1 text-[11px] text-neutral-500">
               <User className="w-3 h-3" />
