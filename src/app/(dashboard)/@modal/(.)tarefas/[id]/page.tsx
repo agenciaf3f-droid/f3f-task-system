@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
-import { Calendar, Pencil, FolderKanban } from "lucide-react";
+import { BriefcaseBusiness, Calendar, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge } from "@/components/tasks/task-badges";
@@ -14,6 +14,8 @@ import { AttachmentsSection } from "@/app/(dashboard)/tarefas/[id]/attachments-s
 import { AssigneesSection } from "@/app/(dashboard)/tarefas/[id]/assignees-section";
 import { DependenciesSection } from "@/app/(dashboard)/tarefas/[id]/dependencies-section";
 import { ProgressSlider } from "@/app/(dashboard)/tarefas/[id]/progress-slider";
+import { TaskContentTabs } from "@/app/(dashboard)/tarefas/[id]/task-content-tabs";
+import { TaskHistorySection } from "@/app/(dashboard)/tarefas/[id]/task-history-section";
 import { LinkButton } from "@/components/ui/link-button";
 import { Linkify } from "@/components/ui/linkify";
 import { ModalClient } from "./modal-client";
@@ -35,7 +37,7 @@ export default async function TaskModalPage({
   // Rotas estáticas como /tarefas/nova caem aqui — não renderiza modal, deixa o children mostrar a página real.
   if (!UUID_RE.test(id)) return null;
 
-  const [task, allUsers] = await Promise.all([
+  const [task, allUsers, activities] = await Promise.all([
     prisma.task.findFirst({
       where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
       include: {
@@ -47,6 +49,7 @@ export default async function TaskModalPage({
           include: { task: { select: { id: true, title: true, status: true } } },
         },
         sector: { select: { name: true, color: true } },
+        client: { select: { id: true, name: true } },
         project: { select: { id: true, name: true, client: { select: { name: true } } } },
         createdBy: { select: { name: true } },
         checklistItems: { orderBy: { position: "asc" } },
@@ -65,6 +68,12 @@ export default async function TaskModalPage({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+    }),
+    prisma.activityLog.findMany({
+      where: { companyId: user.companyId, resourceType: "task", resourceId: id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { user: { select: { name: true } } },
     }),
   ]);
 
@@ -91,6 +100,18 @@ export default async function TaskModalPage({
     user.role === "manager" ||
     task.assigneeId === user.userId ||
     task.createdById === user.userId;
+  const displayedAssignees = task.assignees.map((a) => ({
+    userId: a.user.id,
+    name: a.user.name,
+    avatarUrl: a.user.avatarUrl,
+  }));
+  if (task.assignee && !displayedAssignees.some((a) => a.userId === task.assignee!.id)) {
+    displayedAssignees.unshift({
+      userId: task.assignee.id,
+      name: task.assignee.name,
+      avatarUrl: null,
+    });
+  }
 
   return (
     <ModalClient matchPathname={`/tarefas/${task.id}`} projectId={projectId || undefined}>
@@ -140,16 +161,19 @@ export default async function TaskModalPage({
               </Link>
             </div>
           )}
+          {task.client && (
+            <div className="flex items-center gap-2 text-neutral-600 col-span-2">
+              <BriefcaseBusiness className="w-4 h-4 text-neutral-400 shrink-0" />
+              <span>Cliente: <span className="font-medium">{task.client.name}</span></span>
+            </div>
+          )}
           <div className="col-span-2">
             <AssigneesSection
               taskId={task.id}
-              initialAssignees={task.assignees.map((a) => ({
-                userId: a.user.id,
-                name: a.user.name,
-                avatarUrl: a.user.avatarUrl,
-              }))}
+              initialAssignees={displayedAssignees}
               allUsers={allUsers}
               canEdit={canEdit}
+              primaryAssigneeId={task.assigneeId}
             />
           </div>
           {task.dueDate && (
@@ -190,29 +214,29 @@ export default async function TaskModalPage({
         </div>
       </div>
 
-      {/* Comments — logo após o header, antes do checklist */}
-      <CommentsSection
-        taskId={task.id}
-        comments={task.comments}
-        currentUserName={user.name}
-        currentUserId={user.userId}
-        canModerate={user.role === "admin" || user.role === "manager"}
-        users={allUsers}
+      <TaskContentTabs
+        details={
+          <div className="flex flex-col gap-6">
+            <CommentsSection
+              taskId={task.id}
+              comments={task.comments}
+              currentUserName={user.name}
+              currentUserId={user.userId}
+              canModerate={user.role === "admin" || user.role === "manager"}
+              users={allUsers}
+            />
+            <ChecklistSection taskId={task.id} items={task.checklistItems} />
+            <DependenciesSection
+              taskId={task.id}
+              initialBlockedBy={task.blockedBy.map((d) => d.task)}
+              allTasks={allTasks}
+              canEdit={canEdit}
+            />
+            <AttachmentsSection taskId={task.id} initialAttachments={task.attachments} canEdit={canEdit} />
+          </div>
+        }
+        history={<TaskHistorySection activities={activities} />}
       />
-
-      {/* Checklist */}
-      <ChecklistSection taskId={task.id} items={task.checklistItems} />
-
-      {/* Dependencies */}
-      <DependenciesSection
-        taskId={task.id}
-        initialBlockedBy={task.blockedBy.map((d) => d.task)}
-        allTasks={allTasks}
-        canEdit={canEdit}
-      />
-
-      {/* Attachments */}
-      <AttachmentsSection taskId={task.id} initialAttachments={task.attachments} canEdit={canEdit} />
     </ModalClient>
   );
 }

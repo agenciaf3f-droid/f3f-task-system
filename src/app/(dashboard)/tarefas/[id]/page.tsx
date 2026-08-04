@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
-import { ArrowLeft, Calendar, User, Pencil, FolderKanban } from "lucide-react";
+import { ArrowLeft, BriefcaseBusiness, Calendar, User, Pencil, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge } from "@/components/tasks/task-badges";
@@ -13,6 +13,8 @@ import { CommentsSection } from "./comments-section";
 import { ProgressSlider } from "./progress-slider";
 import { LinkButton } from "@/components/ui/link-button";
 import { Linkify } from "@/components/ui/linkify";
+import { TaskContentTabs } from "./task-content-tabs";
+import { TaskHistorySection } from "./task-history-section";
 
 export default async function TaskDetailPage({
   params,
@@ -22,11 +24,13 @@ export default async function TaskDetailPage({
   const user = await requireAuth();
   const { id } = await params;
 
-  const task = await prisma.task.findFirst({
+  const [task, activities] = await Promise.all([
+    prisma.task.findFirst({
     where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
     include: {
       assignee: { select: { id: true, name: true } },
       sector: { select: { name: true, color: true } },
+      client: { select: { id: true, name: true } },
       project: { select: { id: true, name: true, client: { select: { name: true } } } },
       createdBy: { select: { name: true } },
       checklistItems: { orderBy: { position: "asc" } },
@@ -36,7 +40,14 @@ export default async function TaskDetailPage({
         include: { user: { select: { name: true } } },
       },
     },
-  });
+    }),
+    prisma.activityLog.findMany({
+      where: { companyId: user.companyId, resourceType: "task", resourceId: id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { user: { select: { name: true } } },
+    }),
+  ]);
 
   if (!task) notFound();
 
@@ -99,6 +110,12 @@ export default async function TaskDetailPage({
                 </Link>
               </div>
             )}
+            {task.client && (
+              <div className="flex items-center gap-2 text-neutral-600 col-span-2">
+                <BriefcaseBusiness className="w-4 h-4 text-neutral-400 shrink-0" />
+                <span>Cliente: <span className="font-medium">{task.client.name}</span></span>
+              </div>
+            )}
             {task.assignee && (
               <div className="flex items-center gap-2 text-neutral-600">
                 <User className="w-4 h-4 text-neutral-400 shrink-0" />
@@ -152,19 +169,20 @@ export default async function TaskDetailPage({
           </div>
         </div>
 
-        {/* Comments — antes do checklist */}
-        <CommentsSection
-          taskId={task.id}
-          comments={task.comments}
-          currentUserName={user.name}
-          currentUserId={user.userId}
-          canModerate={user.role === "admin" || user.role === "manager"}
-        />
-
-        {/* Checklist */}
-        <ChecklistSection
-          taskId={task.id}
-          items={task.checklistItems}
+        <TaskContentTabs
+          details={
+            <div className="flex flex-col gap-6">
+              <CommentsSection
+                taskId={task.id}
+                comments={task.comments}
+                currentUserName={user.name}
+                currentUserId={user.userId}
+                canModerate={user.role === "admin" || user.role === "manager"}
+              />
+              <ChecklistSection taskId={task.id} items={task.checklistItems} />
+            </div>
+          }
+          history={<TaskHistorySection activities={activities} />}
         />
       </div>
     </div>

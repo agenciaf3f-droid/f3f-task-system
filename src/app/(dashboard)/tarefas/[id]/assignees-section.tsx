@@ -13,11 +13,13 @@ export function AssigneesSection({
   initialAssignees,
   allUsers,
   canEdit,
+  primaryAssigneeId,
 }: {
   taskId: string;
   initialAssignees: Assignee[];
   allUsers: AllUser[];
   canEdit: boolean;
+  primaryAssigneeId?: string | null;
 }) {
   const [assignees, setAssignees] = useState(initialAssignees);
   const [showPicker, setShowPicker] = useState(false);
@@ -60,7 +62,7 @@ export function AssigneesSection({
           >
             <UserAvatar name={a.name} src={a.avatarUrl ?? undefined} size={20} />
             <span>{a.name.split(" ")[0]}</span>
-            {canEdit && (
+            {canEdit && a.userId !== primaryAssigneeId && (
               <button
                 onClick={() => handleRemove(a.userId)}
                 disabled={isPending}

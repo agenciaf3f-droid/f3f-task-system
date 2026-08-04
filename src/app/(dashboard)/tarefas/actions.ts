@@ -148,6 +148,12 @@ export async function createTaskAction(
       createdById: user.userId,
       dueDate: parsedDueDate,
       recurrenceRule: recurrenceRule ?? undefined,
+      assignees: {
+        create: {
+          userId: validAssigneeId,
+          assignedById: user.userId,
+        },
+      },
     },
   });
 
