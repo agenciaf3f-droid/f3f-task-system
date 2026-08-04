@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2 } from "lucide-react";
 import { RecurrencePicker } from "@/components/tasks/recurrence-picker";
+import { ClientPicker } from "@/components/tasks/client-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
@@ -41,16 +42,18 @@ export function NewTaskForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [justCreated, setJustCreated] = useState(false);
+  const [clientId, setClientId] = useState(defaultClientId ?? "");
 
   useEffect(() => {
     if (state.success && keepOpenAfterCreate) {
       formRef.current?.reset();
+      setClientId(defaultClientId ?? "");
       setJustCreated(true);
       formRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
       const t = setTimeout(() => setJustCreated(false), 2500);
       return () => clearTimeout(t);
     }
-  }, [state.success, keepOpenAfterCreate]);
+  }, [state.success, keepOpenAfterCreate, defaultClientId]);
 
   const backHref = project ? `/projetos/${project.id}` : "/tarefas";
 
@@ -104,18 +107,14 @@ export function NewTaskForm({
         {!project && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="clientId">Cliente</Label>
-            <select
+            <ClientPicker
               id="clientId"
               name="clientId"
-              defaultValue={defaultClientId ?? ""}
+              clients={clients}
+              value={clientId}
+              onValueChange={setClientId}
               disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Sem cliente</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
+            />
           </div>
         )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { updateTaskAction } from "../../actions";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import type { TaskPriority } from "@prisma/client";
 import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
+import { ClientPicker } from "@/components/tasks/client-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
@@ -47,6 +48,7 @@ export function EditTaskForm({
     boundAction,
     {},
   );
+  const [clientId, setClientId] = useState(task.clientId ?? "");
 
   const dueDateValue = task.dueDate
     ? format(new Date(task.dueDate), "yyyy-MM-dd")
@@ -87,18 +89,14 @@ export function EditTaskForm({
         {!task.projectId && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="clientId">Cliente</Label>
-            <select
+            <ClientPicker
               id="clientId"
               name="clientId"
-              defaultValue={task.clientId ?? ""}
+              clients={clients}
+              value={clientId}
+              onValueChange={setClientId}
               disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              <option value="">Sem cliente</option>
-              {clients.map((client) => (
-                <option key={client.id} value={client.id}>{client.name}</option>
-              ))}
-            </select>
+            />
           </div>
         )}
 
