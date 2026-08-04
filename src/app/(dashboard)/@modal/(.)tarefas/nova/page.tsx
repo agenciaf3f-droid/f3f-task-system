@@ -6,7 +6,7 @@ import { ModalClient } from "../[id]/modal-client";
 export default async function NovaTaskModalPage({
   searchParams,
 }: {
-  searchParams: Promise<{ projectId?: string; self?: string }>;
+  searchParams: Promise<{ projectId?: string; clientId?: string; self?: string }>;
 }) {
   const user = await requireAuth();
   const params = await searchParams;
@@ -46,6 +46,7 @@ export default async function NovaTaskModalPage({
         // Tarefa avulsa (?self=1): pré-seleciona o próprio usuário — sem responsável
         // ela não apareceria no board/KPIs da home, que filtram por assignee.
         defaultAssigneeId={params.self === "1" ? user.userId : undefined}
+        defaultClientId={params.clientId}
       />
     </ModalClient>
   );

@@ -21,6 +21,7 @@ export function NewTaskForm({
   project,
   keepOpenAfterCreate = false,
   defaultAssigneeId,
+  defaultClientId,
 }: {
   sectors: Sector[];
   users: User[];
@@ -29,6 +30,8 @@ export function NewTaskForm({
   keepOpenAfterCreate?: boolean;
   /** Pré-seleciona o responsável (ex.: tarefa avulsa da home → o próprio usuário). */
   defaultAssigneeId?: string;
+  /** Pré-seleciona o cliente ao criar uma tarefa a partir do perfil dele. */
+  defaultClientId?: string;
 }) {
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
@@ -104,6 +107,7 @@ export function NewTaskForm({
             <select
               id="clientId"
               name="clientId"
+              defaultValue={defaultClientId ?? ""}
               disabled={isPending}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >

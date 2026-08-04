@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { projectVisibilityFilter } from "@/lib/task-visibility";
-import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, ArrowLeft } from "lucide-react";
+import { projectVisibilityFilter, taskVisibilityFilter } from "@/lib/task-visibility";
+import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, ArrowLeft, Calendar, ListTodo, User } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProjectClientList } from "./project-client-list";
+import { StatusBadge } from "@/components/tasks/task-badges";
+import { format } from "date-fns";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -27,7 +29,7 @@ export default async function ProjetosPage({
 
   // —— VISÃO DE PROJETOS DE UM CLIENTE ESPECÍFICO ——
   if (clientId) {
-    const [client, projects] = await Promise.all([
+    const [client, projects, relatedTasks] = await Promise.all([
       prisma.client.findFirst({
         where: { id: clientId, companyId: user.companyId, deletedAt: null },
         select: { id: true, name: true, color: true },
@@ -41,6 +43,30 @@ export default async function ProjetosPage({
             where: { deletedAt: null, status: { notIn: ["cancelled"] }, parentTaskId: null },
             select: { status: true },
           },
+        },
+      }),
+      prisma.task.findMany({
+        where: {
+          companyId: user.companyId,
+          deletedAt: null,
+          archivedAt: null,
+          parentTaskId: null,
+          status: { not: "cancelled" },
+          OR: [
+            { clientId },
+            { project: { clientId, deletedAt: null } },
+          ],
+          AND: taskVisibilityFilter(user),
+        },
+        orderBy: [{ status: "asc" }, { dueDate: "asc" }],
+        take: 100,
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          dueDate: true,
+          assignee: { select: { name: true } },
+          project: { select: { name: true } },
         },
       }),
     ]);
@@ -96,6 +122,47 @@ export default async function ProjetosPage({
             </LinkButton>
           </div>
         </div>
+
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ListTodo className="w-4 h-4 text-neutral-400" />
+              <h2 className="text-base font-bold text-neutral-900">Tarefas relacionadas</h2>
+              <span className="text-xs font-semibold text-neutral-400 bg-neutral-100 rounded-full px-2 py-0.5">{relatedTasks.length}</span>
+            </div>
+            <LinkButton href={`/tarefas/nova?clientId=${client.id}`} size="sm" variant="outline">
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Nova tarefa
+            </LinkButton>
+          </div>
+
+          {relatedTasks.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-neutral-200 bg-white px-5 py-4 text-sm text-neutral-400">
+              <ListTodo className="w-5 h-5 shrink-0" />
+              Nenhuma tarefa relacionada a este cliente.
+            </div>
+          ) : (
+            <div className="bg-white border border-neutral-200 rounded-xl divide-y divide-neutral-100 overflow-hidden">
+              {relatedTasks.map((task) => (
+                <Link
+                  key={task.id}
+                  href={`/tarefas/${task.id}`}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-50 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-neutral-900 truncate">{task.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-neutral-500 flex-wrap">
+                      {task.project && <span className="truncate">{task.project.name}</span>}
+                      {task.assignee && <span className="flex items-center gap-1"><User className="w-3 h-3" />{task.assignee.name.split(" ")[0]}</span>}
+                      {task.dueDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{format(task.dueDate, "dd/MM/yyyy")}</span>}
+                    </div>
+                  </div>
+                  <StatusBadge status={task.status} />
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
 
         {projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 border border-dashed border-neutral-200 rounded-2xl bg-white">
