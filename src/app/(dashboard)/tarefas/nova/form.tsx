@@ -115,6 +115,21 @@ export function NewTaskForm({
           </div>
         )}
 
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sectorId">Setor</Label>
+          <select
+            id="sectorId"
+            name="sectorId"
+            disabled={isPending}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <option value="">Sem setor</option>
+            {sectors.map((sector) => (
+              <option key={sector.id} value={sector.id}>{sector.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Description */}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="description">Descrição</Label>

@@ -92,6 +92,18 @@ async function resolveCompanyClient(
   return client?.id ?? null;
 }
 
+async function resolveCompanySector(
+  sectorId: string | null | undefined,
+  companyId: string,
+): Promise<string | null> {
+  if (!sectorId) return null;
+  const sector = await prisma.sector.findFirst({
+    where: { id: sectorId, companyId, deletedAt: null },
+    select: { id: true },
+  });
+  return sector?.id ?? null;
+}
+
 export async function createTaskAction(
   _prev: { error?: string; success?: boolean },
   formData: FormData,
@@ -120,6 +132,8 @@ export async function createTaskAction(
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   if (!validAssigneeId) return { error: "Responsável inválido." };
+  const validSectorId = await resolveCompanySector(sectorId, user.companyId);
+  if (sectorId && !validSectorId) return { error: "Setor inválido." };
   const parsedDueDate = parseDateInput(dueDate);
   if (!parsedDueDate) return { error: "Prazo inválido." };
   const project = projectId
@@ -142,7 +156,7 @@ export async function createTaskAction(
       description: description || null,
       priority: safePriority,
       assigneeId: validAssigneeId,
-      sectorId: sectorId || null,
+      sectorId: validSectorId,
       projectId: project?.id ?? null,
       clientId: validClientId,
       createdById: user.userId,
