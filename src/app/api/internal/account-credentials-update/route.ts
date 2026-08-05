@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => null)) as { updates?: CredentialsUpdate[] } | null;
   const updates = body?.updates;
-  if (!Array.isArray(updates) || updates.length !== 2) {
+  if (!Array.isArray(updates) || updates.length < 1 || updates.length > ALLOWED_UPDATES.size) {
     return NextResponse.json({ error: "Solicitação inválida" }, { status: 400 });
   }
 
@@ -102,10 +102,6 @@ export async function POST(request: NextRequest) {
     received.add(currentEmail);
     prepared.push({ currentEmail, newEmail, password });
   }
-  if (received.size !== ALLOWED_UPDATES.size) {
-    return NextResponse.json({ error: "Solicitação inválida" }, { status: 400 });
-  }
-
   for (const update of prepared) {
     const user = await prisma.user.findFirst({
       where: {
