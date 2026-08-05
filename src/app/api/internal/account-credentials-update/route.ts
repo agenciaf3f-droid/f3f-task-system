@@ -108,10 +108,14 @@ export async function POST(request: NextRequest) {
 
   for (const update of prepared) {
     const user = await prisma.user.findFirst({
-      where: { email: update.currentEmail, isActive: true, deletedAt: null },
+      where: {
+        OR: [{ email: update.currentEmail }, { email: update.newEmail }],
+        isActive: true,
+        deletedAt: null,
+      },
       select: { id: true },
     });
-    if (!user) return NextResponse.json({ error: "Conta local não encontrada" }, { status: 404 });
+    if (!user) continue;
 
     const duplicate = await prisma.user.findFirst({
       where: { email: update.newEmail, id: { not: user.id } },
@@ -124,10 +128,15 @@ export async function POST(request: NextRequest) {
     const central = await updateCentralCredentials(update.currentEmail, update.newEmail, update.password);
     if (!central.ok) return NextResponse.json({ error: central.error }, { status: 502 });
 
-    const user = await prisma.user.findFirstOrThrow({
-      where: { email: update.currentEmail, isActive: true, deletedAt: null },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: update.currentEmail }, { email: update.newEmail }],
+        isActive: true,
+        deletedAt: null,
+      },
       select: { id: true },
     });
+    if (!user) continue;
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.id },
