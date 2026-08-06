@@ -16,6 +16,7 @@ import {
   FolderKanban,
   CalendarDays,
   Briefcase,
+  PanelLeftClose,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,8 @@ interface SidebarProps {
   userRole: UserRole;
   userEmail: string;
   userAvatar?: string | null;
+  collapsed: boolean;
+  onCollapse: () => void;
 }
 
 const NavLink = memo(function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
@@ -73,7 +76,7 @@ function filterItems(items: NavItem[], userRole: UserRole) {
   return items.filter((item) => !item.roles || item.roles.includes(userRole));
 }
 
-export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarProps) {
+export function Sidebar({ userName, userRole, userEmail, userAvatar, collapsed, onCollapse }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -88,14 +91,26 @@ export function Sidebar({ userName, userRole, userEmail, userAvatar }: SidebarPr
   const initials = userName.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-sidebar text-sidebar-foreground">
+    <aside className={cn(
+      "fixed inset-y-0 left-0 z-50 w-64 flex flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-out",
+      collapsed ? "-translate-x-full" : "translate-x-0",
+    )}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-sidebar-border shrink-0">
         <Image src="/logo.png" alt="F3F" width={40} height={40} priority className="w-9 h-9 object-contain shrink-0" />
-        <div>
+        <div className="flex-1">
           <span className="font-extrabold text-sm tracking-tight text-sidebar-foreground">F3F Tasks</span>
           <p className="text-[10px] text-sidebar-foreground/40 leading-none mt-0.5 font-medium">Workspace</p>
         </div>
+        <button
+          type="button"
+          onClick={onCollapse}
+          title="Recolher barra lateral"
+          aria-label="Recolher barra lateral"
+          className="w-8 h-8 -mr-2 flex items-center justify-center rounded-md text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+        >
+          <PanelLeftClose className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Navigation */}

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { requireAuth } from "@/lib/auth";
 import { getUnreadCount, getRecentNotifications } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
-import { Sidebar } from "@/components/layout/sidebar";
+import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { TopBar } from "@/components/layout/top-bar";
 
 // Async server component — fetches unread count without blocking layout
@@ -42,20 +42,16 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-neutral-50">
-      <Sidebar
-        userName={user.name}
-        userRole={user.role}
-        userEmail={user.email}
-        userAvatar={user.avatarUrl}
-      />
-      <div className="pl-64 flex flex-col min-h-screen">
-        <Suspense fallback={<TopBar userName={user.name} unreadCount={0} userAvatar={user.avatarUrl} upcomingTasks={[]} />}>
-          <TopBarLoader userName={user.name} userId={user.userId} userAvatar={user.avatarUrl} />
-        </Suspense>
-        <main className="flex-1">
-          <div className="max-w-screen-xl mx-auto px-8 py-8">{children}</div>
-        </main>
-      </div>
+      <DashboardShell
+        user={{ name: user.name, role: user.role, email: user.email, avatarUrl: user.avatarUrl }}
+        topBar={
+          <Suspense fallback={<TopBar userName={user.name} unreadCount={0} userAvatar={user.avatarUrl} upcomingTasks={[]} />}>
+            <TopBarLoader userName={user.name} userId={user.userId} userAvatar={user.avatarUrl} />
+          </Suspense>
+        }
+      >
+        {children}
+      </DashboardShell>
       {modal}
     </div>
   );
