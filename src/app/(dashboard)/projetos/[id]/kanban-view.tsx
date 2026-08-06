@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -194,6 +194,13 @@ export function KanbanView({
 }) {
   const [taskList, setTaskList] = useState(tasks);
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // O board faz updates otimistas ao arrastar cards, por isso mantém estado
+  // próprio. Ao chegar uma atualização do servidor (criação/edição), sincroniza
+  // a lista para exibir o card novo imediatamente.
+  useEffect(() => {
+    setTaskList(tasks);
+  }, [tasks]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 

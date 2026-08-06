@@ -48,12 +48,15 @@ export function NewTaskForm({
     if (state.success && keepOpenAfterCreate) {
       formRef.current?.reset();
       setClientId(defaultClientId ?? "");
+      // O modal fica aberto para criação em sequência. Atualiza a rota de fundo
+      // para que o Kanban receba a tarefa nova sem exigir F5.
+      router.refresh();
       setJustCreated(true);
       formRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
       const t = setTimeout(() => setJustCreated(false), 2500);
       return () => clearTimeout(t);
     }
-  }, [state.success, keepOpenAfterCreate, defaultClientId]);
+  }, [state.success, keepOpenAfterCreate, defaultClientId, router]);
 
   const backHref = project ? `/projetos/${project.id}` : "/tarefas";
 
