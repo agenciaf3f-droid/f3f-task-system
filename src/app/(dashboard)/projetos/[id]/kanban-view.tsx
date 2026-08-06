@@ -84,7 +84,7 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
   const hasMeta = clientName || task.assignee || task.dueDate || task.sector || task._count.checklistItems > 0;
 
   return (
-    <div className={`bg-white border rounded-lg p-3.5 select-none cursor-grab active:cursor-grabbing transition-all ${
+    <div className={`bg-white border rounded-lg p-2.5 select-none cursor-grab active:cursor-grabbing transition-all ${
       overlay
         ? "shadow-xl ring-1 ring-blue-300 animate-card-wiggle"
         : isDragging
@@ -157,7 +157,7 @@ const DraggableCard = memo(function DraggableCard({ task }: { task: Task }) {
 function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   return (
-    <div className="flex flex-col flex-1 min-w-[310px] max-w-none">
+    <div className="flex flex-col flex-1 min-w-[230px] max-w-[360px]">
       <div className="flex items-center gap-2 mb-2.5 px-1.5">
         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[column.id] ?? "bg-neutral-400"}`} />
         <span className={`text-[11px] font-semibold uppercase tracking-wider ${STATUS_TEXT[column.id] ?? "text-neutral-500"}`}>{column.label}</span>
@@ -165,7 +165,7 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
       </div>
       <div
         ref={setNodeRef}
-        className={`flex flex-col gap-2 p-2 rounded-xl min-h-[64px] max-h-[70vh] overflow-y-auto transition-colors ${
+        className={`flex flex-col gap-2 p-2 rounded-xl min-h-[64px] max-h-[60vh] overflow-y-auto transition-colors ${
           isOver ? "bg-blue-100 ring-2 ring-inset ring-blue-300" : (STATUS_TINT[column.id] ?? "bg-neutral-100/60")
         }`}
       >

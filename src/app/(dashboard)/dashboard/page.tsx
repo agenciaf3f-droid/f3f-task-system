@@ -31,7 +31,7 @@ const DASHBOARD_COLUMNS = [
   { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
 ];
 
-async function getDashboardData(userId: string | null, companyId: string) {
+async function getDashboardData(memberId: string | null, companyId: string) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
@@ -40,37 +40,37 @@ async function getDashboardData(userId: string | null, companyId: string) {
   // "Minhas tarefas" = onde sou assignee primário ou multi-assignee.
   // Não inclui creator/watcher pra evitar poluir o dashboard de admins/managers que criam muito.
   // userId null = modo "Todos" (cargos elevados) — sem restrição de assignee, empresa toda.
-  const myTasksOR: Prisma.TaskWhereInput = userId
-    ? { OR: [{ assigneeId: userId }, { assignees: { some: { userId } } }] }
+  const memberScope: Prisma.TaskWhereInput = memberId
+    ? { OR: [{ assigneeId: memberId }, { assignees: { some: { userId: memberId } } }] }
     : {};
 
   const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
     // Pendentes minhas: todas menos done/cancelled.
     prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: myTasksOR, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
+      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
       orderBy: [{ dueDate: "asc" }],
       take: 100,
       select: boardTaskSelect,
     }),
     // Board: Concluído — só recentes (7 dias), senão a coluna cresce sem limite
     prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: myTasksOR, status: "done", completedAt: { gte: sevenDaysAgo } },
+      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "done", completedAt: { gte: sevenDaysAgo } },
       orderBy: [{ completedAt: "desc" }],
       take: 50,
       select: boardTaskSelect,
     }),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: myTasksOR },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: memberScope },
     }),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, archivedAt: null, AND: myTasksOR },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, archivedAt: null, AND: memberScope },
     }),
     prisma.task.count({
-      where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: myTasksOR },
+      where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: memberScope },
     }),
     // KPI "Em andamento" via count() dedicado (não derivar do array truncado em take:100)
     prisma.task.count({
-      where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: myTasksOR },
+      where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: memberScope },
     }),
   ]);
 
@@ -245,6 +245,7 @@ export default async function DashboardPage({
             </div>
           ) : view === "board" ? (
             <KanbanView
+              key={viewingAll ? "all" : viewingUserId}
               tasks={myTasks}
               columns={DASHBOARD_COLUMNS}
             />

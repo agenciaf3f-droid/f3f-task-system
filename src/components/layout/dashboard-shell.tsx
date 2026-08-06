@@ -49,7 +49,7 @@ export function DashboardShell({ children, topBar, user }: DashboardShellProps) 
           onClick={() => setCollapsed(false)}
           title="Abrir barra lateral"
           aria-label="Abrir barra lateral"
-          className="fixed left-3 top-3 z-40 w-10 h-10 flex items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 shadow-sm hover:text-neutral-900 hover:bg-neutral-50 transition-colors"
+          className="fixed left-0 top-1/2 z-[60] flex h-14 w-9 -translate-y-1/2 items-center justify-center rounded-r-xl border border-l-0 border-neutral-200 bg-white text-neutral-500 shadow-md hover:w-10 hover:bg-neutral-50 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all"
         >
           <PanelLeftOpen className="w-5 h-5" />
         </button>
