@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 import { generateDueNotifications } from "@/lib/notifications";
@@ -44,10 +43,12 @@ export async function GET(req: Request) {
       createdById: true,
       recurrenceRule: true,
       dueDate: true,
+      checklistItems: { select: { title: true, position: true } },
+      assignees: { select: { userId: true, assignedById: true } },
     },
   });
 
-  const payload: Prisma.TaskCreateManyInput[] = [];
+  const occurrences: Array<{ task: (typeof recurringTasks)[number]; dueDate: Date }> = [];
 
   for (const task of recurringTasks) {
     const rule = parseRecurrenceRuleFromDb(task.recurrenceRule);
@@ -59,26 +60,45 @@ export async function GET(req: Request) {
     // Só cria se próxima ocorrência for hoje ou no futuro próximo (evita backfill infinito)
     if (nextDue < today) continue;
 
-    payload.push({
-      companyId: task.companyId,
-      title: task.title,
-      description: task.description,
-      priority: task.priority,
-      assigneeId: task.assigneeId,
-      sectorId: task.sectorId,
-      clientId: task.clientId,
-      projectId: task.projectId,
-      createdById: task.createdById,
-      recurrenceRule: task.recurrenceRule ?? undefined,
-      recurrenceParentId: task.id,
-      dueDate: nextDue,
-    });
+    occurrences.push({ task, dueDate: nextDue });
   }
 
-  if (payload.length > 0) {
-    await prisma.task.createMany({ data: payload });
+  if (occurrences.length > 0) {
+    // createMany não suporta relações filhas. Criamos cada ocorrência numa
+    // transação para copiar checklist e responsáveis da tarefa recorrente.
+    await prisma.$transaction(
+      occurrences.map(({ task, dueDate }) =>
+        prisma.task.create({
+          data: {
+            companyId: task.companyId,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+            assigneeId: task.assigneeId,
+            sectorId: task.sectorId,
+            clientId: task.clientId,
+            projectId: task.projectId,
+            createdById: task.createdById,
+            recurrenceRule: task.recurrenceRule ?? undefined,
+            recurrenceParentId: task.id,
+            dueDate,
+            checklistItems: task.checklistItems.length
+              ? { create: task.checklistItems.map((item) => ({ title: item.title, position: item.position })) }
+              : undefined,
+            assignees: task.assignees.length
+              ? {
+                  create: task.assignees.map((assignee) => ({
+                    userId: assignee.userId,
+                    assignedById: assignee.assignedById,
+                  })),
+                }
+              : undefined,
+          },
+        }),
+      ),
+    );
   }
-  const created = payload.length;
+  const created = occurrences.length;
 
   // ─── Limpeza: séries DIÁRIAS mantêm só as N ocorrências mais recentes ──
   // Agrupa por (title, project_id) porque a cadeia recurrence_parent_id é linked-list

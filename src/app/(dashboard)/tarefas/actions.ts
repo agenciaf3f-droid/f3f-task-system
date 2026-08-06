@@ -219,7 +219,13 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
-    select: { status: true, assigneeId: true, title: true, projectId: true, clientId: true, sectorId: true, dueDate: true, recurrenceRule: true, description: true, priority: true, createdById: true },
+    select: {
+      status: true, assigneeId: true, title: true, projectId: true, clientId: true,
+      sectorId: true, dueDate: true, recurrenceRule: true, description: true,
+      priority: true, createdById: true,
+      checklistItems: { select: { title: true, position: true } },
+      assignees: { select: { userId: true, assignedById: true } },
+    },
   });
   if (!old) return;
 
@@ -282,6 +288,19 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
           recurrenceRule: old.recurrenceRule ?? undefined,
           recurrenceParentId: taskId,
           dueDate: nextDue,
+          // Cada ocorrência recebe itens próprios, sempre abertos, para que a
+          // conclusão de hoje não marque automaticamente a checklist futura.
+          checklistItems: old.checklistItems.length
+            ? { create: old.checklistItems.map((item) => ({ title: item.title, position: item.position })) }
+            : undefined,
+          assignees: old.assignees.length
+            ? {
+                create: old.assignees.map((assignee) => ({
+                  userId: assignee.userId,
+                  assignedById: assignee.assignedById,
+                })),
+              }
+            : undefined,
         },
       });
       if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
