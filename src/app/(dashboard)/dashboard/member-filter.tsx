@@ -1,7 +1,5 @@
 "use client";
 
-import { useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Users } from "lucide-react";
 
 interface MemberFilterProps {
@@ -13,25 +11,17 @@ interface MemberFilterProps {
 // Exceção de visibilidade: cargos elevados podem trocar de "minhas tarefas"
 // pra ver/filtrar as tarefas de qualquer membro da empresa (server valida).
 export function MemberFilter({ members, selected, view }: MemberFilterProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [isPending, startTransition] = useTransition();
-
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
 
     params.set("view", view);
     if (value) params.set("member", value);
     else params.delete("member");
 
-    // A mudança do search param já invalida e renderiza novamente o Server
-    // Component. Um router.refresh() imediatamente após push/replace cria uma
-    // corrida e pode reaplicar os dados do membro anterior.
-    startTransition(() => {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    });
+    // Navegação completa intencional: o filtro administrativo precisa sempre
+    // buscar um snapshot novo no servidor e descartar caches/estado do kanban.
+    window.location.assign(`/dashboard?${params.toString()}`);
   }
 
   return (
@@ -40,9 +30,8 @@ export function MemberFilter({ members, selected, view }: MemberFilterProps) {
       <select
         value={selected}
         onChange={onChange}
-        disabled={isPending}
         aria-label="Ver tarefas de"
-        className="text-xs text-neutral-700 bg-transparent outline-none cursor-pointer max-w-[140px] disabled:cursor-wait disabled:opacity-60"
+        className="text-xs text-neutral-700 bg-transparent outline-none cursor-pointer max-w-[140px]"
       >
         <option value="">Eu mesmo</option>
         <option value="all">Todos</option>

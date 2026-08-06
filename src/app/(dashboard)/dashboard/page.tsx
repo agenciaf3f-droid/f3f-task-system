@@ -9,6 +9,7 @@ import { ptBR } from "date-fns/locale";
 import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
 import { DashboardTaskRow } from "./dashboard-task-row";
 import { MemberFilter } from "./member-filter";
+import { DashboardGreeting } from "./dashboard-greeting";
 import { isElevated } from "@/lib/task-visibility";
 
 // Shape rico que o KanbanView espera (assignee, sector, contadores, subtasks).
@@ -77,13 +78,6 @@ async function getDashboardData(memberId: string | null, companyId: string) {
   const myTasks = [...activeMine, ...doneMine];
 
   return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount };
-}
-
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
 }
 
 export default async function DashboardPage({
@@ -165,14 +159,7 @@ export default async function DashboardPage({
     <div className="flex flex-col gap-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">
-            {getGreeting()}, {user.name.split(" ")[0]}
-          </h1>
-          <p className="text-sm text-neutral-500 mt-1 capitalize">
-            {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
-          </p>
-        </div>
+        <DashboardGreeting firstName={user.name.split(" ")[0]} initialNowIso={new Date().toISOString()} />
         <div className="flex items-center gap-3">
           {overdueCount > 0 && (
             <div className="flex items-center gap-2 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">

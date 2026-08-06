@@ -51,9 +51,14 @@ export async function updateAvatarAction(
   const file = formData.get("avatar") as File | null;
   if (!file || file.size === 0) return { error: "Selecione uma imagem." };
   if (file.size > 3 * 1024 * 1024) return { error: "Imagem deve ter no máximo 3MB." };
-  if (!file.type.startsWith("image/")) return { error: "Arquivo deve ser uma imagem." };
+  const extensionsByType: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const ext = extensionsByType[file.type];
+  if (!ext) return { error: "A imagem deve ser JPG, PNG ou WebP." };
 
-  const ext = file.name.split(".").pop() ?? "jpg";
   const path = `${user.userId}.${ext}`;
 
   const bytes = await file.arrayBuffer();
