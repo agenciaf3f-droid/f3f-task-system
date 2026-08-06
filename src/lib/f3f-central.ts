@@ -179,3 +179,47 @@ export async function centralProvisionTaskUser(params: {
 
   return { existedCentrally };
 }
+
+/**
+ * Cria uma nova identidade F3F com acesso ao Tasks.
+ * Diferente do convite administrativo, não reutiliza uma conta central já
+ * existente: o cadastro público nunca deve alterar senha ou ampliar acesso
+ * de uma identidade que já pertença a outra pessoa.
+ */
+export async function centralCreateTaskUser(params: {
+  email: string;
+  name: string;
+  password: string;
+  localUserId: string;
+}): Promise<{ created: true } | { created: false; reason: "exists" }> {
+  const admin = serviceClient();
+  if (!admin) throw new Error("F3F_CENTRAL_SERVICE_ROLE_KEY ausente");
+
+  const { email, name, password, localUserId } = params;
+  if (await findCentralUserByEmail(admin, email)) return { created: false, reason: "exists" };
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name, must_change_password: false },
+  });
+  if (error || !data.user) throw new Error(`createUser central: ${error?.message ?? "falhou"}`);
+
+  const { error: loginError } = await admin.from("f3f_logins").upsert(
+    {
+      auth_user_id: data.user.id,
+      email,
+      system: SYSTEM,
+      external_user_id: localUserId,
+      active: true,
+    },
+    { onConflict: "email,system" },
+  );
+  if (loginError) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    throw new Error(`f3f_logins upsert: ${loginError.message}`);
+  }
+
+  return { created: true };
+}

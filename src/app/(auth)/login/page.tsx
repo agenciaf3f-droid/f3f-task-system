@@ -84,6 +84,18 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-neutral-200" /></div>
+            <div className="relative flex justify-center text-xs"><span className="bg-white px-2 text-neutral-400">ou</span></div>
+          </div>
+
+          <Link
+            href="/criar-conta"
+            className="flex h-10 w-full items-center justify-center rounded-md border border-neutral-200 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+          >
+            Criar conta
+          </Link>
         </div>
 
         <p className="text-center text-xs text-neutral-400 mt-6">
