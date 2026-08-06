@@ -13,7 +13,7 @@ import { TemplateTasksEditor, type TaskRow } from "../template-tasks-editor";
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
 
-export function NewTemplateForm({ sectors, users }: { sectors: Sector[]; users: User[] }) {
+export function NewTemplateForm({ sectors, users, personal = false }: { sectors: Sector[]; users: User[]; personal?: boolean }) {
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
     createTemplateAction,
     {},
@@ -28,25 +28,37 @@ export function NewTemplateForm({ sectors, users }: { sectors: Sector[]; users: 
         <Link href="/templates" className="text-neutral-500 hover:text-neutral-900 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </Link>
-        <h1 className="text-2xl font-semibold text-neutral-900">Novo template</h1>
+        <h1 className="text-2xl font-semibold text-neutral-900">{personal ? "Criar template personalizado" : "Novo template"}</h1>
       </div>
 
       <form action={action} className="flex flex-col gap-6">
+        {personal && (
+          <>
+            <input type="hidden" name="isPersonal" value="1" />
+            <input type="hidden" name="description" value="" />
+            <input type="hidden" name="category" value="" />
+            <input type="hidden" name="sectorId" value="" />
+          </>
+        )}
         {/* Template info */}
         <div className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-neutral-700">Informações do template</h2>
+          <h2 className="text-sm font-semibold text-neutral-700">{personal ? "Seu template pessoal" : "Informações do template"}</h2>
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="name">Nome <span className="text-red-500">*</span></Label>
             <Input id="name" name="name" placeholder="Ex: Onboarding de cliente" required disabled={isPending} />
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="description">Descrição</Label>
-            <Input id="description" name="description" placeholder="Para que serve este template?" disabled={isPending} />
-          </div>
+          {personal ? (
+            <p className="text-sm text-neutral-500">Somente você poderá reutilizar este template. Administradores terão acesso apenas para visualização.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="description">Descrição</Label>
+              <Input id="description" name="description" placeholder="Para que serve este template?" disabled={isPending} />
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 gap-4">
+          {!personal && <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="category">Categoria</Label>
               <Input id="category" name="category" placeholder="Ex: Comercial, Ops..." disabled={isPending} />
@@ -65,7 +77,7 @@ export function NewTemplateForm({ sectors, users }: { sectors: Sector[]; users: 
                 </select>
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
         <TemplateTasksEditor tasks={tasks} setTasks={setTasks} users={users} isPending={isPending} />
@@ -80,7 +92,7 @@ export function NewTemplateForm({ sectors, users }: { sectors: Sector[]; users: 
         <div className="flex gap-3">
           <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Criar template
+            {personal ? "Criar template personalizado" : "Criar template"}
           </Button>
           <LinkButton variant="outline" href="/templates">Cancelar</LinkButton>
         </div>

@@ -1,24 +1,37 @@
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { FileText, Plus, Hash, Pencil } from "lucide-react";
+import { FileText, Plus, Hash, Pencil, LockKeyhole, UserRound } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ToggleTemplateButton } from "./toggle-template-button";
 import { DeleteTemplateButton } from "./delete-template-button";
+import { ActivateTemplateDialog } from "./activate-template-dialog";
 
 export default async function TemplatesPage() {
   const user = await requireAuth();
 
-  const templates = await prisma.template.findMany({
-    where: { companyId: user.companyId, deletedAt: null },
+  const canManageShared = user.role === "admin" || user.role === "manager";
+  const canViewAllPersonal = user.role === "admin";
+  const [templates, users] = await Promise.all([
+    prisma.template.findMany({
+    where: {
+      companyId: user.companyId,
+      deletedAt: null,
+      ...(canViewAllPersonal ? {} : { OR: [{ isPersonal: false }, { createdById: user.userId }] }),
+    },
     orderBy: [{ isActive: "desc" }, { position: "asc" }, { name: "asc" }],
     include: {
       sector: { select: { name: true, color: true } },
       createdBy: { select: { name: true } },
       _count: { select: { templateTasks: true } },
     },
-  });
+    }),
+    prisma.user.findMany({
+      where: { companyId: user.companyId, isActive: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
-  const canManage = user.role === "admin" || user.role === "manager";
   const active = templates.filter((t) => t.isActive);
   const inactive = templates.filter((t) => !t.isActive);
 
@@ -31,12 +44,18 @@ export default async function TemplatesPage() {
             Processos padronizados que geram tarefas com 1 clique
           </p>
         </div>
-        {canManage && (
-          <LinkButton href="/templates/novo">
+        <div className="flex items-center gap-2">
+          <LinkButton href="/templates/personalizado/novo" variant="outline">
             <Plus className="w-4 h-4 mr-2" />
-            Novo template
+            Criar template personalizado
           </LinkButton>
-        )}
+          {canManageShared && (
+            <LinkButton href="/templates/novo">
+              <Plus className="w-4 h-4 mr-2" />
+              Novo template
+            </LinkButton>
+          )}
+        </div>
       </div>
 
       {templates.length === 0 ? (
@@ -48,7 +67,7 @@ export default async function TemplatesPage() {
           <p className="text-xs text-neutral-400 mt-1 mb-5">
             Templates padronizam seus processos e economizam tempo
           </p>
-          {canManage && (
+          {canManageShared && (
             <LinkButton href="/templates/novo" size="sm">
               <Plus className="w-4 h-4 mr-2" />
               Criar primeiro template
@@ -76,7 +95,7 @@ export default async function TemplatesPage() {
                       </p>
                     )}
                   </div>
-                  {canManage && (
+                  {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
                     <LinkButton
                       href={`/templates/${template.id}/editar`}
                       variant="outline"
@@ -109,18 +128,40 @@ export default async function TemplatesPage() {
                       {template.category}
                     </span>
                   )}
+                  {template.isPersonal && (
+                    <span className="flex items-center gap-1 bg-violet-50 text-violet-700 border border-violet-100 px-2 py-0.5 rounded-full font-medium">
+                      <LockKeyhole className="w-3 h-3" />
+                      Personalizado
+                    </span>
+                  )}
+                  {template.isPersonal && canViewAllPersonal && template.createdById !== user.userId && (
+                    <span className="flex items-center gap-1 text-neutral-400">
+                      <UserRound className="w-3 h-3" />
+                      {template.createdBy.name}
+                    </span>
+                  )}
                   {template.useCount > 0 && (
                     <span className="text-neutral-400">usado {template.useCount}×</span>
                   )}
                 </div>
 
                 {/* Footer actions */}
-                {canManage && (
-                  <div className="flex items-center gap-2 pt-1 mt-auto border-t border-neutral-100">
+                <div className="flex items-center gap-2 pt-1 mt-auto border-t border-neutral-100">
+                  {(!template.isPersonal || template.createdById === user.userId) && (
+                    <ActivateTemplateDialog
+                      templateId={template.id}
+                      templateName={template.name}
+                      taskCount={template._count.templateTasks}
+                      users={users}
+                    />
+                  )}
+                  {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
+                  <div className="flex items-center gap-2">
                     <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
                     <DeleteTemplateButton templateId={template.id} templateName={template.name} />
                   </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -143,7 +184,7 @@ export default async function TemplatesPage() {
                         {template._count.templateTasks} tarefa{template._count.templateTasks !== 1 ? "s" : ""}
                       </p>
                     </div>
-                    {canManage && (
+                    {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
                       <div className="flex items-center gap-2 shrink-0">
                         <LinkButton
                           href={`/templates/${template.id}/editar`}

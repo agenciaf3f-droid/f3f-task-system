@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { EditTemplateForm } from "./form";
 
@@ -8,7 +8,7 @@ export default async function EditarTemplatePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireAuth();
   const { id } = await params;
 
   const [template, sectors, users] = await Promise.all([
@@ -34,6 +34,10 @@ export default async function EditarTemplatePage({
   ]);
 
   if (!template) notFound();
+  const canEdit = template.isPersonal
+    ? template.createdById === user.userId
+    : user.role === "admin" || user.role === "manager";
+  if (!canEdit) notFound();
 
   const initialTasks = template.templateTasks.map((t) => ({
     id: t.id,
@@ -57,6 +61,7 @@ export default async function EditarTemplatePage({
       initialTasks={initialTasks}
       sectors={sectors}
       users={users}
+      personal={template.isPersonal}
     />
   );
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
 import type { TaskPriority } from "@prisma/client";
 
 const templateSchema = z.object({
@@ -18,7 +18,11 @@ export async function createTemplateAction(
   _prev: { error?: string },
   formData: FormData,
 ): Promise<{ error?: string }> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireAuth();
+  const isPersonal = formData.get("isPersonal") === "1";
+  if (!isPersonal && user.role !== "admin" && user.role !== "manager") {
+    return { error: "Você não tem permissão para criar templates compartilhados." };
+  }
 
   const parsed = templateSchema.safeParse({
     name: formData.get("name"),
@@ -48,8 +52,9 @@ export async function createTemplateAction(
       createdById: user.userId,
       name: parsed.data.name,
       description: parsed.data.description || null,
-      category: parsed.data.category || null,
-      sectorId: parsed.data.sectorId || null,
+      category: isPersonal ? null : parsed.data.category || null,
+      sectorId: isPersonal ? null : parsed.data.sectorId || null,
+      isPersonal,
     },
   });
 
@@ -93,7 +98,7 @@ export async function updateTemplateAction(
   _prev: { error?: string },
   formData: FormData,
 ): Promise<{ error?: string }> {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireAuth();
 
   const parsed = templateSchema.safeParse({
     name: formData.get("name"),
@@ -118,14 +123,20 @@ export async function updateTemplateAction(
     where: { id: templateId, companyId: user.companyId, deletedAt: null },
   });
   if (!existing) return { error: "Template não encontrado." };
+  if (existing.isPersonal && existing.createdById !== user.userId) {
+    return { error: "Somente o criador pode editar este template personalizado." };
+  }
+  if (!existing.isPersonal && user.role !== "admin" && user.role !== "manager") {
+    return { error: "Você não tem permissão para editar este template." };
+  }
 
   await prisma.template.update({
     where: { id: templateId },
     data: {
       name: parsed.data.name,
       description: parsed.data.description || null,
-      category: parsed.data.category || null,
-      sectorId: parsed.data.sectorId || null,
+      category: existing.isPersonal ? null : parsed.data.category || null,
+      sectorId: existing.isPersonal ? null : parsed.data.sectorId || null,
     },
   });
 
@@ -175,29 +186,47 @@ export async function activateTemplateAction(
   const user = await requireAuth();
 
   const template = await prisma.template.findFirst({
-    where: { id: templateId, companyId: user.companyId, isActive: true },
-    include: { templateTasks: { orderBy: { position: "asc" } } },
+    where: {
+      id: templateId,
+      companyId: user.companyId,
+      isActive: true,
+      deletedAt: null,
+      OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
+    },
+    include: {
+      templateTasks: {
+        orderBy: { position: "asc" },
+        include: { checklistItems: { orderBy: { position: "asc" } } },
+      },
+    },
   });
   if (!template) return { error: "Template não encontrado." };
 
   const start = startDate ? new Date(startDate) : new Date();
   const resolvedAssignee = assigneeId || null;
 
-  await prisma.task.createMany({
-    data: template.templateTasks.map((tt) => ({
-      companyId: user.companyId,
-      templateId: template.id,
-      sectorId: template.sectorId,
-      title: tt.title,
-      description: tt.description,
-      priority: tt.priority,
-      assigneeId: resolvedAssignee,
-      createdById: user.userId,
-      dueDate: tt.daysToComplete
-        ? new Date(start.getTime() - tt.daysToComplete * 86400000)
-        : null,
-    })),
-  });
+  await prisma.$transaction(
+    template.templateTasks.map((tt) =>
+      prisma.task.create({
+        data: {
+          companyId: user.companyId,
+          templateId: template.id,
+          sectorId: template.sectorId,
+          title: tt.title,
+          description: tt.description,
+          priority: tt.priority,
+          assigneeId: resolvedAssignee,
+          createdById: user.userId,
+          dueDate: tt.daysToComplete
+            ? new Date(start.getTime() - tt.daysToComplete * 86400000)
+            : null,
+          checklistItems: tt.checklistItems.length
+            ? { create: tt.checklistItems.map((item) => ({ title: item.title, position: item.position })) }
+            : undefined,
+        },
+      }),
+    ),
+  );
 
   await prisma.template.update({
     where: { id: templateId },
@@ -211,11 +240,13 @@ export async function activateTemplateAction(
 }
 
 export async function toggleTemplateActiveAction(templateId: string) {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireAuth();
   const template = await prisma.template.findFirst({
     where: { id: templateId, companyId: user.companyId },
   });
   if (!template) return;
+  if (template.isPersonal && template.createdById !== user.userId) return;
+  if (!template.isPersonal && user.role !== "admin" && user.role !== "manager") return;
   await prisma.template.update({
     where: { id: templateId },
     data: { isActive: !template.isActive },
@@ -224,11 +255,17 @@ export async function toggleTemplateActiveAction(templateId: string) {
 }
 
 export async function deleteTemplateAction(templateId: string) {
-  const user = await requireRole(["admin", "manager"]);
+  const user = await requireAuth();
   const template = await prisma.template.findFirst({
     where: { id: templateId, companyId: user.companyId, deletedAt: null },
   });
   if (!template) return { error: "Template não encontrado." };
+  if (template.isPersonal && template.createdById !== user.userId) {
+    return { error: "Somente o criador pode excluir este template personalizado." };
+  }
+  if (!template.isPersonal && user.role !== "admin" && user.role !== "manager") {
+    return { error: "Você não tem permissão para excluir este template." };
+  }
 
   await prisma.template.update({
     where: { id: templateId },

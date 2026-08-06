@@ -397,6 +397,7 @@ model Template {
   name        String   @db.VarChar(255)
   description String?
   category    String?  @db.VarChar(100)
+  isPersonal  Boolean  @default(false) @map("is_personal")
   isActive    Boolean  @default(true) @map("is_active")
   useCount    Int      @default(0) @map("use_count")
   position    Int      @default(0)
@@ -413,6 +414,7 @@ model Template {
 
   @@index([companyId])
   @@index([sectorId])
+  @@index([companyId, isPersonal, createdById])
   @@map("templates")
 }
 

@@ -24,9 +24,10 @@ interface EditTemplateFormProps {
   initialTasks: TaskRow[];
   sectors: Sector[];
   users: User[];
+  personal?: boolean;
 }
 
-export function EditTemplateForm({ templateId, initialData, initialTasks, sectors, users }: EditTemplateFormProps) {
+export function EditTemplateForm({ templateId, initialData, initialTasks, sectors, users, personal = false }: EditTemplateFormProps) {
   const updateAction = updateTemplateAction.bind(null, templateId);
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
     updateAction,
@@ -45,10 +46,16 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
         <Link href="/templates" className="text-neutral-500 hover:text-neutral-900 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </Link>
-        <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">Editar template</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900">{personal ? "Editar template personalizado" : "Editar template"}</h1>
       </div>
 
       <form action={action} className="flex flex-col gap-6">
+        {personal && (
+          <>
+            <input type="hidden" name="category" value="" />
+            <input type="hidden" name="sectorId" value="" />
+          </>
+        )}
         {/* Template info */}
         <div className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-neutral-700">Informações do template</h2>
@@ -76,7 +83,7 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {!personal && <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="category">Categoria</Label>
               <Input
@@ -104,7 +111,7 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
                 </select>
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
         <TemplateTasksEditor tasks={tasks} setTasks={setTasks} users={users} isPending={isPending} />
