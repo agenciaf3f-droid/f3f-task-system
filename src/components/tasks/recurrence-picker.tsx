@@ -15,6 +15,8 @@ export interface RecurrenceRule {
 interface Props {
   name?: string;          // hidden input field name (default: "recurrenceRule")
   defaultValue?: RecurrenceRule | null;
+  value?: RecurrenceRule | null;
+  onValueChange?: (rule: RecurrenceRule | null) => void;
   disabled?: boolean;
 }
 
@@ -45,10 +47,23 @@ function describeRule(r: RecurrenceRule | null): string {
   }
 }
 
-export function RecurrencePicker({ name = "recurrenceRule", defaultValue = null, disabled }: Props) {
-  const [rule, setRule] = useState<RecurrenceRule | null>(defaultValue);
+export function RecurrencePicker({
+  name = "recurrenceRule",
+  defaultValue = null,
+  value,
+  onValueChange,
+  disabled,
+}: Props) {
+  const [internalRule, setInternalRule] = useState<RecurrenceRule | null>(defaultValue);
+  const rule = value === undefined ? internalRule : value;
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  function setRule(next: RecurrenceRule | null | ((current: RecurrenceRule | null) => RecurrenceRule | null)) {
+    const resolved = typeof next === "function" ? next(rule) : next;
+    if (value === undefined) setInternalRule(resolved);
+    onValueChange?.(resolved);
+  }
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -77,11 +92,11 @@ export function RecurrencePicker({ name = "recurrenceRule", defaultValue = null,
   }
 
   const hasRule = rule !== null;
-  const value = rule ? JSON.stringify(rule) : "";
+  const serializedValue = rule ? JSON.stringify(rule) : "";
 
   return (
     <div ref={ref} className="relative">
-      <input type="hidden" name={name} value={value} />
+      <input type="hidden" name={name} value={serializedValue} />
       <button
         type="button"
         disabled={disabled}

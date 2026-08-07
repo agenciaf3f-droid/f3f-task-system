@@ -1,19 +1,38 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2 } from "lucide-react";
-import { RecurrencePicker } from "@/components/tasks/recurrence-picker";
+import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2, Save } from "lucide-react";
+import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
 import { ClientPicker } from "@/components/tasks/client-picker";
+import { TaskTemplatePicker, type TaskTemplateOption } from "@/components/tasks/task-template-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
 interface Client { id: string; name: string }
 interface Project { id: string; name: string; client: { name: string } }
+
+interface TaskDraft {
+  title: string;
+  description: string;
+  clientId: string;
+  sectorId: string;
+  assigneeId: string;
+  dueDate: string;
+  recurrenceRule: RecurrenceRule | null;
+  templateId: string;
+}
+
+function setFormValue(form: HTMLFormElement, name: string, value: string) {
+  const field = form.elements.namedItem(name);
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) {
+    field.value = value;
+  }
+}
 
 export function NewTaskForm({
   sectors,
@@ -23,6 +42,8 @@ export function NewTaskForm({
   keepOpenAfterCreate = false,
   defaultAssigneeId,
   defaultClientId,
+  draftKey,
+  templates,
 }: {
   sectors: Sector[];
   users: User[];
@@ -33,32 +54,122 @@ export function NewTaskForm({
   defaultAssigneeId?: string;
   /** Pré-seleciona o cliente ao criar uma tarefa a partir do perfil dele. */
   defaultClientId?: string;
+  /** Isola o rascunho por usuário e contexto (avulsa, cliente ou projeto). */
+  draftKey: string;
+  templates: TaskTemplateOption[];
 }) {
   const [state, action, isPending] = useActionState<
-    { error?: string; success?: boolean },
+    { error?: string; success?: boolean; createdTaskId?: string; redirectTo?: string },
     FormData
   >(createTaskAction, {});
 
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const preservedDraftRef = useRef<TaskDraft | null>(null);
+  const handledCreatedTaskRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
   const [justCreated, setJustCreated] = useState(false);
   const [clientId, setClientId] = useState(defaultClientId ?? "");
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
+  const [preserveForNext, setPreserveForNext] = useState(true);
+  const [templateId, setTemplateId] = useState("");
+  const draftStorageKey = `f3f-task-draft:${draftKey}:v1`;
+
+  function collectDraft(overrides?: Partial<TaskDraft>): TaskDraft | null {
+    const form = formRef.current;
+    if (!form) return null;
+    const data = new FormData(form);
+    return {
+      title: String(data.get("title") ?? ""),
+      description: String(data.get("description") ?? ""),
+      clientId,
+      sectorId: String(data.get("sectorId") ?? ""),
+      assigneeId: String(data.get("assigneeId") ?? ""),
+      dueDate: String(data.get("dueDate") ?? ""),
+      recurrenceRule,
+      templateId,
+      ...overrides,
+    };
+  }
+
+  const storeDraft = useCallback((draft: TaskDraft | null) => {
+    if (!draft) return;
+    localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+  }, [draftStorageKey]);
+
+  function scheduleDraftSave() {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => storeDraft(collectDraft()), 200);
+  }
 
   useEffect(() => {
-    if (state.success && keepOpenAfterCreate) {
-      formRef.current?.reset();
-      setClientId(defaultClientId ?? "");
+    const form = formRef.current;
+    const raw = localStorage.getItem(draftStorageKey);
+    if (!form || !raw) return;
+
+    try {
+      const draft = JSON.parse(raw) as TaskDraft;
+      setFormValue(form, "title", draft.title ?? "");
+      setFormValue(form, "description", draft.description ?? "");
+      setFormValue(form, "sectorId", draft.sectorId ?? "");
+      setFormValue(form, "assigneeId", defaultAssigneeId ?? draft.assigneeId ?? "");
+      setFormValue(form, "dueDate", draft.dueDate ?? "");
+      const animationFrameId = window.requestAnimationFrame(() => {
+        setClientId(defaultClientId ?? draft.clientId ?? "");
+        setRecurrenceRule(draft.recurrenceRule ?? null);
+        setTemplateId(draft.templateId ?? "");
+      });
+      return () => window.cancelAnimationFrame(animationFrameId);
+    } catch {
+      localStorage.removeItem(draftStorageKey);
+    }
+  }, [defaultAssigneeId, defaultClientId, draftStorageKey]);
+
+  useEffect(() => () => {
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!state.createdTaskId || handledCreatedTaskRef.current === state.createdTaskId) return;
+    handledCreatedTaskRef.current = state.createdTaskId;
+
+    if (!keepOpenAfterCreate) {
+      localStorage.removeItem(draftStorageKey);
+      router.push(state.redirectTo ?? "/dashboard");
+      return;
+    }
+
+    const form = formRef.current;
+    if (form) {
+      form.reset();
+      const previous = preservedDraftRef.current;
+
+      if (preserveForNext && previous) {
+        const nextDraft = { ...previous, title: "" };
+        setFormValue(form, "description", nextDraft.description);
+        setFormValue(form, "sectorId", nextDraft.sectorId);
+        setFormValue(form, "assigneeId", nextDraft.assigneeId);
+        setFormValue(form, "dueDate", nextDraft.dueDate);
+        setClientId(nextDraft.clientId);
+        setRecurrenceRule(nextDraft.recurrenceRule);
+        setTemplateId(nextDraft.templateId);
+        storeDraft(nextDraft);
+      } else {
+        setClientId(defaultClientId ?? "");
+        setRecurrenceRule(null);
+        setTemplateId("");
+        localStorage.removeItem(draftStorageKey);
+      }
+
       // O modal fica aberto para criação em sequência. Atualiza a rota de fundo
       // para que o Kanban receba a tarefa nova sem exigir F5.
       router.refresh();
       setJustCreated(true);
-      formRef.current?.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
+      form.querySelector<HTMLInputElement>('input[name="title"]')?.focus();
       const t = setTimeout(() => setJustCreated(false), 2500);
       return () => clearTimeout(t);
     }
-  }, [state.success, keepOpenAfterCreate, defaultClientId, router]);
-
-  const backHref = project ? `/projetos/${project.id}` : "/tarefas";
+  }, [state.createdTaskId, state.redirectTo, keepOpenAfterCreate, preserveForNext, defaultClientId, draftStorageKey, router, storeDraft]);
 
   function handleClose() {
     // router.back() fecha o modal interceptado e também volta na página standalone
@@ -87,7 +198,18 @@ export function NewTaskForm({
         </div>
       </div>
 
-      <form ref={formRef} action={action} className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5">
+      <form
+        ref={formRef}
+        action={action}
+        onInput={scheduleDraftSave}
+        onChange={scheduleDraftSave}
+        onSubmit={() => {
+          const draft = collectDraft();
+          preservedDraftRef.current = draft;
+          storeDraft(draft);
+        }}
+        className="bg-white border border-neutral-200 rounded-xl p-6 flex flex-col gap-5"
+      >
         {/* Hidden projectId */}
         {project && <input type="hidden" name="projectId" value={project.id} />}
         {keepOpenAfterCreate && <input type="hidden" name="keepOpen" value="1" />}
@@ -107,6 +229,19 @@ export function NewTaskForm({
           />
         </div>
 
+        <div className="flex flex-col gap-1.5">
+          <Label>Template da tarefa <span className="font-normal text-neutral-400">(opcional)</span></Label>
+          <TaskTemplatePicker
+            templates={templates}
+            value={templateId}
+            onValueChange={(value) => {
+              setTemplateId(value);
+              storeDraft(collectDraft({ templateId: value }));
+            }}
+            disabled={isPending}
+          />
+        </div>
+
         {!project && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="clientId">Cliente</Label>
@@ -115,7 +250,10 @@ export function NewTaskForm({
               name="clientId"
               clients={clients}
               value={clientId}
-              onValueChange={setClientId}
+              onValueChange={(value) => {
+                setClientId(value);
+                storeDraft(collectDraft({ clientId: value }));
+              }}
               disabled={isPending}
             />
           </div>
@@ -175,7 +313,36 @@ export function NewTaskForm({
 
         <div className="flex flex-col gap-1.5">
           <Label>Repetição</Label>
-          <RecurrencePicker disabled={isPending} />
+          <RecurrencePicker
+            value={recurrenceRule}
+            onValueChange={(value) => {
+              setRecurrenceRule(value);
+              storeDraft(collectDraft({ recurrenceRule: value }));
+            }}
+            disabled={isPending}
+          />
+        </div>
+
+        <div className="rounded-lg border border-blue-100 bg-blue-50/70 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-xs font-medium text-blue-800">
+            <Save className="h-3.5 w-3.5" />
+            Rascunho salvo automaticamente neste dispositivo
+          </div>
+          {keepOpenAfterCreate && (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 border-t border-blue-100 pt-2 text-xs text-blue-900">
+              <input
+                type="checkbox"
+                checked={preserveForNext}
+                onChange={(event) => setPreserveForNext(event.target.checked)}
+                disabled={isPending}
+                className="mt-0.5 h-3.5 w-3.5 accent-blue-600"
+              />
+              <span>
+                <strong>Manter preenchimento para a próxima tarefa.</strong>
+                <span className="block font-normal text-blue-700">Depois de criar, somente o título será limpo.</span>
+              </span>
+            </label>
+          )}
         </div>
 
         {state.error && (

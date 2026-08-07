@@ -56,6 +56,7 @@ const taskSchema = z.object({
   projectId: optUuid,
   priority: optStr,
   dueDate: optStr,
+  templateId: optUuid,
 });
 
 const createTaskSchema = taskSchema.extend({
@@ -107,7 +108,7 @@ async function resolveCompanySector(
 export async function createTaskAction(
   _prev: { error?: string; success?: boolean },
   formData: FormData,
-): Promise<{ error?: string; success?: boolean }> {
+): Promise<{ error?: string; success?: boolean; createdTaskId?: string; redirectTo?: string }> {
   const user = await requireAuth();
 
   // Quando keepOpen=1 (modal "criar várias"), retornamos { success } em vez de redirect
@@ -122,13 +123,14 @@ export async function createTaskAction(
     projectId: formData.get("projectId"),
     priority: formData.get("priority"),
     dueDate: formData.get("dueDate"),
+    templateId: formData.get("templateId"),
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate } = parsed.data;
+  const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate, templateId } = parsed.data;
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   if (!validAssigneeId) return { error: "Responsável inválido." };
@@ -149,26 +151,71 @@ export async function createTaskAction(
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
-  const task = await prisma.task.create({
-    data: {
-      companyId: user.companyId,
-      title,
-      description: description || null,
-      priority: safePriority,
-      assigneeId: validAssigneeId,
-      sectorId: validSectorId,
-      projectId: project?.id ?? null,
-      clientId: validClientId,
-      createdById: user.userId,
-      dueDate: parsedDueDate,
-      recurrenceRule: recurrenceRule ?? undefined,
-      assignees: {
-        create: {
-          userId: validAssigneeId,
-          assignedById: user.userId,
+  const template = templateId
+    ? await prisma.template.findFirst({
+        where: {
+          id: templateId,
+          companyId: user.companyId,
+          isActive: true,
+          deletedAt: null,
+          OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
         },
+        include: {
+          templateTasks: {
+            orderBy: { position: "asc" },
+            include: { checklistItems: { orderBy: { position: "asc" } } },
+          },
+        },
+      })
+    : null;
+  if (templateId && !template) return { error: "Template inválido ou sem permissão de uso." };
+
+  const templateChecklistItems = template?.templateTasks.flatMap((templateTask) =>
+    templateTask.checklistItems.length > 0
+      ? templateTask.checklistItems.map((item) => item.title)
+      : [templateTask.title],
+  ) ?? [];
+
+  const task = await prisma.$transaction(async (transaction) => {
+    const createdTask = await transaction.task.create({
+      data: {
+        companyId: user.companyId,
+        title,
+        description: description || null,
+        priority: safePriority,
+        assigneeId: validAssigneeId,
+        sectorId: validSectorId,
+        projectId: project?.id ?? null,
+        clientId: validClientId,
+        templateId: template?.id ?? null,
+        createdById: user.userId,
+        dueDate: parsedDueDate,
+        recurrenceRule: recurrenceRule ?? undefined,
+        assignees: {
+          create: {
+            userId: validAssigneeId,
+            assignedById: user.userId,
+          },
+        },
+        checklistItems: templateChecklistItems.length
+          ? {
+              create: templateChecklistItems.map((itemTitle, position) => ({
+                title: itemTitle,
+                position,
+              })),
+            }
+          : undefined,
       },
-    },
+    });
+
+    if (template) {
+      await transaction.template.update({
+        where: { id: template.id },
+        data: { useCount: { increment: 1 } },
+      });
+    }
+
+    return createdTask;
   });
 
   await logActivity({
@@ -208,10 +255,11 @@ export async function createTaskAction(
   revalidatePath("/dashboard");
   if (projectId) revalidatePath(`/projetos/${projectId}`);
 
-  if (keepOpen) return { success: true };
-
-  if (projectId) redirect(`/projetos/${projectId}`);
-  redirect("/dashboard");
+  return {
+    success: true,
+    createdTaskId: task.id,
+    redirectTo: keepOpen ? undefined : projectId ? `/projetos/${projectId}` : "/dashboard",
+  };
 }
 
 export async function updateTaskStatusAction(taskId: string, status: TaskStatus) {

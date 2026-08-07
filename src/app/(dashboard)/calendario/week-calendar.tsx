@@ -52,10 +52,6 @@ function styleForHost(hostId: string) {
   return HOST_EVENT_STYLES[Math.abs(hash) % HOST_EVENT_STYLES.length];
 }
 
-function firstName(name: string) {
-  return name.trim().split(" ")[0];
-}
-
 const DAY_NAMES = ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."];
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -117,7 +113,7 @@ const DayCell = memo(function DayCell({
   onOpenDay,
   onHoverOverflow,
 }: DayCellProps) {
-  const VISIBLE_CAP = 4;
+  const VISIBLE_CAP = 6;
   const visible = dayMeetings.slice(0, VISIBLE_CAP);
   const overflow = dayMeetings.length - visible.length;
 
@@ -125,20 +121,20 @@ const DayCell = memo(function DayCell({
     <div
       key={dateStr}
       className={`
-        group relative px-1 py-1.5 flex flex-col gap-0.5 overflow-hidden min-h-0 transition-colors
+        group relative px-1.5 py-2 flex flex-col gap-1 overflow-hidden min-h-0 transition-colors
         ${isLastRow ? "" : "border-b border-slate-200/80"}
         ${isLastCol ? "" : "border-r border-slate-200/80"}
         ${isCurrentMonth ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/60"}
       `}
     >
       {/* Date number (top-left, estilo Google) */}
-      <div className="flex h-7 shrink-0 items-center px-0.5">
+      <div className="flex h-8 shrink-0 items-center px-0.5">
         {isToday ? (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[12px] font-semibold text-white shadow-sm shadow-blue-200">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white shadow-sm shadow-blue-200">
             {day.getUTCDate()}
           </span>
         ) : (
-          <span className={`px-1.5 text-[12px] font-medium ${
+          <span className={`px-1.5 text-sm font-medium ${
             isCurrentMonth ? "text-slate-600" : "text-slate-300"
           }`}>
             {day.getUTCDate()}
@@ -152,7 +148,7 @@ const DayCell = memo(function DayCell({
       )}
 
       {/* Eventos compactos com overflow no padrão do Google Calendar. */}
-      <div className="flex min-h-0 flex-col gap-0.5">
+      <div className="flex min-h-0 flex-col gap-1">
         {visible.map((m) => {
           const eventStyle = styleForHost(m.hostId);
           const isOwn = m.hostId === userId;
@@ -163,12 +159,12 @@ const DayCell = memo(function DayCell({
           return (
             <div
               key={m.id}
-              className={`group/m relative flex h-[22px] items-center gap-1 rounded-md border-l-[3px] px-1.5 text-[11px] leading-none transition-colors ${eventStyle}`}
+              className={`group/m relative flex h-[30px] items-center gap-1.5 rounded-md border-l-[3px] px-2 text-xs leading-none transition-colors ${eventStyle}`}
               title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
             >
-              {m.isRecurring && <Repeat className="h-2.5 w-2.5 shrink-0 opacity-60" />}
+              {m.isRecurring && <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" />}
               <span className="shrink-0 font-semibold tabular-nums">{m.startTime}</span>
-              <span className="truncate font-medium">{firstName(displayName)}</span>
+              <span className="truncate font-medium">{displayName}</span>
               {isOwn && (
                 <button
                   onClick={() => onCancelClick(m)}
@@ -176,7 +172,7 @@ const DayCell = memo(function DayCell({
                   className="ml-auto rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover/m:opacity-100 focus-visible:opacity-100"
                   aria-label="Cancelar"
                 >
-                  <X className="w-2.5 h-2.5" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -193,7 +189,7 @@ const DayCell = memo(function DayCell({
             aria-haspopup="dialog"
             aria-label={`Ver todas as ${dayMeetings.length} reuniões de ${formatDayTitle(dateStr)}`}
             title="Clique ou pressione Espaço para ver todas"
-            className="w-fit rounded-md px-2 py-0.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="w-fit rounded-md px-2 py-1 text-left text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             mais {overflow}
           </button>
@@ -315,15 +311,11 @@ export function WeekCalendar({
   const year = monthRef.getUTCFullYear();
   const todayStr = todayInBrazil();
 
-  const days = useMemo(
-    () =>
-      Array.from({ length: 42 }, (_, i) => {
-        const d = new Date(gridStart);
-        d.setUTCDate(gridStart.getUTCDate() + i);
-        return d;
-      }),
-    [gridStartISO]
-  );
+  const days = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart);
+    d.setUTCDate(gridStart.getUTCDate() + i);
+    return d;
+  });
 
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, Meeting[]>();
@@ -357,7 +349,8 @@ export function WeekCalendar({
 
   const navigateMonth = useCallback(
     (delta: number) => {
-      const next = new Date(Date.UTC(monthRef.getUTCFullYear(), monthRef.getUTCMonth() + delta, 1));
+      const month = new Date(monthRefIso);
+      const next = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + delta, 1));
       router.push(`/calendario?month=${toMonthStr(next)}`);
     },
     [monthRefIso, router]
@@ -393,7 +386,7 @@ export function WeekCalendar({
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-160px)]">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 gap-4 flex-wrap">
         <div className="flex items-center gap-4">
@@ -455,13 +448,13 @@ export function WeekCalendar({
       </div>
 
       {/* Month grid */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* Weekday headers */}
-        <div className="grid shrink-0 grid-cols-7 border-b border-slate-200 bg-slate-50/70">
+        <div className="grid min-w-[1260px] grid-cols-7 border-b border-slate-200 bg-slate-50/70">
           {DAY_NAMES.map((name) => (
             <div
               key={name}
-              className="border-r border-slate-200/80 py-2.5 text-center text-[10px] font-semibold tracking-[0.12em] text-slate-500 last:border-r-0"
+              className="border-r border-slate-200/80 py-3 text-center text-xs font-semibold tracking-[0.12em] text-slate-500 last:border-r-0"
             >
               {name}
             </div>
@@ -469,7 +462,7 @@ export function WeekCalendar({
         </div>
 
         {/* Days */}
-        <div className="grid grid-cols-7 grid-rows-6 flex-1 min-h-0">
+        <div className="grid min-w-[1260px] grid-cols-7 auto-rows-[270px]">
           {days.map((day, idx) => {
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
