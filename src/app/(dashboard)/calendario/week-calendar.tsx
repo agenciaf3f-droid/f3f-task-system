@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Link2, Check, Pencil, X, Repeat } from "lucide-react";
-import { useState, useTransition, useMemo, useCallback, memo } from "react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, X } from "lucide-react";
+import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
 import { cancelMeetingAction, updateCalendarSlugAction, type CancelScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Meeting = {
   id: string;
@@ -65,6 +72,19 @@ function toMonthStr(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function formatDayTitle(dateStr: string): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const formatted = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
 type DayCellProps = {
   day: Date;
   dateStr: string;
@@ -77,6 +97,8 @@ type DayCellProps = {
   userId: string;
   cancelling: boolean;
   onCancelClick: (m: Meeting) => void;
+  onOpenDay: (dateStr: string) => void;
+  onHoverOverflow: (dateStr: string | null) => void;
 };
 
 const DayCell = memo(function DayCell({
@@ -91,6 +113,8 @@ const DayCell = memo(function DayCell({
   userId,
   cancelling,
   onCancelClick,
+  onOpenDay,
+  onHoverOverflow,
 }: DayCellProps) {
   const VISIBLE_CAP = 3;
   const visible = dayMeetings.slice(0, VISIBLE_CAP);
@@ -159,14 +183,78 @@ const DayCell = memo(function DayCell({
           );
         })}
         {overflow > 0 && (
-          <span className="px-1.5 text-[11px] text-slate-500 font-medium">
-            Mais {overflow}
-          </span>
+          <button
+            type="button"
+            onClick={() => onOpenDay(dateStr)}
+            onMouseEnter={() => onHoverOverflow(dateStr)}
+            onMouseLeave={() => onHoverOverflow(null)}
+            onFocus={() => onHoverOverflow(dateStr)}
+            onBlur={() => onHoverOverflow(null)}
+            aria-haspopup="dialog"
+            aria-label={`Ver todas as ${dayMeetings.length} reuniões de ${formatDayTitle(dateStr)}`}
+            title="Clique ou pressione Espaço para ver todas"
+            className="w-fit rounded px-1.5 py-0.5 text-left text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            + {overflow} {overflow === 1 ? "reunião" : "reuniões"}
+          </button>
         )}
       </div>
     </div>
   );
 });
+
+function DayMeetingsDialog({
+  dateStr,
+  meetings,
+  open,
+  onOpenChange,
+}: {
+  dateStr: string | null;
+  meetings: Meeting[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0">
+        <DialogHeader className="border-b border-slate-100 px-5 py-4">
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
+            <CalendarDays className="h-4 w-4 text-blue-600" />
+            {dateStr ? formatDayTitle(dateStr) : "Reuniões do dia"}
+          </DialogTitle>
+          <DialogDescription>
+            {meetings.length} {meetings.length === 1 ? "reunião agendada" : "reuniões agendadas"} neste dia.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[60vh] overflow-y-auto p-3">
+          <div className="flex flex-col gap-1.5">
+            {meetings.map((meeting) => {
+              const displayName = meeting.clientName || meeting.hostName;
+              return (
+                <div
+                  key={meeting.id}
+                  className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50"
+                >
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorForHost(meeting.hostId)}`} />
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums text-slate-700">
+                      <Clock className="h-3.5 w-3.5 text-slate-400" />
+                      {meeting.startTime}–{meeting.endTime}
+                    </span>
+                    <span className="truncate text-sm font-medium text-slate-900">{displayName}</span>
+                    {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
+                  </div>
+                  <span className="shrink-0 text-xs text-slate-500">{meeting.hostName}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function WeekCalendar({
   gridStart: gridStartISO,
@@ -196,6 +284,8 @@ export function WeekCalendar({
   const [savingSlug, startSaveSlug] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
+  const [openDayDate, setOpenDayDate] = useState<string | null>(null);
+  const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
   // "Minhas" mantém também reuniões shared (Daily 10h, Reunião de Gestores)
   // que valem pra todo mundo
@@ -244,6 +334,21 @@ export function WeekCalendar({
     }
     return map;
   }, [visibleMeetings]);
+
+  const openDayMeetings = openDayDate ? meetingsByDate.get(openDayDate) ?? [] : [];
+
+  useEffect(() => {
+    if (!hoveredOverflowDate) return;
+
+    function openQuickLook(event: KeyboardEvent) {
+      if (event.code !== "Space" || event.repeat) return;
+      event.preventDefault();
+      setOpenDayDate(hoveredOverflowDate);
+    }
+
+    window.addEventListener("keydown", openQuickLook);
+    return () => window.removeEventListener("keydown", openQuickLook);
+  }, [hoveredOverflowDate]);
 
   const availableDays = useMemo(
     () => new Set(availability.map((a) => a.dayOfWeek)),
@@ -389,11 +494,20 @@ export function WeekCalendar({
                 userId={userId}
                 cancelling={cancelling}
                 onCancelClick={handleCancelClick}
+                onOpenDay={setOpenDayDate}
+                onHoverOverflow={setHoveredOverflowDate}
               />
             );
           })}
         </div>
       </div>
+
+      <DayMeetingsDialog
+        dateStr={openDayDate}
+        meetings={openDayMeetings}
+        open={openDayDate !== null}
+        onOpenChange={(open) => { if (!open) setOpenDayDate(null); }}
+      />
 
       {/* Booking link */}
       <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 flex-wrap">
