@@ -33,22 +33,23 @@ type Availability = {
   endTime: string;
 };
 
-// Cor do bolinha por gestor — estilo Google Calendar
-const HOST_DOT_COLORS = [
-  "bg-blue-500",
-  "bg-emerald-500",
-  "bg-violet-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-cyan-500",
-  "bg-fuchsia-500",
-  "bg-teal-500",
+// Paleta por gestor: eventos compactos com superfície suave, no padrão de mês
+// do Google Calendar, preservando as cores de identificação do Tasks.
+const HOST_EVENT_STYLES = [
+  "border-blue-500 bg-blue-50 text-blue-950 hover:bg-blue-100",
+  "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
+  "border-violet-500 bg-violet-50 text-violet-950 hover:bg-violet-100",
+  "border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100",
+  "border-rose-500 bg-rose-50 text-rose-950 hover:bg-rose-100",
+  "border-cyan-500 bg-cyan-50 text-cyan-950 hover:bg-cyan-100",
+  "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-950 hover:bg-fuchsia-100",
+  "border-teal-500 bg-teal-50 text-teal-950 hover:bg-teal-100",
 ];
 
-function colorForHost(hostId: string) {
+function styleForHost(hostId: string) {
   let hash = 0;
   for (let i = 0; i < hostId.length; i++) hash = (hash * 31 + hostId.charCodeAt(i)) | 0;
-  return HOST_DOT_COLORS[Math.abs(hash) % HOST_DOT_COLORS.length];
+  return HOST_EVENT_STYLES[Math.abs(hash) % HOST_EVENT_STYLES.length];
 }
 
 function firstName(name: string) {
@@ -116,7 +117,7 @@ const DayCell = memo(function DayCell({
   onOpenDay,
   onHoverOverflow,
 }: DayCellProps) {
-  const VISIBLE_CAP = 3;
+  const VISIBLE_CAP = 4;
   const visible = dayMeetings.slice(0, VISIBLE_CAP);
   const overflow = dayMeetings.length - visible.length;
 
@@ -124,21 +125,21 @@ const DayCell = memo(function DayCell({
     <div
       key={dateStr}
       className={`
-        group relative px-1.5 py-1 flex flex-col gap-0.5 overflow-hidden min-h-0
-        ${isLastRow ? "" : "border-b border-slate-200"}
-        ${isLastCol ? "" : "border-r border-slate-200"}
-        ${isCurrentMonth ? "bg-white" : "bg-slate-50/50"}
+        group relative px-1 py-1.5 flex flex-col gap-0.5 overflow-hidden min-h-0 transition-colors
+        ${isLastRow ? "" : "border-b border-slate-200/80"}
+        ${isLastCol ? "" : "border-r border-slate-200/80"}
+        ${isCurrentMonth ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/60"}
       `}
     >
       {/* Date number (top-left, estilo Google) */}
-      <div className="flex items-center h-6 shrink-0">
+      <div className="flex h-7 shrink-0 items-center px-0.5">
         {isToday ? (
-          <span className="w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white text-[12px] font-semibold">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[12px] font-semibold text-white shadow-sm shadow-blue-200">
             {day.getUTCDate()}
           </span>
         ) : (
           <span className={`px-1.5 text-[12px] font-medium ${
-            isCurrentMonth ? "text-slate-700" : "text-slate-300"
+            isCurrentMonth ? "text-slate-600" : "text-slate-300"
           }`}>
             {day.getUTCDate()}
           </span>
@@ -150,10 +151,10 @@ const DayCell = memo(function DayCell({
         <span className="absolute top-2.5 right-2 w-1.5 h-1.5 rounded-full bg-emerald-400" title="Disponível" />
       )}
 
-      {/* Meetings — cap em 3, "Mais N" no overflow (estilo Google) */}
-      <div className="flex flex-col min-h-0">
+      {/* Eventos compactos com overflow no padrão do Google Calendar. */}
+      <div className="flex min-h-0 flex-col gap-0.5">
         {visible.map((m) => {
-          const dotColor = colorForHost(m.hostId);
+          const eventStyle = styleForHost(m.hostId);
           const isOwn = m.hostId === userId;
           const displayName = m.clientName || m.hostName;
           const tooltipPrefix = m.clientName
@@ -162,18 +163,17 @@ const DayCell = memo(function DayCell({
           return (
             <div
               key={m.id}
-              className="group/m relative flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-default text-[11px] leading-tight"
+              className={`group/m relative flex h-[22px] items-center gap-1 rounded-md border-l-[3px] px-1.5 text-[11px] leading-none transition-colors ${eventStyle}`}
               title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
             >
-              <span className={`shrink-0 w-2 h-2 rounded-full ${dotColor}`} />
-              {m.isRecurring && <Repeat className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
-              <span className="font-medium text-slate-600 tabular-nums shrink-0">{m.startTime}</span>
-              <span className="truncate text-slate-700">{firstName(displayName)}</span>
+              {m.isRecurring && <Repeat className="h-2.5 w-2.5 shrink-0 opacity-60" />}
+              <span className="shrink-0 font-semibold tabular-nums">{m.startTime}</span>
+              <span className="truncate font-medium">{firstName(displayName)}</span>
               {isOwn && (
                 <button
                   onClick={() => onCancelClick(m)}
                   disabled={cancelling}
-                  className="ml-auto opacity-0 group-hover/m:opacity-100 transition-opacity hover:bg-slate-200 rounded p-0.5 text-slate-500"
+                  className="ml-auto rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover/m:opacity-100 focus-visible:opacity-100"
                   aria-label="Cancelar"
                 >
                   <X className="w-2.5 h-2.5" />
@@ -193,9 +193,9 @@ const DayCell = memo(function DayCell({
             aria-haspopup="dialog"
             aria-label={`Ver todas as ${dayMeetings.length} reuniões de ${formatDayTitle(dateStr)}`}
             title="Clique ou pressione Espaço para ver todas"
-            className="w-fit rounded px-1.5 py-0.5 text-left text-[11px] font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="w-fit rounded-md px-2 py-0.5 text-left text-[11px] font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
-            + {overflow} {overflow === 1 ? "reunião" : "reuniões"}
+            mais {overflow}
           </button>
         )}
       </div>
@@ -216,8 +216,8 @@ function DayMeetingsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b border-slate-100 px-5 py-4">
+      <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 shadow-2xl sm:max-w-lg">
+        <DialogHeader className="border-b border-slate-100 bg-white px-5 py-4">
           <DialogTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
             <CalendarDays className="h-4 w-4 text-blue-600" />
             {dateStr ? formatDayTitle(dateStr) : "Reuniões do dia"}
@@ -227,25 +227,25 @@ function DayMeetingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[60vh] overflow-y-auto p-3">
-          <div className="flex flex-col gap-1.5">
+        <div className="max-h-[60vh] overflow-y-auto bg-slate-50/50 p-3">
+          <div className="flex flex-col gap-2">
             {meetings.map((meeting) => {
               const displayName = meeting.clientName || meeting.hostName;
+              const eventStyle = styleForHost(meeting.hostId);
               return (
                 <div
                   key={meeting.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 hover:bg-slate-50"
+                  className={`flex items-center gap-3 rounded-xl border border-l-4 px-3 py-3 shadow-sm ${eventStyle}`}
                 >
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorForHost(meeting.hostId)}`} />
                   <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="flex shrink-0 items-center gap-1 text-xs font-semibold tabular-nums text-slate-700">
+                    <span className="flex w-24 shrink-0 items-center gap-1 text-xs font-semibold tabular-nums">
                       <Clock className="h-3.5 w-3.5 text-slate-400" />
                       {meeting.startTime}–{meeting.endTime}
                     </span>
-                    <span className="truncate text-sm font-medium text-slate-900">{displayName}</span>
+                    <span className="truncate text-sm font-semibold">{displayName}</span>
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
                   </div>
-                  <span className="shrink-0 text-xs text-slate-500">{meeting.hostName}</span>
+                  <span className="shrink-0 text-xs opacity-65">{meeting.hostName}</span>
                 </div>
               );
             })}
@@ -455,13 +455,13 @@ export function WeekCalendar({
       </div>
 
       {/* Month grid */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* Weekday headers */}
-        <div className="grid grid-cols-7 border-b border-slate-200 shrink-0">
+        <div className="grid shrink-0 grid-cols-7 border-b border-slate-200 bg-slate-50/70">
           {DAY_NAMES.map((name) => (
             <div
               key={name}
-              className="text-center py-2 text-[11px] font-semibold tracking-wider text-slate-500 border-r border-slate-200 last:border-r-0"
+              className="border-r border-slate-200/80 py-2.5 text-center text-[10px] font-semibold tracking-[0.12em] text-slate-500 last:border-r-0"
             >
               {name}
             </div>
