@@ -23,6 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { TaskCheckbox, TaskInlineAssignee, TaskInlineDueDate, TaskInlineTitle } from "./task-inline-edit";
 import { addSubtaskAction, bulkUpdateTaskStatusAction, bulkAssignAction, bulkDeleteAction, reorderTasksAction } from "@/app/(dashboard)/tarefas/actions";
 import type { TaskStatus } from "@prisma/client";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 
 function AddSubtaskInline({ parentTaskId }: { parentTaskId: string }) {
   const [editing, setEditing] = useState(false);
@@ -101,6 +102,7 @@ type Subtask = {
   id: string;
   title: string;
   status: string;
+  isBlocked: boolean;
   dueDate: Date | null;
   assignee: Assignee;
 };
@@ -109,6 +111,7 @@ type Task = {
   id: string;
   title: string;
   status: string;
+  isBlocked: boolean;
   priority: string;
   dueDate: Date | null;
   metadata: unknown;
@@ -277,6 +280,7 @@ function SubtaskRow({
         isDone={sub.status === "done"}
         size="sm"
       />
+      {sub.isBlocked && <TaskBlockedIndicator />}
       <div className="flex items-center shrink-0">
         <div className="w-32 flex justify-end">
           <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
@@ -397,6 +401,7 @@ const TaskRow = memo(function TaskRow({
           href={`/tarefas/${task.id}?projectId=${projectId}`}
           isDone={task.status === "done"}
         />
+        {task.isBlocked && <TaskBlockedIndicator />}
 
         {/* Colunas fixas */}
         <div className="flex items-center shrink-0">

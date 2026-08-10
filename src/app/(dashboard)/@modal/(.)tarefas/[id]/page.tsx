@@ -6,8 +6,8 @@ import { BriefcaseBusiness, Calendar, Pencil, FolderKanban } from "lucide-react"
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge } from "@/components/tasks/task-badges";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "@/app/(dashboard)/tarefas/[id]/task-actions";
-import { MoveTaskButton } from "@/app/(dashboard)/tarefas/[id]/move-task-button";
 import { ChecklistSection } from "@/app/(dashboard)/tarefas/[id]/checklist-section";
 import { CommentsSection } from "@/app/(dashboard)/tarefas/[id]/comments-section";
 import { AttachmentsSection } from "@/app/(dashboard)/tarefas/[id]/attachments-section";
@@ -132,13 +132,12 @@ export default async function TaskModalPage({
                   <Pencil className="w-3.5 h-3.5 mr-1.5" />
                   Editar
                 </LinkButton>
-                <MoveTaskButton taskId={task.id} currentProjectId={task.project?.id ?? null} />
               </>
             )}
             <TaskActions
               taskId={task.id}
               currentStatus={task.status}
-              currentProgress={task.progress}
+              isBlocked={task.isBlocked}
               canEdit={canEdit}
             />
           </div>
@@ -147,6 +146,7 @@ export default async function TaskModalPage({
         {/* Badges */}
         <div className="flex items-center gap-2 flex-wrap mb-5">
           <StatusBadge status={task.status} />
+          {task.isBlocked && <TaskBlockedIndicator showLabel />}
         </div>
 
         {/* Meta */}

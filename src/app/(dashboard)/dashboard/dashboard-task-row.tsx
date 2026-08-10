@@ -8,12 +8,14 @@ import { updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 import { format, isBefore, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { TaskStatus } from "@prisma/client";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 
 interface DashboardTaskRowProps {
   task: {
     id: string;
     title: string;
     status: TaskStatus;
+    isBlocked: boolean;
     dueDate: Date | null;
     client?: { name: string } | null;
     project: { name: string; client: { name: string } } | null;
@@ -92,6 +94,8 @@ export function DashboardTaskRow({ task, showAssignee }: DashboardTaskRowProps) 
             {task.assignee.name.split(" ")[0]}
           </span>
         )}
+
+        {task.isBlocked && <TaskBlockedIndicator />}
 
         <StatusBadge status={task.status} />
 

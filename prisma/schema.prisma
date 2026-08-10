@@ -196,6 +196,7 @@ model Task {
   title              String       @db.VarChar(500)
   description        String?
   status             TaskStatus   @default(todo)
+  isBlocked          Boolean      @default(false) @map("is_blocked")
   priority           TaskPriority @default(medium)
   progress           Int          @default(0)
   assigneeId         String?      @map("assignee_id") @db.Uuid

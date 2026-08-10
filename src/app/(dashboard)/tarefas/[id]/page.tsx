@@ -7,6 +7,7 @@ import { ArrowLeft, BriefcaseBusiness, Calendar, User, Pencil, FolderKanban } fr
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { StatusBadge } from "@/components/tasks/task-badges";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "./task-actions";
 import { ChecklistSection } from "./checklist-section";
 import { CommentsSection } from "./comments-section";
@@ -82,7 +83,7 @@ export default async function TaskDetailPage({
               <TaskActions
                 taskId={task.id}
                 currentStatus={task.status}
-                currentProgress={task.progress}
+                isBlocked={task.isBlocked}
                 canEdit={
                   user.role === "admin" ||
                   user.role === "manager" ||
@@ -96,6 +97,7 @@ export default async function TaskDetailPage({
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap mb-5">
             <StatusBadge status={task.status} />
+            {task.isBlocked && <TaskBlockedIndicator showLabel />}
           </div>
 
           {/* Meta grid */}

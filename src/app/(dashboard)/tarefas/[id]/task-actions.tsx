@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTaskStatusAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
+import { updateTaskStatusAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { STATUS_CONFIG } from "@/components/tasks/task-badges";
-import { Trash2, ChevronDown, Loader2, Copy, Archive } from "lucide-react";
+import { Trash2, ChevronDown, Loader2, Copy, Archive, Flag } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 
 const STATUS_ORDER: TaskStatus[] = [
@@ -15,16 +15,17 @@ const STATUS_ORDER: TaskStatus[] = [
 export function TaskActions({
   taskId,
   currentStatus,
-  currentProgress,
+  isBlocked,
   canEdit,
 }: {
   taskId: string;
   currentStatus: TaskStatus;
-  currentProgress: number;
+  isBlocked: boolean;
   canEdit: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [blocked, setBlocked] = useOptimistic(isBlocked);
   const router = useRouter();
 
   function changeStatus(status: TaskStatus) {
@@ -40,6 +41,15 @@ export function TaskActions({
       await deleteTaskAction(taskId);
       // router.back() funciona em modal interceptado (fecha) e em página standalone (volta).
       router.back();
+    });
+  }
+
+  function handleBlockedToggle() {
+    const nextBlocked = !blocked;
+    startTransition(async () => {
+      setBlocked(nextBlocked);
+      const result = await setTaskBlockedAction(taskId, nextBlocked);
+      if (!result.error) router.refresh();
     });
   }
 
@@ -104,6 +114,22 @@ export function TaskActions({
           </>
         )}
       </div>
+
+      {/* Independent blocking flag — does not change task status. */}
+      <Button
+        variant="outline"
+        size="sm"
+        className={blocked
+          ? "text-xs border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
+          : "text-xs text-neutral-500"}
+        onClick={handleBlockedToggle}
+        disabled={isPending}
+        title={blocked ? "Desbloquear tarefa" : "Bloquear tarefa"}
+        aria-label={blocked ? "Desbloquear tarefa" : "Bloquear tarefa"}
+      >
+        <Flag className={`w-3.5 h-3.5 mr-1.5 ${blocked ? "fill-current" : ""}`} />
+        {blocked ? "Desbloquear" : "Bloquear"}
+      </Button>
 
       {/* Duplicate */}
       <Button

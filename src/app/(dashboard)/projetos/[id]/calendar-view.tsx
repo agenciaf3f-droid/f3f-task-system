@@ -9,11 +9,13 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import Link from "next/link";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 
 type Task = {
   id: string;
   title: string;
   status: string;
+  isBlocked: boolean;
   priority: string;
   dueDate: Date | null;
 };
@@ -127,6 +129,7 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[t.priority] ?? "bg-neutral-300"}`} />
                       <span className="truncate">{t.title}</span>
+                      {t.isBlocked && <TaskBlockedIndicator />}
                     </Link>
                   );
                 })}
@@ -152,6 +155,7 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOT[t.priority] ?? "bg-neutral-300"}`} />
                 {t.title}
+                {t.isBlocked && <TaskBlockedIndicator />}
               </Link>
             ))}
           </div>

@@ -42,6 +42,10 @@ function activityDescription(activity: Activity) {
       return "adicionou um comentário";
     case "task.deleted":
       return "excluiu a tarefa";
+    case "task.blocked":
+      return "bloqueou a tarefa";
+    case "task.unblocked":
+      return "desbloqueou a tarefa";
     default:
       return "atualizou a tarefa";
   }

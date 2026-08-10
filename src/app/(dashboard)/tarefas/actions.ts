@@ -10,7 +10,7 @@ import { dispatchWebhook } from "@/lib/webhook";
 import { createNotification, notifyTaskAssigned } from "@/lib/notifications";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
-import { taskVisibilityFilter, projectVisibilityFilter } from "@/lib/task-visibility";
+import { taskVisibilityFilter } from "@/lib/task-visibility";
 
 // datetime-local já vem com hora; date-only ("yyyy-MM-dd") seria parseado como UTC midnight
 // e mostraria o dia anterior em fusos negativos. Forçamos meio-dia local nesse caso.
@@ -359,6 +359,51 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
   revalidatePath("/tarefas");
   revalidatePath("/dashboard");
   if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
+}
+
+export async function setTaskBlockedAction(
+  taskId: string,
+  isBlocked: boolean,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (typeof isBlocked !== "boolean") return { error: "Estado de bloqueio inválido." };
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: {
+      isBlocked: true,
+      projectId: true,
+      assigneeId: true,
+      createdById: true,
+    },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  const canEdit = user.role === "admin"
+    || user.role === "manager"
+    || task.assigneeId === user.userId
+    || task.createdById === user.userId;
+  if (!canEdit) return { error: "Sem permissão para alterar esta tarefa." };
+  if (task.isBlocked === isBlocked) return {};
+
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { isBlocked },
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: isBlocked ? "task.blocked" : "task.unblocked",
+    resourceType: "task",
+    resourceId: taskId,
+    oldValue: { isBlocked: task.isBlocked },
+    newValue: { isBlocked },
+  });
+
+  revalidatePath(`/tarefas/${taskId}`);
+  revalidatePath("/dashboard");
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
 }
 
 export async function updateTaskProgressAction(taskId: string, progress: number) {
@@ -819,6 +864,7 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
   title: string;
   description: string | null;
   status: string;
+  isBlocked: boolean;
   priority: string;
   dueDate: Date | null;
   assignee: { id: string; name: string } | null;
@@ -834,6 +880,7 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
       title: true,
       description: true,
       status: true,
+      isBlocked: true,
       priority: true,
       dueDate: true,
       assignee: { select: { id: true, name: true } },
@@ -848,6 +895,7 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
     title: task.title,
     description: task.description,
     status: task.status,
+    isBlocked: task.isBlocked,
     priority: task.priority,
     dueDate: task.dueDate,
     assignee: task.assignee,
@@ -855,58 +903,6 @@ export async function getTaskDetailsAction(taskId: string): Promise<{
     checklistItems: task.checklistItems.map((i) => ({ id: i.id, title: i.title, isDone: i.isDone })),
     commentsCount: task._count.comments,
   };
-}
-
-export async function fetchProjectsForMoveAction(): Promise<{ id: string; name: string }[]> {
-  const user = await requireAuth();
-  return prisma.project.findMany({
-    where: { deletedAt: null, AND: projectVisibilityFilter(user) },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
-}
-
-export async function moveTaskToProjectAction(
-  taskId: string,
-  projectId: string | null,
-): Promise<{ error?: string }> {
-  const user = await requireAuth();
-
-  const task = await prisma.task.findFirst({
-    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
-    select: { projectId: true, clientId: true, title: true },
-  });
-  if (!task) return { error: "Tarefa não encontrada." };
-
-  let targetClientId = task.clientId;
-  if (projectId) {
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, deletedAt: null, AND: projectVisibilityFilter(user) },
-      select: { id: true, clientId: true },
-    });
-    if (!project) return { error: "Projeto não encontrado." };
-    targetClientId = project.clientId;
-  }
-
-  await prisma.task.update({
-    where: { id: taskId },
-    data: { projectId: projectId || null, clientId: targetClientId ?? null },
-  });
-
-  await logActivity({
-    companyId: user.companyId,
-    userId: user.userId,
-    action: "task.updated",
-    resourceType: "task",
-    resourceId: taskId,
-    newValue: { projectId },
-  });
-
-  revalidatePath(`/tarefas/${taskId}`);
-  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
-  if (projectId) revalidatePath(`/projetos/${projectId}`);
-  revalidatePath("/dashboard");
-  return {};
 }
 
 export async function duplicateTaskAction(taskId: string): Promise<{ error?: string; newTaskId?: string }> {

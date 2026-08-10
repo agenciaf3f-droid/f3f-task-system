@@ -6,6 +6,7 @@ import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, Arro
 import { LinkButton } from "@/components/ui/link-button";
 import { ProjectClientList } from "./project-client-list";
 import { StatusBadge } from "@/components/tasks/task-badges";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { format } from "date-fns";
 import { MeetingBookingButton } from "../clientes/meeting-booking-button";
 
@@ -73,6 +74,7 @@ export default async function ProjetosPage({
           id: true,
           title: true,
           status: true,
+          isBlocked: true,
           dueDate: true,
           assignee: { select: { name: true } },
           project: { select: { name: true } },
@@ -177,6 +179,7 @@ export default async function ProjetosPage({
                       {task.dueDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{format(task.dueDate, "dd/MM/yyyy")}</span>}
                     </div>
                   </div>
+                  {task.isBlocked && <TaskBlockedIndicator />}
                   <StatusBadge status={task.status} />
                 </Link>
               ))}

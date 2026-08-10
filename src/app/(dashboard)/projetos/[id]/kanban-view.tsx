@@ -16,6 +16,7 @@ import Link from "next/link";
 import { isBefore, isToday, format } from "date-fns";
 import { BriefcaseBusiness, Calendar, User, AlertCircle } from "lucide-react";
 import { updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 
 type Assignee = { id: string; name: string; avatarUrl: string | null } | null;
 
@@ -23,6 +24,7 @@ type Task = {
   id: string;
   title: string;
   status: string;
+  isBlocked: boolean;
   priority: string;
   dueDate: Date | null;
   client?: { name: string } | null;
@@ -100,6 +102,7 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
         >
           {task.title}
         </Link>
+        {task.isBlocked && <TaskBlockedIndicator className="mt-0.5" />}
       </div>
 
       {hasMeta && (

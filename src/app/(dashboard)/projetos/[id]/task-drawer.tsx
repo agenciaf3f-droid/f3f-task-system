@@ -6,6 +6,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getTaskDetailsAction } from "@/app/(dashboard)/tarefas/actions";
+import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 
 type TaskDetails = Awaited<ReturnType<typeof getTaskDetailsAction>> | null;
 
@@ -126,6 +127,7 @@ export function TaskDrawer({ taskId, onClose }: TaskDrawerProps) {
                 <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${STATUS_STYLES[task.status] ?? STATUS_STYLES.todo}`}>
                   {STATUS_LABELS[task.status] ?? task.status}
                 </span>
+                {task.isBlocked && <TaskBlockedIndicator showLabel />}
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${PRIORITY_STYLES[task.priority] ?? PRIORITY_STYLES.medium}`}>
                   {PRIORITY_LABELS[task.priority] ?? task.priority}
                 </span>
