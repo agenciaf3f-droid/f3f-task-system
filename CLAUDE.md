@@ -94,14 +94,24 @@ Banco externo NÃO é controlado por esta app — apenas leitura para login. Has
 
 ## Booking Flow (`/agendar`)
 
-1. Gestor copia link `/agendar/<slugOrToken>` (User.calendarSlug ou calendarToken) → envia ao cliente
-2. Cliente abre → sem sessão → redireciona para `/agendar/[token]/login`
-3. Cliente faz login → `POST /api/agendar/[token]/auth` → `findClientByCredentials()` no banco externo
-4. Sessão guarda: `clientEmail`, `clientName`, `clientPlan`, `clientGroupId` (whatsapp), `clientGestor`, `bookingToken`
-5. Cliente escolhe horário (respeitando `CalendarAvailability`) → `POST /api/agendar/[token]/book`
-6. Cria `Meeting` (Prisma interno) com `clientName`, `clientGroupId`, `clientPlan`
-7. Chama `createCalendarMeeting()` → cria evento Google Calendar → salva `googleEventId` na Meeting
-8. Recorrentes: gera 12 ocorrências mensais (parent + children); conflitos pulam silenciosamente
+Fluxo principal (sem login):
+1. No perfil `/projetos?clientId=...`, `Agendar reunião` chama `sendClientBookingLinkAction()`
+2. A action encontra plano + `whatsapp_group_id` no banco externo por e-mail (fallback único por nome)
+3. Cria `BookingMagicLink`: token aleatório, apenas SHA-256 salvo, validade de 7 dias
+4. Envia `meeting.booking_link_requested` ao `WebhookConfig` da empresa com `whatsappGroupId`, `message` e `bookingUrl`
+5. Cliente abre `/agendar/acesso/[token]` → token válido cria `f3f_client_session` e redireciona para a agenda do gestor
+6. Cliente escolhe horário (respeitando `CalendarAvailability`) → `POST /api/agendar/[token]/book`
+7. Duração e recorrência vêm de `clientPlan`; o cliente não escolhe nem envia essas regras
+8. Cria `Meeting` + evento Google Calendar. Recorrentes geram 12 ocorrências; conflitos futuros são ignorados
+
+Fluxo legado por login continua disponível em `/agendar/[token]/login` para links antigos.
+
+Evento do webhook WhatsApp:
+- `event`: `meeting.booking_link_requested`
+- `data.whatsappGroupId`: destino do grupo
+- `data.message`: texto pronto para envio
+- `data.bookingUrl`: link mágico individual
+- O endpoint precisa responder HTTP 2xx para o Task considerar o envio confirmado.
 
 ---
 

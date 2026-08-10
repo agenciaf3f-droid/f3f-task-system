@@ -10,7 +10,6 @@ export function AgendarClient({
   userName,
   token,
   availableDays,
-  clientName,
   durationMinutes,
   recurrence,
   upcomingMeetings,
@@ -18,7 +17,6 @@ export function AgendarClient({
   userName: string;
   token: string;
   availableDays: number[];
-  clientName?: string;
   durationMinutes: number;
   recurrence: Recurrence;
   upcomingMeetings: ClientMeeting[];
@@ -54,7 +52,6 @@ export function AgendarClient({
         userName={userName}
         token={token}
         availableDays={availableDays}
-        clientName={clientName}
         durationMinutes={durationMinutes}
         recurrence={recurrence}
       />

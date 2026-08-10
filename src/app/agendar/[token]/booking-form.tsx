@@ -35,14 +35,12 @@ export function BookingForm({
   userName,
   token,
   availableDays,
-  clientName,
   durationMinutes,
   recurrence,
 }: {
   userName: string;
   token: string;
   availableDays: number[];
-  clientName?: string;
   durationMinutes: number;
   recurrence: Recurrence;
 }) {
@@ -55,7 +53,6 @@ export function BookingForm({
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
-  const [recurring, setRecurring] = useState(true);
   const [bookedSummary, setBookedSummary] = useState<{ created: number; skipped: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +100,6 @@ export function BookingForm({
         body: JSON.stringify({
           date: selectedDate,
           startTime: selectedSlot.startTime,
-          recurring,
         }),
       });
       const data = await res.json();
@@ -138,7 +134,7 @@ export function BookingForm({
         <p className="text-slate-500 text-sm max-w-xs">
           {bookedSummary ? (
             <>
-              <strong>{bookedSummary.created}</strong> reuniões mensais com <strong>{userName}</strong>{" "}
+              <strong>{bookedSummary.created}</strong> reuniões {recurrence === "weekly" ? "semanais" : "mensais"} com <strong>{userName}</strong>{" "}
               começando <strong>{DAYS_SHORT[dateObj.getDay()]}, {dateObj.getDate()} de {MONTHS[dateObj.getMonth()]}</strong>{" "}
               às <strong>{selectedSlot.startTime}</strong>.
               {bookedSummary.skipped > 0 && (
@@ -292,29 +288,17 @@ export function BookingForm({
               <p className="text-[11px] text-blue-500 mt-1 font-medium">Duração: {durationLabel}</p>
             </div>
           </div>
-          {/* Recurring toggle */}
-          <button
-            type="button"
-            onClick={() => setRecurring((v) => !v)}
-            className={`w-full mb-2 p-3 rounded-xl border text-left flex items-center gap-3 transition-colors ${
-              recurring
-                ? "border-blue-500 bg-blue-50"
-                : "border-slate-200 bg-white hover:border-slate-300"
-            }`}
-          >
-            <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${recurring ? "bg-blue-600" : "bg-slate-300"}`}>
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${recurring ? "left-4" : "left-0.5"}`} />
+          <div className="w-full mb-2 p-3 rounded-xl border border-blue-200 bg-blue-50 text-left flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+              <Repeat className="w-4 h-4" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                <Repeat className="w-3 h-3" />
-                {recurrenceFrequencyLabel} <span className="font-normal text-slate-500">(recomendado)</span>
+                {recurrenceFrequencyLabel}
               </p>
-              {recurring && (
-                <p className="text-[11px] text-blue-700 mt-0.5">{recurrenceLabel}</p>
-              )}
+              <p className="text-[11px] text-blue-700 mt-0.5">{recurrenceLabel} · definido pelo seu plano</p>
             </div>
-          </button>
+          </div>
 
           {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
           <button

@@ -97,7 +97,6 @@ export default async function AgendarPage({
               userName={user.name}
               token={token}
               availableDays={availableDays}
-              clientName={session.clientName}
               durationMinutes={durationMinutes}
               recurrence={recurrence}
               upcomingMeetings={upcomingMeetings}

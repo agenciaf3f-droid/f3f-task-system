@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ProjectClientList } from "./project-client-list";
 import { StatusBadge } from "@/components/tasks/task-badges";
 import { format } from "date-fns";
+import { MeetingBookingButton } from "../clientes/meeting-booking-button";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -116,10 +117,13 @@ export default async function ProjetosPage({
                 </p>
               </div>
             </div>
-            <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo projeto
-            </LinkButton>
+            <div className="flex items-center gap-2">
+              <MeetingBookingButton clientId={client.id} />
+              <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
+                <Plus className="w-4 h-4 mr-2" />
+                Novo projeto
+              </LinkButton>
+            </div>
           </div>
         </div>
 

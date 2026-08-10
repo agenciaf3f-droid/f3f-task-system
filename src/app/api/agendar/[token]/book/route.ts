@@ -37,14 +37,14 @@ export async function POST(
 ) {
   const { token } = await params;
 
-  let body: { date?: string; startTime?: string; recurring?: boolean; weekOfMonth?: number };
+  let body: { date?: string; startTime?: string; weekOfMonth?: number };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ ok: false, error: "body inválido" }, { status: 400 });
   }
 
-  const { date, startTime, recurring, weekOfMonth: clientWeekOfMonth } = body;
+  const { date, startTime, weekOfMonth: clientWeekOfMonth } = body;
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ ok: false, error: "date inválida" }, { status: 400 });
@@ -110,52 +110,8 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Horário não cabe na disponibilidade." }, { status: 400 });
   }
 
-  // ─── Booking simples ───────────────────────────────────────────
-  if (!recurring) {
-    // Sem unique constraint no DB (precisa permitir multi-gestor no mesmo slot via sync),
-    // checagem manual de duplicata pra esse user no mesmo slot exato.
-    const existing = await prisma.meeting.findFirst({
-      where: { userId: user.id, date, startTime, status: "confirmed" },
-      select: { id: true },
-    });
-    if (existing) {
-      return NextResponse.json({ ok: false, error: "Horário já reservado." }, { status: 409 });
-    }
-    const meeting = await prisma.meeting.create({
-      data: {
-        userId: user.id,
-        date,
-        startTime,
-        endTime,
-        status: "confirmed",
-        clientName: session.clientName,
-        clientGroupId: session.clientGroupId,
-        clientPlan: session.clientPlan,
-      },
-      select: { id: true },
-    });
-    const createdMeetingId = meeting.id;
-
-    // Google Calendar fora da transação (best-effort)
-    const googleEventId = await createCalendarMeeting({
-      date,
-      startTime,
-      endTime,
-      ownerName: user.name,
-      clientName: session.clientName,
-      clientGroupId: session.clientGroupId,
-      calendarId,
-    });
-    if (googleEventId) {
-      await prisma.meeting.update({
-        where: { id: createdMeetingId },
-        data: { googleEventId },
-      });
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  // ─── Booking recorrente: regra depende do plano (semanal vs mensal) ──
+  // A recorrência é obrigatória e depende exclusivamente do plano salvo na sessão.
+  // O cliente não envia nem pode sobrescrever esta regra.
   const recurrenceType = getMeetingRecurrence(session.clientPlan);
   const rule: RecurrenceRule =
     recurrenceType === "weekly"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useEffect, useRef, useTransition } from "react";
+import { useState, useActionState, useRef, useTransition } from "react";
 import { Pencil, Loader2, AlertCircle, Camera, Trash2 } from "lucide-react";
 import { updateClientAction, updateClientAvatarAction, removeClientAvatarAction } from "../projetos/actions";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ interface EditClientDialogProps {
     color: string | null;
     avatarUrl: string | null;
     description: string | null;
+    email: string | null;
     managerId: string | null;
   };
   managers: { id: string; name: string }[];
@@ -30,7 +31,11 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
     FormData
-  >(updateClientAction, {});
+  >(async (previousState, formData) => {
+    const result = await updateClientAction(previousState, formData);
+    if (result.success) setOpen(false);
+    return result;
+  }, {});
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -52,12 +57,6 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
       setAvatarUrl(null);
     });
   }
-
-  // Dep precisa ser `state` (não `state.success`) — cada submit gera nova ref de state,
-  // mas state.success continua === true, então useEffect não re-dispara no 2º submit.
-  useEffect(() => {
-    if (state.success) setOpen(false);
-  }, [state]);
 
   return (
     <>
@@ -130,6 +129,19 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="email">E-mail do cliente</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                defaultValue={client.email ?? ""}
+                placeholder="cliente@empresa.com"
+                disabled={isPending}
+              />
+              <p className="text-xs text-neutral-400">Usado para localizar o plano e o grupo do WhatsApp.</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

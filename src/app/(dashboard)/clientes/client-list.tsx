@@ -13,6 +13,7 @@ type ClientItem = {
   color: string | null;
   avatarUrl: string | null;
   description: string | null;
+  email: string | null;
   managerId: string | null;
   manager: { id: string; name: string } | null;
   deletedAt: Date | null;

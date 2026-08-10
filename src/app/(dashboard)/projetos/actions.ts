@@ -14,6 +14,10 @@ import type { ProjectStatus } from "@prisma/client";
 
 const clientSchema = z.object({
   name: z.string().min(1, "Nome do cliente obrigatório").max(255),
+  email: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim().toLowerCase() : ""),
+    z.string().email("E-mail inválido").or(z.literal("")),
+  ),
   description: z.string().optional().or(z.literal("")),
   managerId: z.string().uuid().optional().or(z.literal("")),
 });
@@ -26,6 +30,7 @@ export async function createClientAction(
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
+    email: formData.get("email"),
     description: formData.get("description"),
     managerId: formData.get("managerId"),
   });
@@ -35,6 +40,7 @@ export async function createClientAction(
     data: {
       companyId: user.companyId,
       name: parsed.data.name,
+      email: parsed.data.email || null,
       color: pickColor(parsed.data.name),
       description: parsed.data.description || null,
       managerId: parsed.data.managerId || null,
@@ -58,6 +64,7 @@ export async function updateClientAction(
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
+    email: formData.get("email"),
     description: formData.get("description"),
     managerId: formData.get("managerId"),
   });
@@ -67,6 +74,7 @@ export async function updateClientAction(
     where: { id: clientId, companyId: user.companyId },
     data: {
       name: parsed.data.name,
+      email: parsed.data.email || null,
       description: parsed.data.description || null,
       managerId: parsed.data.managerId || null,
     },

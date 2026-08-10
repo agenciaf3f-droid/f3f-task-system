@@ -9,6 +9,11 @@ export type ClientData = {
   user_id?: string;
 };
 
+type ExternalClientLookup = {
+  email?: string | null;
+  name: string;
+};
+
 function getExternalSupabase() {
   const supabaseUrl = process.env.EXTERNAL_SUPABASE_URL;
   const supabaseKey = process.env.EXTERNAL_SUPABASE_SERVICE_ROLE_KEY;
@@ -20,25 +25,45 @@ function getExternalSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
+function getExternalClientFields() {
+  return {
+    tableName: process.env.EXTERNAL_CLIENT_TABLE || "client_dashboards",
+    emailField: process.env.EXTERNAL_FIELD_EMAIL || "email",
+    passwordField: process.env.EXTERNAL_FIELD_PASSWORD || "senha",
+    nameField: process.env.EXTERNAL_FIELD_NAME || "nome",
+    planField: process.env.EXTERNAL_FIELD_PLAN || "plano",
+    groupIdField: process.env.EXTERNAL_FIELD_GROUP_ID || "whatsapp_group_id",
+    gestorField: process.env.EXTERNAL_FIELD_MANAGER_ID || "gestor",
+  };
+}
+
+function mapClientData(
+  data: Record<string, unknown>,
+  fields: ReturnType<typeof getExternalClientFields>,
+): ClientData {
+  return {
+    email: String(data[fields.emailField] ?? ""),
+    nome: String(data[fields.nameField] ?? ""),
+    plano: String(data[fields.planField] ?? ""),
+    whatsapp_group_id: String(data[fields.groupIdField] ?? ""),
+    gestor: data[fields.gestorField] ? String(data[fields.gestorField]) : undefined,
+    user_id: data.user_id ? String(data.user_id) : undefined,
+  };
+}
+
 export async function findClientByCredentials(
   email: string,
   password: string
 ): Promise<ClientData | null> {
   try {
     const externalSupabase = getExternalSupabase();
-    const tableName = process.env.EXTERNAL_CLIENT_TABLE || "client_dashboards";
-    const emailField = process.env.EXTERNAL_FIELD_EMAIL || "email";
-    const passwordField = process.env.EXTERNAL_FIELD_PASSWORD || "senha";
-    const nameField = process.env.EXTERNAL_FIELD_NAME || "nome";
-    const planField = process.env.EXTERNAL_FIELD_PLAN || "plano";
-    const groupIdField = process.env.EXTERNAL_FIELD_GROUP_ID || "whatsapp_group_id";
-    const gestorField = process.env.EXTERNAL_FIELD_MANAGER_ID || "gestor";
+    const fields = getExternalClientFields();
 
     const emailNorm = email.trim().toLowerCase();
     const { data, error } = await externalSupabase
-      .from(tableName)
-      .select(`${emailField},${passwordField},${nameField},${planField},${groupIdField},${gestorField}`)
-      .ilike(emailField, emailNorm)
+      .from(fields.tableName)
+      .select(`${fields.emailField},${fields.passwordField},${fields.nameField},${fields.planField},${fields.groupIdField},${fields.gestorField}`)
+      .ilike(fields.emailField, emailNorm)
       .maybeSingle();
 
     if (error) {
@@ -46,11 +71,11 @@ export async function findClientByCredentials(
       return null;
     }
     if (!data) {
-      console.warn(`[external-db] no row found for email="${emailNorm}" (table=${tableName}, field=${emailField})`);
+      console.warn(`[external-db] no row found for email="${emailNorm}" (table=${fields.tableName}, field=${fields.emailField})`);
       return null;
     }
 
-    const storedPassword = data[passwordField as keyof typeof data];
+    const storedPassword = data[fields.passwordField as keyof typeof data];
     const defaultPassword = "123456";
 
     // Se senha é null, usar default
@@ -64,16 +89,64 @@ export async function findClientByCredentials(
 
     if (!passwordMatch) return null;
 
-    return {
-      email: data[emailField as keyof typeof data] as string,
-      nome: data[nameField as keyof typeof data] as string,
-      plano: data[planField as keyof typeof data] as string,
-      whatsapp_group_id: data[groupIdField as keyof typeof data] as string,
-      gestor: data[gestorField as keyof typeof data] as string | undefined,
-      user_id: data["user_id" as keyof typeof data] as string | undefined,
-    };
+    return mapClientData(data as unknown as Record<string, unknown>, fields);
   } catch (error) {
     console.error("Error fetching client from external DB:", error);
+    return null;
+  }
+}
+
+/**
+ * Resolve os dados necessários ao agendamento sem pedir senha ao cliente.
+ * Uso exclusivo em ações autenticadas do dashboard: primeiro tenta o e-mail
+ * interno e, para cadastros legados sem e-mail, exige correspondência única
+ * pelo nome completo.
+ */
+export async function findClientForBooking({
+  email,
+  name,
+}: ExternalClientLookup): Promise<ClientData | null> {
+  try {
+    const externalSupabase = getExternalSupabase();
+    const fields = getExternalClientFields();
+    const selectedFields = `${fields.emailField},${fields.nameField},${fields.planField},${fields.groupIdField},${fields.gestorField}`;
+
+    if (email?.trim()) {
+      const { data, error } = await externalSupabase
+        .from(fields.tableName)
+        .select(selectedFields)
+        .ilike(fields.emailField, email.trim())
+        .limit(2);
+
+      if (error) {
+        console.error("[external-db] booking lookup by email failed:", error.message);
+        return null;
+      }
+      if (data?.length === 1) return mapClientData(data[0] as unknown as Record<string, unknown>, fields);
+      if ((data?.length ?? 0) > 1) {
+        console.error("[external-db] booking lookup found duplicate emails");
+        return null;
+      }
+    }
+
+    const { data, error } = await externalSupabase
+      .from(fields.tableName)
+      .select(selectedFields)
+      .ilike(fields.nameField, name.trim())
+      .limit(2);
+
+    if (error) {
+      console.error("[external-db] booking lookup by name failed:", error.message);
+      return null;
+    }
+    if (data?.length !== 1) {
+      console.error(`[external-db] booking lookup by name returned ${data?.length ?? 0} rows`);
+      return null;
+    }
+
+    return mapClientData(data[0] as unknown as Record<string, unknown>, fields);
+  } catch (error) {
+    console.error("[external-db] booking lookup failed:", error);
     return null;
   }
 }

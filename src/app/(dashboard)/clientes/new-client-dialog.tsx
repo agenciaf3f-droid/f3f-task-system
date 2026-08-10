@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useEffect } from "react";
+import { useState, useActionState } from "react";
 import { createClientAction } from "@/app/(dashboard)/projetos/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,14 +15,11 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
     FormData
-  >(createClientAction, {});
-
-  // Fecha o dialog só quando UM novo state.success chega (cada submit produz nova ref de state).
-  // setState durante render deixava state.success "grudado" e o dialog fechava instantaneamente
-  // ao reabrir após o primeiro sucesso.
-  useEffect(() => {
-    if (state.success) setOpen(false);
-  }, [state]);
+  >(async (previousState, formData) => {
+    const result = await createClientAction(previousState, formData);
+    if (result.success) setOpen(false);
+    return result;
+  }, {});
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -51,6 +48,12 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="email">E-mail do cliente (opcional)</Label>
+            <Input id="email" name="email" type="email" placeholder="cliente@empresa.com" disabled={isPending} />
+            <p className="text-xs text-neutral-400">Usado para localizar com segurança o plano e o grupo do WhatsApp.</p>
           </div>
 
           <div className="flex flex-col gap-1.5">

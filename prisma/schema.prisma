@@ -76,16 +76,17 @@ model Company {
   updatedAt DateTime    @updatedAt @map("updated_at")
   deletedAt DateTime?   @map("deleted_at")
 
-  users         User[]
-  sectors       Sector[]
-  tasks         Task[]
-  templates     Template[]
-  notifications Notification[]
-  activityLogs  ActivityLog[]
-  permissions   Permission[]
-  clients       Client[]
-  projects      Project[]
-  webhookConfig WebhookConfig?
+  users             User[]
+  sectors           Sector[]
+  tasks             Task[]
+  templates         Template[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+  permissions       Permission[]
+  clients           Client[]
+  projects          Project[]
+  webhookConfig     WebhookConfig?
+  bookingMagicLinks BookingMagicLink[]
 
   @@map("companies")
 }
@@ -95,44 +96,46 @@ model Company {
 // ============================================================
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  companyId    String    @map("company_id") @db.Uuid
-  name         String    @db.VarChar(255)
-  email        String    @unique @db.VarChar(255)
-  passwordHash String    @map("password_hash")
-  avatarUrl    String?   @map("avatar_url")
-  role         UserRole  @default(member)
+  id                 String    @id @default(uuid()) @db.Uuid
+  companyId          String    @map("company_id") @db.Uuid
+  name               String    @db.VarChar(255)
+  email              String    @unique @db.VarChar(255)
+  passwordHash       String    @map("password_hash")
+  avatarUrl          String?   @map("avatar_url")
+  role               UserRole  @default(member)
   isActive           Boolean   @default(true) @map("is_active")
   mustChangePassword Boolean   @default(false) @map("must_change_password")
   lastLoginAt        DateTime? @map("last_login_at")
   createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
 
-  company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  managedSectors    Sector[]            @relation("SectorManager")
-  sectorMemberships SectorMember[]
-  assignedTasks     Task[]              @relation("TaskAssignee")
-  taskAssignments   TaskAssignee[]      @relation("TaskAssignees")
-  taskAssignmentsGiven TaskAssignee[]   @relation("TaskAssigneeAssignedBy")
-  createdTasks      Task[]              @relation("TaskCreatedBy")
-  watchedTasks      TaskWatcher[]
-  checklistDone     TaskChecklistItem[] @relation("ChecklistDoneBy")
-  comments          TaskComment[]
-  attachments       TaskAttachment[]
-  templates                Template[]
-  templateTaskAssignments  TemplateTask[]      @relation("TemplateTaskAssignee")
-  notifications            Notification[]
-  activityLogs      ActivityLog[]
-  permissions       Permission[]
-  projects          Project[]
-  managedClients    Client[]            @relation("ClientManager")
-  passwordResetTokens  PasswordResetToken[]
-  calendarToken        String?               @unique @map("calendar_token") @db.VarChar(32)
-  calendarSlug         String?               @unique @map("calendar_slug") @db.VarChar(60)
-  googleCalendarId     String?               @unique @map("google_calendar_id") @db.VarChar(255)
-  calendarAvailability CalendarAvailability[]
-  meetings             Meeting[]
+  company                 Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  managedSectors          Sector[]               @relation("SectorManager")
+  sectorMemberships       SectorMember[]
+  assignedTasks           Task[]                 @relation("TaskAssignee")
+  taskAssignments         TaskAssignee[]         @relation("TaskAssignees")
+  taskAssignmentsGiven    TaskAssignee[]         @relation("TaskAssigneeAssignedBy")
+  createdTasks            Task[]                 @relation("TaskCreatedBy")
+  watchedTasks            TaskWatcher[]
+  checklistDone           TaskChecklistItem[]    @relation("ChecklistDoneBy")
+  comments                TaskComment[]
+  attachments             TaskAttachment[]
+  templates               Template[]
+  templateTaskAssignments TemplateTask[]         @relation("TemplateTaskAssignee")
+  notifications           Notification[]
+  activityLogs            ActivityLog[]
+  permissions             Permission[]
+  projects                Project[]
+  managedClients          Client[]               @relation("ClientManager")
+  passwordResetTokens     PasswordResetToken[]
+  calendarToken           String?                @unique @map("calendar_token") @db.VarChar(32)
+  calendarSlug            String?                @unique @map("calendar_slug") @db.VarChar(60)
+  googleCalendarId        String?                @unique @map("google_calendar_id") @db.VarChar(255)
+  calendarAvailability    CalendarAvailability[]
+  meetings                Meeting[]
+  managedBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkManager")
+  createdBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkCreator")
 
   @@index([companyId])
   @@index([email])
@@ -144,14 +147,14 @@ model User {
 // ============================================================
 
 model Sector {
-  id          String   @id @default(uuid()) @db.Uuid
-  companyId   String   @map("company_id") @db.Uuid
-  name        String   @db.VarChar(255)
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  name        String    @db.VarChar(255)
   description String?
-  color       String?  @db.VarChar(7)
-  managerId   String?  @map("manager_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  color       String?   @db.VarChar(7)
+  managerId   String?   @map("manager_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
   company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -181,49 +184,49 @@ model SectorMember {
 // ============================================================
 
 model Task {
-  id           String       @id @default(uuid()) @db.Uuid
-  companyId    String       @map("company_id") @db.Uuid
-  sectorId     String?      @map("sector_id") @db.Uuid
-  clientId     String?      @map("client_id") @db.Uuid
-  projectId    String?      @map("project_id") @db.Uuid
-  templateId   String?      @map("template_id") @db.Uuid
-  parentTaskId String?      @map("parent_task_id") @db.Uuid
-  recurrenceRule     Json?    @map("recurrence_rule")
-  recurrenceParentId String?  @map("recurrence_parent_id") @db.Uuid
-  title        String       @db.VarChar(500)
-  description  String?
-  status       TaskStatus   @default(todo)
-  priority     TaskPriority @default(medium)
-  progress     Int          @default(0)
-  assigneeId   String?      @map("assignee_id") @db.Uuid
-  createdById  String       @map("created_by") @db.Uuid
-  dueDate      DateTime?    @map("due_date")
-  completedAt  DateTime?    @map("completed_at")
-  tags         String[]     @default([])
-  metadata     Json         @default("{}")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
-  deletedAt    DateTime?    @map("deleted_at")
-  archivedAt   DateTime?    @map("archived_at")
+  id                 String       @id @default(uuid()) @db.Uuid
+  companyId          String       @map("company_id") @db.Uuid
+  sectorId           String?      @map("sector_id") @db.Uuid
+  clientId           String?      @map("client_id") @db.Uuid
+  projectId          String?      @map("project_id") @db.Uuid
+  templateId         String?      @map("template_id") @db.Uuid
+  parentTaskId       String?      @map("parent_task_id") @db.Uuid
+  recurrenceRule     Json?        @map("recurrence_rule")
+  recurrenceParentId String?      @map("recurrence_parent_id") @db.Uuid
+  title              String       @db.VarChar(500)
+  description        String?
+  status             TaskStatus   @default(todo)
+  priority           TaskPriority @default(medium)
+  progress           Int          @default(0)
+  assigneeId         String?      @map("assignee_id") @db.Uuid
+  createdById        String       @map("created_by") @db.Uuid
+  dueDate            DateTime?    @map("due_date")
+  completedAt        DateTime?    @map("completed_at")
+  tags               String[]     @default([])
+  metadata           Json         @default("{}")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+  deletedAt          DateTime?    @map("deleted_at")
+  archivedAt         DateTime?    @map("archived_at")
 
-  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sector         Sector?             @relation(fields: [sectorId], references: [id], onDelete: SetNull)
-  client         Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  template       Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  parentTask     Task?               @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
-  subtasks       Task[]              @relation("TaskSubtasks")
-  recurrenceParent    Task?          @relation("TaskRecurrence", fields: [recurrenceParentId], references: [id], onDelete: SetNull)
-  recurrenceOccurrences Task[]       @relation("TaskRecurrence")
-  assignee       User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  createdBy      User                @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  assignees      TaskAssignee[]
-  blockedBy      TaskDependency[] @relation("BlockedTask")
-  blocking       TaskDependency[] @relation("BlockingTask")
-  watchers       TaskWatcher[]
-  checklistItems TaskChecklistItem[]
-  comments       TaskComment[]
-  attachments    TaskAttachment[]
+  company               Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sector                Sector?             @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  client                Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project               Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  template              Template?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  parentTask            Task?               @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks              Task[]              @relation("TaskSubtasks")
+  recurrenceParent      Task?               @relation("TaskRecurrence", fields: [recurrenceParentId], references: [id], onDelete: SetNull)
+  recurrenceOccurrences Task[]              @relation("TaskRecurrence")
+  assignee              User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy             User                @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  assignees             TaskAssignee[]
+  blockedBy             TaskDependency[]    @relation("BlockedTask")
+  blocking              TaskDependency[]    @relation("BlockingTask")
+  watchers              TaskWatcher[]
+  checklistItems        TaskChecklistItem[]
+  comments              TaskComment[]
+  attachments           TaskAttachment[]
 
   @@index([companyId])
   @@index([assigneeId])
@@ -339,23 +342,24 @@ model TaskAttachment {
 // ============================================================
 
 model Client {
-  id        String    @id @default(uuid()) @db.Uuid
-  companyId String    @map("company_id") @db.Uuid
-  managerId String?   @map("manager_id") @db.Uuid
-  name      String    @db.VarChar(255)
-  color     String?   @db.VarChar(7)
-  email     String?   @db.VarChar(255)
-  phone     String?   @db.VarChar(50)
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  managerId   String?   @map("manager_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  color       String?   @db.VarChar(7)
+  email       String?   @db.VarChar(255)
+  phone       String?   @db.VarChar(50)
   avatarUrl   String?   @map("avatar_url")
   description String?
   createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
 
-  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  manager  User?     @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
-  projects Project[]
-  tasks    Task[]
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager           User?              @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
+  projects          Project[]
+  tasks             Task[]
+  bookingMagicLinks BookingMagicLink[]
 
   @@index([companyId])
   @@index([managerId])
@@ -390,20 +394,20 @@ model Project {
 // ============================================================
 
 model Template {
-  id          String   @id @default(uuid()) @db.Uuid
-  companyId   String   @map("company_id") @db.Uuid
-  sectorId    String?  @map("sector_id") @db.Uuid
-  createdById String   @map("created_by") @db.Uuid
-  name        String   @db.VarChar(255)
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  sectorId    String?   @map("sector_id") @db.Uuid
+  createdById String    @map("created_by") @db.Uuid
+  name        String    @db.VarChar(255)
   description String?
-  category    String?  @db.VarChar(100)
-  isPersonal  Boolean  @default(false) @map("is_personal")
-  isActive    Boolean  @default(true) @map("is_active")
-  useCount    Int      @default(0) @map("use_count")
-  position    Int      @default(0)
-  version     Int      @default(1)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  category    String?   @db.VarChar(100)
+  isPersonal  Boolean   @default(false) @map("is_personal")
+  isActive    Boolean   @default(true) @map("is_active")
+  useCount    Int       @default(0) @map("use_count")
+  position    Int       @default(0)
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
   company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -429,9 +433,9 @@ model TemplateTask {
   defaultAssigneeRole UserRole?    @map("default_assignee_role")
   defaultAssigneeId   String?      @map("default_assignee_id") @db.Uuid
 
-  template         Template                @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  defaultAssignee  User?                   @relation("TemplateTaskAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
-  checklistItems   TemplateChecklistItem[]
+  template        Template                @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  defaultAssignee User?                   @relation("TemplateTaskAssignee", fields: [defaultAssigneeId], references: [id], onDelete: SetNull)
+  checklistItems  TemplateChecklistItem[]
 
   @@index([templateId])
   @@map("template_tasks")
@@ -517,12 +521,12 @@ model WebhookConfig {
 // ============================================================
 
 model PasswordResetToken {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  token     String   @unique @db.VarChar(64)
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique @db.VarChar(64)
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -560,7 +564,7 @@ model CalendarAvailability {
   userId    String   @map("user_id") @db.Uuid
   dayOfWeek Int      @map("day_of_week") // 0=Dom, 1=Seg, ..., 6=Sáb
   startTime String   @map("start_time") @db.VarChar(5) // "09:00"
-  endTime   String   @map("end_time") @db.VarChar(5)   // "18:00"
+  endTime   String   @map("end_time") @db.VarChar(5) // "18:00"
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -572,26 +576,26 @@ model CalendarAvailability {
 }
 
 model Meeting {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  date      String   @db.VarChar(10)  // "YYYY-MM-DD"
-  startTime String   @map("start_time") @db.VarChar(5) // "09:00"
-  endTime   String   @map("end_time") @db.VarChar(5)   // "09:30"
-  status         String   @default("confirmed") @db.VarChar(20)
-  googleEventId  String?  @map("google_event_id")
-  bookedAt       DateTime @default(now()) @map("booked_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  date          String   @db.VarChar(10) // "YYYY-MM-DD"
+  startTime     String   @map("start_time") @db.VarChar(5) // "09:00"
+  endTime       String   @map("end_time") @db.VarChar(5) // "09:30"
+  status        String   @default("confirmed") @db.VarChar(20)
+  googleEventId String?  @map("google_event_id")
+  bookedAt      DateTime @default(now()) @map("booked_at")
 
   // Client data (from external DB)
-  clientName     String?  @map("client_name")
-  clientGroupId  String?  @map("client_group_id")
-  clientPlan     String?  @map("client_plan")
+  clientName    String? @map("client_name")
+  clientGroupId String? @map("client_group_id")
+  clientPlan    String? @map("client_plan")
 
   // Recurrence (booker-side fixed monthly)
-  recurrenceRule     Json?    @map("recurrence_rule")
-  recurrenceParentId String?  @map("recurrence_parent_id") @db.Uuid
+  recurrenceRule     Json?   @map("recurrence_rule")
+  recurrenceParentId String? @map("recurrence_parent_id") @db.Uuid
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recurrenceParent Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurrenceParent   Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
   recurrenceChildren Meeting[] @relation("MeetingRecurrence")
 
   @@index([userId, date])
@@ -599,4 +603,31 @@ model Meeting {
   @@index([googleEventId])
   @@index([date, status])
   @@map("meetings")
+}
+
+model BookingMagicLink {
+  id            String    @id @default(uuid()) @db.Uuid
+  companyId     String    @map("company_id") @db.Uuid
+  clientId      String    @map("client_id") @db.Uuid
+  managerId     String    @map("manager_id") @db.Uuid
+  createdById   String    @map("created_by") @db.Uuid
+  tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
+  clientEmail   String    @map("client_email") @db.VarChar(255)
+  clientName    String    @map("client_name") @db.VarChar(255)
+  clientPlan    String?   @map("client_plan") @db.VarChar(255)
+  clientGroupId String    @map("client_group_id") @db.VarChar(255)
+  expiresAt     DateTime  @map("expires_at")
+  openedAt      DateTime? @map("opened_at")
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  client    Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  manager   User    @relation("BookingMagicLinkManager", fields: [managerId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("BookingMagicLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt])
+  @@index([managerId])
+  @@index([expiresAt, revokedAt])
+  @@map("booking_magic_links")
 }
