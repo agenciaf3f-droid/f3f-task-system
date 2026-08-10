@@ -19,7 +19,7 @@ export async function POST(
       select: { id: true },
     }),
   ]);
-  if (!session.clientEmail || session.bookingToken !== token) {
+  if (!session.clientName || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });

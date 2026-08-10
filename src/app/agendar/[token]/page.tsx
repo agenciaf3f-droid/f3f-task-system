@@ -28,7 +28,7 @@ export default async function AgendarPage({
   if (!user || !user.isActive) notFound();
 
   const session = await getClientSession();
-  if (!session.clientEmail || session.bookingToken !== token) {
+  if (!session.clientName || session.bookingToken !== token) {
     redirect(`/agendar/${token}/login`);
   }
 

@@ -69,7 +69,7 @@ export async function POST(
   }
 
   // ─── Ler sessão do cliente ─────────────────────────────────────
-  if (!session.clientEmail || session.bookingToken !== token) {
+  if (!session.clientName || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida ou expirada" }, { status: 401 });
   }
 

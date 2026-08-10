@@ -50,7 +50,7 @@ export async function PATCH(
       select: { id: true, name: true },
     }),
   ]);
-  if (!session.clientEmail || session.bookingToken !== token) {
+  if (!session.clientName || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
@@ -139,7 +139,7 @@ export async function DELETE(
       select: { id: true },
     }),
   ]);
-  if (!session.clientEmail || session.bookingToken !== token) {
+  if (!session.clientName || session.bookingToken !== token) {
     return NextResponse.json({ ok: false, error: "Sessão inválida" }, { status: 401 });
   }
   if (!user) return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
