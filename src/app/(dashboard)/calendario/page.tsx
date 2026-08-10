@@ -2,7 +2,8 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { WeekCalendar } from "./week-calendar";
 import { getOrCreateCalendarToken } from "./actions";
-import { currentYearMonthInBrazil } from "@/lib/meeting-recurrence";
+import { currentYearMonthInBrazil, todayInBrazil } from "@/lib/meeting-recurrence";
+import { isElevated } from "@/lib/task-visibility";
 
 export const metadata = { title: "Calendário" };
 
@@ -40,7 +41,8 @@ export default async function CalendarioPage({
   }
   const { gridStart, gridEnd, firstOfMonth } = getMonthGridRange(monthRef);
 
-  const [meetings, availability, calendarToken, currentUser] = await Promise.all([
+  const canManageAll = isElevated(user.role);
+  const [meetings, availability, calendarToken, currentUser, users, clients] = await Promise.all([
     prisma.meeting.findMany({
       where: {
         user: { companyId: user.companyId },
@@ -57,6 +59,21 @@ export default async function CalendarioPage({
     }),
     getOrCreateCalendarToken(),
     prisma.user.findUnique({ where: { id: user.userId }, select: { calendarSlug: true } }),
+    prisma.user.findMany({
+      where: {
+        companyId: user.companyId,
+        isActive: true,
+        deletedAt: null,
+        ...(canManageAll ? {} : { id: user.userId }),
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -87,6 +104,10 @@ export default async function CalendarioPage({
       currentSlug={currentUser?.calendarSlug ?? ""}
       appUrl={appUrl}
       userId={user.userId}
+      users={users}
+      clients={clients}
+      canManageAll={canManageAll}
+      defaultDate={todayInBrazil()}
     />
   );
 }

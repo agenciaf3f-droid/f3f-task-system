@@ -2,10 +2,14 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { deleteCalendarMeeting } from "@/lib/google-calendar";
-import { todayInBrazil } from "@/lib/meeting-recurrence";
+import { createCalendarMeeting, deleteCalendarMeeting } from "@/lib/google-calendar";
+import { isPastDate, nowInBrazil, todayInBrazil } from "@/lib/meeting-recurrence";
+import { resolvePlanCalendarId } from "@/lib/plan-calendar";
+import { isElevated } from "@/lib/task-visibility";
+import { logActivity } from "@/lib/activity";
 
 export type AvailabilityInput = {
   dayOfWeek: number;
@@ -53,6 +57,109 @@ export async function saveAvailabilityAction(
 
 export type CancelScope = "single" | "series";
 
+const timeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Horário inválido.");
+const manualMeetingSchema = z.object({
+  title: z.string().trim().min(1, "Título obrigatório.").max(255),
+  hostId: z.string().uuid("Responsável inválido."),
+  clientId: z.string().uuid().or(z.literal("")),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
+  startTime: timeSchema,
+  endTime: timeSchema,
+});
+
+export async function createManualMeetingAction(
+  formData: FormData,
+): Promise<{ success?: true; error?: string }> {
+  const user = await requireAuth();
+  const parsed = manualMeetingSchema.safeParse({
+    title: formData.get("title"),
+    hostId: formData.get("hostId"),
+    clientId: formData.get("clientId"),
+    date: formData.get("date"),
+    startTime: formData.get("startTime"),
+    endTime: formData.get("endTime"),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+
+  const { title, date, startTime, endTime, clientId } = parsed.data;
+  if (isPastDate(date)) return { error: "Não é possível criar reunião no passado." };
+  if (endTime <= startTime) return { error: "O horário final deve ser posterior ao inicial." };
+  const now = nowInBrazil();
+  if (date === now.date && startTime <= now.time) {
+    return { error: "O horário inicial deve estar no futuro." };
+  }
+
+  const hostId = isElevated(user.role) ? parsed.data.hostId : user.userId;
+  const [host, client] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: hostId, companyId: user.companyId, isActive: true, deletedAt: null },
+      select: { id: true, name: true, googleCalendarId: true },
+    }),
+    clientId
+      ? prisma.client.findFirst({
+          where: { id: clientId, companyId: user.companyId, deletedAt: null },
+          select: { name: true, whatsappGroupId: true, meetingPlan: true },
+        })
+      : null,
+  ]);
+  if (!host) return { error: "Responsável não encontrado." };
+  if (clientId && !client) return { error: "Cliente não encontrado." };
+  const displayName = client ? `${title} · ${client.name}` : title;
+
+  const conflict = await prisma.meeting.findFirst({
+    where: {
+      userId: host.id,
+      date,
+      status: "confirmed",
+      startTime: { lt: endTime },
+      endTime: { gt: startTime },
+    },
+    select: { id: true },
+  });
+  if (conflict) return { error: "Este responsável já possui uma reunião nesse horário." };
+
+  const meeting = await prisma.meeting.create({
+    data: {
+      userId: host.id,
+      date,
+      startTime,
+      endTime,
+      status: "confirmed",
+      clientName: displayName,
+      clientGroupId: client?.whatsappGroupId ?? null,
+      clientPlan: client?.meetingPlan ?? null,
+    },
+    select: { id: true },
+  });
+
+  const calendarId = await resolvePlanCalendarId(client?.meetingPlan ?? null)
+    ?? host.googleCalendarId
+    ?? undefined;
+  const googleEventId = await createCalendarMeeting({
+    date,
+    startTime,
+    endTime,
+    ownerName: host.name,
+    clientName: displayName,
+    clientGroupId: client?.whatsappGroupId ?? undefined,
+    calendarId,
+  });
+  if (googleEventId) {
+    await prisma.meeting.update({ where: { id: meeting.id }, data: { googleEventId } });
+  }
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "meeting.created",
+    resourceType: "meeting",
+    resourceId: meeting.id,
+    newValue: { title, clientId: clientId || null, hostId: host.id, date, startTime, endTime },
+  });
+  revalidatePath("/calendario");
+  return { success: true };
+}
+
 export async function cancelMeetingAction(
   meetingId: string,
   scope: CancelScope = "single",
@@ -60,10 +167,17 @@ export async function cancelMeetingAction(
   const user = await requireAuth();
 
   const meeting = await prisma.meeting.findFirst({
-    where: { id: meetingId, userId: user.userId },
+    where: {
+      id: meetingId,
+      user: { companyId: user.companyId },
+      ...(isElevated(user.role) ? {} : { userId: user.userId }),
+    },
     select: {
       id: true,
+      userId: true,
       googleEventId: true,
+      clientPlan: true,
+      user: { select: { googleCalendarId: true } },
       recurrenceRule: true,
       recurrenceParentId: true,
     },
@@ -79,7 +193,10 @@ export async function cancelMeetingAction(
       data: { status: "cancelled" },
     });
     if (meeting.googleEventId) {
-      await deleteCalendarMeeting(meeting.googleEventId);
+      const calendarId = await resolvePlanCalendarId(meeting.clientPlan)
+        ?? meeting.user.googleCalendarId
+        ?? undefined;
+      await deleteCalendarMeeting(meeting.googleEventId, calendarId);
     }
     revalidatePath("/calendario");
     return;
@@ -91,12 +208,18 @@ export async function cancelMeetingAction(
 
   const targets = await prisma.meeting.findMany({
     where: {
-      userId: user.userId,
+      userId: meeting.userId,
+      user: { companyId: user.companyId },
       status: "confirmed",
       date: { gte: today },
       OR: [{ id: parentId }, { recurrenceParentId: parentId }],
     },
-    select: { id: true, googleEventId: true },
+    select: {
+      id: true,
+      googleEventId: true,
+      clientPlan: true,
+      user: { select: { googleCalendarId: true } },
+    },
   });
 
   if (targets.length === 0) {
@@ -113,10 +236,75 @@ export async function cancelMeetingAction(
   await Promise.allSettled(
     targets
       .filter((t) => t.googleEventId)
-      .map((t) => deleteCalendarMeeting(t.googleEventId!)),
+      .map(async (t) => {
+        const calendarId = await resolvePlanCalendarId(t.clientPlan)
+          ?? t.user.googleCalendarId
+          ?? undefined;
+        await deleteCalendarMeeting(t.googleEventId!, calendarId);
+      }),
   );
 
   revalidatePath("/calendario");
+}
+
+export async function deleteMeetingForeverAction(
+  meetingId: string,
+): Promise<{ success?: true; error?: string }> {
+  const user = await requireAuth();
+  const meeting = await prisma.meeting.findFirst({
+    where: {
+      id: meetingId,
+      user: { companyId: user.companyId },
+      ...(isElevated(user.role) ? {} : { userId: user.userId }),
+    },
+    select: {
+      id: true,
+      googleEventId: true,
+      clientPlan: true,
+      recurrenceParentId: true,
+      user: { select: { googleCalendarId: true } },
+      recurrenceChildren: {
+        orderBy: [{ date: "asc" }, { startTime: "asc" }],
+        select: { id: true },
+      },
+    },
+  });
+  if (!meeting) return { error: "Reunião não encontrada ou sem permissão." };
+
+  if (meeting.googleEventId) {
+    const calendarId = await resolvePlanCalendarId(meeting.clientPlan)
+      ?? meeting.user.googleCalendarId
+      ?? undefined;
+    const deleted = await deleteCalendarMeeting(meeting.googleEventId, calendarId);
+    if (!deleted) return { error: "Não foi possível remover o evento do Google Calendar." };
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    const [nextParent, ...remainingChildren] = meeting.recurrenceChildren;
+    if (nextParent) {
+      await transaction.meeting.update({
+        where: { id: nextParent.id },
+        data: { recurrenceParentId: null },
+      });
+      if (remainingChildren.length > 0) {
+        await transaction.meeting.updateMany({
+          where: { id: { in: remainingChildren.map((child) => child.id) } },
+          data: { recurrenceParentId: nextParent.id },
+        });
+      }
+    }
+    await transaction.meeting.delete({ where: { id: meeting.id } });
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "meeting.deleted",
+    resourceType: "meeting",
+    resourceId: meeting.id,
+  });
+  revalidatePath("/calendario");
+  return { success: true };
 }
 
 export async function updateCalendarSlugAction(slug: string): Promise<{ error?: string; success?: true }> {

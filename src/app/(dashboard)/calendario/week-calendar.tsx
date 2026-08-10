@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, X } from "lucide-react";
+import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, Trash2 } from "lucide-react";
 import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
-import { cancelMeetingAction, updateCalendarSlugAction, type CancelScope } from "./actions";
+import { NewMeetingDialog } from "./new-meeting-dialog";
+import { cancelMeetingAction, deleteMeetingForeverAction, updateCalendarSlugAction, type CancelScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import {
   Dialog,
@@ -32,6 +33,8 @@ type Availability = {
   startTime: string;
   endTime: string;
 };
+
+type Option = { id: string; name: string };
 
 // Paleta por gestor: eventos compactos com superfície suave, no padrão de mês
 // do Google Calendar, preservando as cores de identificação do Tasks.
@@ -92,8 +95,11 @@ type DayCellProps = {
   isLastRow: boolean;
   isLastCol: boolean;
   userId: string;
+  canManageAll: boolean;
   cancelling: boolean;
+  deleting: boolean;
   onCancelClick: (m: Meeting) => void;
+  onDeleteClick: (m: Meeting) => void;
   onOpenDay: (dateStr: string) => void;
   onHoverOverflow: (dateStr: string | null) => void;
 };
@@ -108,8 +114,11 @@ const DayCell = memo(function DayCell({
   isLastRow,
   isLastCol,
   userId,
+  canManageAll,
   cancelling,
+  deleting,
   onCancelClick,
+  onDeleteClick,
   onOpenDay,
   onHoverOverflow,
 }: DayCellProps) {
@@ -151,7 +160,7 @@ const DayCell = memo(function DayCell({
       <div className="flex min-h-0 flex-col gap-1">
         {visible.map((m) => {
           const eventStyle = styleForHost(m.hostId);
-          const isOwn = m.hostId === userId;
+          const canManage = canManageAll || m.hostId === userId;
           const displayName = m.clientName || m.hostName;
           const tooltipPrefix = m.clientName
             ? `${m.clientName} com ${m.hostName}`
@@ -165,16 +174,30 @@ const DayCell = memo(function DayCell({
               {m.isRecurring && <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" />}
               <span className="shrink-0 font-semibold tabular-nums">{m.startTime}</span>
               <span className="truncate font-medium">{displayName}</span>
-              {isOwn && (
-                <button
-                  onClick={() => onCancelClick(m)}
-                  disabled={cancelling}
-                  className="ml-auto rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover/m:opacity-100 focus-visible:opacity-100"
-                  aria-label="Cancelar"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+              {canManage ? (
+                <span className="ml-auto flex items-center opacity-0 transition-opacity group-hover/m:opacity-100 focus-within:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => onCancelClick(m)}
+                    disabled={cancelling || deleting}
+                    className="rounded p-0.5 hover:bg-black/10"
+                    aria-label="Cancelar reunião"
+                    title="Cancelar reunião"
+                  >
+                    <CalendarX className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteClick(m)}
+                    disabled={cancelling || deleting}
+                    className="rounded p-0.5 text-red-600 hover:bg-red-100"
+                    aria-label="Excluir reunião permanentemente"
+                    title="Excluir permanentemente"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ) : null}
             </div>
           );
         })}
@@ -204,11 +227,23 @@ function DayMeetingsDialog({
   meetings,
   open,
   onOpenChange,
+  userId,
+  canManageAll,
+  cancelling,
+  deleting,
+  onCancelClick,
+  onDeleteClick,
 }: {
   dateStr: string | null;
   meetings: Meeting[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  userId: string;
+  canManageAll: boolean;
+  cancelling: boolean;
+  deleting: boolean;
+  onCancelClick: (meeting: Meeting) => void;
+  onDeleteClick: (meeting: Meeting) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -228,6 +263,7 @@ function DayMeetingsDialog({
             {meetings.map((meeting) => {
               const displayName = meeting.clientName || meeting.hostName;
               const eventStyle = styleForHost(meeting.hostId);
+              const canManage = canManageAll || meeting.hostId === userId;
               return (
                 <div
                   key={meeting.id}
@@ -242,6 +278,30 @@ function DayMeetingsDialog({
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
                   </div>
                   <span className="shrink-0 text-xs opacity-65">{meeting.hostName}</span>
+                  {canManage ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onCancelClick(meeting)}
+                        disabled={cancelling || deleting}
+                        className="rounded-lg p-1.5 hover:bg-white/70 disabled:opacity-50"
+                        aria-label={`Cancelar reunião ${displayName}`}
+                        title="Cancelar reunião"
+                      >
+                        <CalendarX className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteClick(meeting)}
+                        disabled={cancelling || deleting}
+                        className="rounded-lg p-1.5 text-red-600 hover:bg-red-100 disabled:opacity-50"
+                        aria-label={`Excluir permanentemente reunião ${displayName}`}
+                        title="Excluir permanentemente"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -261,6 +321,10 @@ export function WeekCalendar({
   currentSlug,
   appUrl,
   userId,
+  users,
+  clients,
+  canManageAll,
+  defaultDate,
 }: {
   gridStart: string;
   monthRefIso: string;
@@ -270,10 +334,15 @@ export function WeekCalendar({
   currentSlug: string;
   appUrl: string;
   userId: string;
+  users: Option[];
+  clients: Option[];
+  canManageAll: boolean;
+  defaultDate: string;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [cancelling, startCancel] = useTransition();
+  const [deleting, startDelete] = useTransition();
   const [editingSlug, setEditingSlug] = useState(false);
   const [slugDraft, setSlugDraft] = useState(currentSlug);
   const [slugError, setSlugError] = useState<string | null>(null);
@@ -366,13 +435,34 @@ export function WeekCalendar({
   const handleCancelClick = useCallback(
     (m: Meeting) => {
       if (m.isRecurring) {
+        setOpenDayDate(null);
         setCancelTarget(m);
       } else {
         if (!confirm("Cancelar esta reunião?")) return;
-        startCancel(() => cancelMeetingAction(m.id, "single"));
+        setOpenDayDate(null);
+        startCancel(async () => {
+          await cancelMeetingAction(m.id, "single");
+          router.refresh();
+        });
       }
     },
-    [startCancel]
+    [router]
+  );
+
+  const handleDeleteClick = useCallback(
+    (meeting: Meeting) => {
+      if (!confirm("Excluir permanentemente esta reunião? Esta ação não pode ser desfeita.")) return;
+      setOpenDayDate(null);
+      startDelete(async () => {
+        const result = await deleteMeetingForeverAction(meeting.id);
+        if (result.error) {
+          alert(result.error);
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [router]
   );
 
   const confirmCancel = useCallback(
@@ -380,9 +470,12 @@ export function WeekCalendar({
       if (!cancelTarget) return;
       const id = cancelTarget.id;
       setCancelTarget(null);
-      startCancel(() => cancelMeetingAction(id, scope));
+      startCancel(async () => {
+        await cancelMeetingAction(id, scope);
+        router.refresh();
+      });
     },
-    [cancelTarget, startCancel]
+    [cancelTarget, router]
   );
 
   return (
@@ -436,6 +529,13 @@ export function WeekCalendar({
               Todas
             </button>
           </div>
+          <NewMeetingDialog
+            users={users}
+            clients={clients}
+            currentUserId={userId}
+            canManageAll={canManageAll}
+            defaultDate={defaultDate}
+          />
           <AvailabilityDialog availability={availability} />
           <button
             onClick={copyLink}
@@ -485,8 +585,11 @@ export function WeekCalendar({
                 isLastRow={isLastRow}
                 isLastCol={isLastCol}
                 userId={userId}
+                canManageAll={canManageAll}
                 cancelling={cancelling}
+                deleting={deleting}
                 onCancelClick={handleCancelClick}
+                onDeleteClick={handleDeleteClick}
                 onOpenDay={setOpenDayDate}
                 onHoverOverflow={setHoveredOverflowDate}
               />
@@ -500,6 +603,12 @@ export function WeekCalendar({
         meetings={openDayMeetings}
         open={openDayDate !== null}
         onOpenChange={(open) => { if (!open) setOpenDayDate(null); }}
+        userId={userId}
+        canManageAll={canManageAll}
+        cancelling={cancelling}
+        deleting={deleting}
+        onCancelClick={handleCancelClick}
+        onDeleteClick={handleDeleteClick}
       />
 
       {/* Booking link */}

@@ -107,17 +107,25 @@ export async function listAllCalendarSummaries(): Promise<{ id: string; summary:
   }
 }
 
-export async function deleteCalendarMeeting(googleEventId: string): Promise<void> {
+export async function deleteCalendarMeeting(
+  googleEventId: string,
+  customCalendarId?: string,
+): Promise<boolean> {
   const client = getClient();
-  if (!client) return;
+  if (!client) return true;
 
   try {
     await client.calendar.events.delete({
-      calendarId: client.calendarId,
+      calendarId: customCalendarId || client.calendarId,
       eventId: googleEventId,
     });
+    return true;
   } catch (err) {
+    const status = (err as { code?: number; response?: { status?: number } }).code
+      ?? (err as { response?: { status?: number } }).response?.status;
+    if (status === 404 || status === 410) return true;
     console.error("[GCal] Erro ao deletar evento:", err);
+    return false;
   }
 }
 
