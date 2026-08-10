@@ -15,7 +15,8 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test:uazapi-safety": "node --import tsx scripts/test-uazapi-safety.ts"
+    "test:uazapi-safety": "node --import tsx scripts/test-uazapi-safety.ts",
+    "test:client-sync": "node --import tsx scripts/test-client-sheet-sync.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

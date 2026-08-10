@@ -2,6 +2,7 @@
   "buildCommand": "npm run db:deploy:vercel && npm run build",
   "crons": [
     { "path": "/api/cron/recurrence", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/sync-calendar", "schedule": "0 4 * * *" }
+    { "path": "/api/cron/sync-calendar", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/sync-clients", "schedule": "*/10 * * * *" }
   ]
 }

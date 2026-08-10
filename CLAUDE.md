@@ -55,6 +55,7 @@ src/
     api/agendar/[token]/
       auth/route.ts   # POST: client credentials → f3f_client_session
       book/route.ts   # POST: create Meeting + Google Calendar event
+    api/cron/sync-clients/route.ts # GET: planilha pública → Client
   components/
     ui/               # shared primitives
     tasks/            # task-specific components
@@ -119,7 +120,20 @@ Protocolo obrigatório de testes do WhatsApp:
 - Nunca testar mensagens automáticas em grupos reais de outros clientes.
 - Credenciais e tokens da UAZAPI devem existir apenas como secrets de ambiente; nunca em código, commits, logs ou documentação.
 - Antes de qualquer teste, resolver e validar o JID do grupo selecionado (`...@g.us`) e bloquear o envio se ele não corresponder ao grupo autorizado.
-- Em `UAZAPI_MODE=test`, somente administradores enviam e o servidor força o JID autorizado, ignorando o destino do cliente.
+- Em `UAZAPI_MODE=test`, o servidor força o JID autorizado, ignorando o destino do cliente.
+
+---
+
+## Sincronização automática de clientes
+
+- **Fonte:** CSV público da planilha de grupos F3F.
+- **Cron:** `/api/cron/sync-clients`, a cada 10 minutos via `vercel.json`.
+- **Auth:** `CRON_SECRET` enviado pela Vercel como `Authorization: Bearer ...`.
+- **Campos:** `Grupo`, `Gestor Responsável`, `Status`, `ID Grupo (Uazapi)` e `Plano`.
+- **Identidade:** `ID Grupo (Uazapi)`; fallback por nome apenas para cliente legado sem ID.
+- **Ativo:** cria, atualiza ou restaura o cliente e vincula o gestor interno pelo nome.
+- **Inativo:** arquiva cliente existente; nunca cria cliente inativo.
+- Linhas sem ID UAZAPI, plano ou gestor válidos são ignoradas e registradas no resultado do cron.
 
 ---
 
