@@ -26,14 +26,12 @@ function hashToken(token: string): string {
 
 function buildMessage({
   clientName,
-  managerName,
   bookingUrl,
   durationMinutes,
   recurrence,
   testMode,
 }: {
   clientName: string;
-  managerName: string;
   bookingUrl: string;
   durationMinutes: number;
   recurrence: "weekly" | "monthly";
@@ -47,7 +45,7 @@ function buildMessage({
     ...(testMode ? ["🧪 TESTE DO AGENDAMENTO", ""] : []),
     `Olá, ${firstName}! 👋`,
     "",
-    `Sua reunião com ${managerName} já pode ser agendada.`,
+    `Sua reunião com ${clientName} já pode ser agendada.`,
     `Duração: ${duration} · Frequência: ${frequency}.`,
     "",
     "Escolha o melhor dia e horário pelo seu link pessoal:",
@@ -147,7 +145,6 @@ export async function sendClientBookingLinkAction(
   const recurrence = getMeetingRecurrence(clientPlan);
   const message = buildMessage({
     clientName,
-    managerName: manager.name,
     bookingUrl,
     durationMinutes,
     recurrence,
