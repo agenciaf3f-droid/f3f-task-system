@@ -19,9 +19,8 @@ export function NewProjectForm({ clients, templates, defaultClientId }: { client
   );
   const initialClientId = (defaultClientId && clients.find((c) => c.id === defaultClientId))
     ? defaultClientId
-    : (clients[0]?.id ?? "__new__");
+    : (clients[0]?.id ?? "");
   const [clientId, setClientId] = useState(initialClientId);
-  const [showNewClient, setShowNewClient] = useState(clients.length === 0 || initialClientId === "__new__");
   const [templateId, setTemplateId] = useState("__none__");
   const [description, setDescription] = useState("");
   const [descriptionTouched, setDescriptionTouched] = useState(false);
@@ -35,9 +34,7 @@ export function NewProjectForm({ clients, templates, defaultClientId }: { client
   }
 
   function handleClientChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const val = e.target.value;
-    setClientId(val);
-    setShowNewClient(val === "__new__");
+    setClientId(e.target.value);
   }
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
@@ -67,27 +64,15 @@ export function NewProjectForm({ clients, templates, defaultClientId }: { client
             disabled={isPending}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
+            {clients.length === 0 && <option value="">Nenhum cliente cadastrado</option>}
             {clients.map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
-            <option value="__new__">+ Novo cliente</option>
           </select>
+          <Link href="/clientes" className="text-xs text-blue-600 hover:underline">
+            + Cadastrar cliente com plano, gestor e grupo do WhatsApp
+          </Link>
         </div>
-
-        {showNewClient && (
-          <div className="flex flex-col gap-1.5 bg-neutral-50 border border-neutral-200 rounded-lg p-4">
-            <Label htmlFor="newClientName">
-              Nome do novo cliente <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="newClientName"
-              name="newClientName"
-              placeholder="Ex: Mari Eiras, Empresa XYZ..."
-              disabled={isPending}
-              autoFocus
-            />
-          </div>
-        )}
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="name">
@@ -153,7 +138,7 @@ export function NewProjectForm({ clients, templates, defaultClientId }: { client
         )}
 
         <div className="flex gap-3 pt-1">
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || clients.length === 0}>
             {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             Criar projeto
           </Button>

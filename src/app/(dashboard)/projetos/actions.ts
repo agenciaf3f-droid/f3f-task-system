@@ -18,9 +18,21 @@ const clientSchema = z.object({
     (value) => (typeof value === "string" ? value.trim().toLowerCase() : ""),
     z.string().email("E-mail inválido").or(z.literal("")),
   ),
+  meetingPlan: z.string().trim().min(1, "Plano obrigatório").max(100),
+  whatsappGroupId: z.string().trim()
+    .regex(/^\d+@g\.us$/, "ID do grupo inválido. Use o formato 120363...@g.us"),
+  whatsappGroupName: z.string().trim().min(1, "Nome do grupo obrigatório").max(255),
   description: z.string().optional().or(z.literal("")),
-  managerId: z.string().uuid().optional().or(z.literal("")),
+  managerId: z.string().uuid("Selecione um gestor responsável"),
 });
+
+async function isValidClientManager(companyId: string, managerId: string) {
+  const manager = await prisma.user.findFirst({
+    where: { id: managerId, companyId, deletedAt: null, isActive: true },
+    select: { id: true },
+  });
+  return Boolean(manager);
+}
 
 export async function createClientAction(
   _prev: { error?: string; success?: boolean },
@@ -31,19 +43,28 @@ export async function createClientAction(
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    meetingPlan: formData.get("meetingPlan"),
+    whatsappGroupId: formData.get("whatsappGroupId"),
+    whatsappGroupName: formData.get("whatsappGroupName"),
     description: formData.get("description"),
     managerId: formData.get("managerId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
+    return { error: "Gestor responsável inválido." };
+  }
 
   await prisma.client.create({
     data: {
       companyId: user.companyId,
       name: parsed.data.name,
       email: parsed.data.email || null,
+      meetingPlan: parsed.data.meetingPlan,
+      whatsappGroupId: parsed.data.whatsappGroupId,
+      whatsappGroupName: parsed.data.whatsappGroupName,
       color: pickColor(parsed.data.name),
       description: parsed.data.description || null,
-      managerId: parsed.data.managerId || null,
+      managerId: parsed.data.managerId,
     },
   });
 
@@ -65,18 +86,27 @@ export async function updateClientAction(
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    meetingPlan: formData.get("meetingPlan"),
+    whatsappGroupId: formData.get("whatsappGroupId"),
+    whatsappGroupName: formData.get("whatsappGroupName"),
     description: formData.get("description"),
     managerId: formData.get("managerId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
+    return { error: "Gestor responsável inválido." };
+  }
 
   await prisma.client.updateMany({
     where: { id: clientId, companyId: user.companyId },
     data: {
       name: parsed.data.name,
       email: parsed.data.email || null,
+      meetingPlan: parsed.data.meetingPlan,
+      whatsappGroupId: parsed.data.whatsappGroupId,
+      whatsappGroupName: parsed.data.whatsappGroupName,
       description: parsed.data.description || null,
-      managerId: parsed.data.managerId || null,
+      managerId: parsed.data.managerId,
     },
   });
 
@@ -236,22 +266,23 @@ export async function createProjectAction(
 
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim();
-  let clientId = formData.get("clientId") as string;
-  const newClientName = (formData.get("newClientName") as string)?.trim();
+  const clientId = formData.get("clientId") as string;
   const templateId = (formData.get("templateId") as string)?.trim();
 
   if (!name) return { error: "Nome do projeto obrigatório." };
 
   if (clientId === "__new__") {
-    if (!newClientName) return { error: "Nome do cliente obrigatório." };
-    const client = await prisma.client.create({
-      data: { companyId: user.companyId, name: newClientName, color: pickColor(newClientName) },
-    });
-    clientId = client.id;
+    return { error: "Cadastre o cliente na tela Clientes antes de criar o projeto." };
   }
 
   const uuidParsed = z.string().uuid().safeParse(clientId);
   if (!uuidParsed.success) return { error: "Selecione um cliente." };
+
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, companyId: user.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!client) return { error: "Cliente não encontrado." };
 
   const project = await prisma.project.create({
     data: {

@@ -24,7 +24,7 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" />Novo cliente</Button>} />
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Criar cliente</DialogTitle>
         </DialogHeader>
@@ -39,11 +39,12 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
             <select
               id="managerId"
               name="managerId"
+              required
               disabled={isPending}
               className="border border-input rounded-md px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-ring"
               defaultValue=""
             >
-              <option value="">— Sem gestor —</option>
+              <option value="">Selecione um gestor</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -51,9 +52,25 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="meetingPlan">Plano</Label>
+            <Input id="meetingPlan" name="meetingPlan" placeholder="Ex: 16 FASES" required disabled={isPending} />
+            <p className="text-xs text-neutral-400">Define a duração e a frequência das reuniões.</p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="whatsappGroupName">Grupo do WhatsApp</Label>
+            <Input id="whatsappGroupName" name="whatsappGroupName" placeholder="Ex: F3F - Cliente - Plano" required disabled={isPending} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="whatsappGroupId">ID do grupo</Label>
+            <Input id="whatsappGroupId" name="whatsappGroupId" placeholder="120363...@g.us" required disabled={isPending} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">E-mail do cliente (opcional)</Label>
             <Input id="email" name="email" type="email" placeholder="cliente@empresa.com" disabled={isPending} />
-            <p className="text-xs text-neutral-400">Usado para localizar com segurança o plano e o grupo do WhatsApp.</p>
+            <p className="text-xs text-neutral-400">Usado como identificação adicional do cliente.</p>
           </div>
 
           <div className="flex flex-col gap-1.5">

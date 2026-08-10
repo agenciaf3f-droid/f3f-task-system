@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { findClientForBooking } from "@/lib/external-db";
 import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-duration";
-import { deliverWebhook } from "@/lib/webhook";
+import { isUazapiTestMode, sendWhatsAppText } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { projectVisibilityFilter } from "@/lib/task-visibility";
 
@@ -17,6 +17,7 @@ export type SendBookingLinkResult = {
   error?: string;
   durationMinutes?: number;
   recurrence?: "weekly" | "monthly";
+  testMode?: boolean;
 };
 
 function hashToken(token: string): string {
@@ -29,18 +30,21 @@ function buildMessage({
   bookingUrl,
   durationMinutes,
   recurrence,
+  testMode,
 }: {
   clientName: string;
   managerName: string;
   bookingUrl: string;
   durationMinutes: number;
   recurrence: "weekly" | "monthly";
+  testMode: boolean;
 }): string {
   const firstName = clientName.trim().split(/\s+/)[0] || clientName;
   const duration = durationMinutes === 60 ? "1 hora" : `${durationMinutes} minutos`;
   const frequency = recurrence === "weekly" ? "semanal" : "mensal";
 
   return [
+    ...(testMode ? ["🧪 TESTE DO AGENDAMENTO", ""] : []),
     `Olá, ${firstName}! 👋`,
     "",
     `Sua reunião com ${managerName} já pode ser agendada.`,
@@ -57,6 +61,10 @@ export async function sendClientBookingLinkAction(
   clientId: string,
 ): Promise<SendBookingLinkResult> {
   const user = await requireAuth();
+  const testMode = isUazapiTestMode();
+  if (testMode && user.role !== "admin") {
+    return { error: "O envio de teste está restrito aos administradores." };
+  }
   const parsedClientId = z.string().uuid().safeParse(clientId);
   if (!parsedClientId.success) return { error: "Cliente inválido." };
 
@@ -66,6 +74,8 @@ export async function sendClientBookingLinkAction(
       id: true,
       name: true,
       email: true,
+      meetingPlan: true,
+      whatsappGroupId: true,
       managerId: true,
       manager: {
         select: {
@@ -102,17 +112,21 @@ export async function sendClientBookingLinkAction(
     return { error: `${manager.name} ainda não configurou horários disponíveis.` };
   }
 
-  const externalClient = await findClientForBooking({
-    email: client.email,
-    name: client.name,
-  });
-  if (!externalClient) {
-    return { error: "Não foi possível localizar este cliente no cadastro de planos." };
+  const needsExternalData = !client.meetingPlan?.trim() || !client.whatsappGroupId?.trim();
+  const externalClient = needsExternalData
+    ? await findClientForBooking({ email: client.email, name: client.name })
+    : null;
+  const clientPlan = client.meetingPlan?.trim() || externalClient?.plano?.trim();
+  const clientGroupId = client.whatsappGroupId?.trim() || externalClient?.whatsapp_group_id?.trim();
+  const clientName = externalClient?.nome?.trim() || client.name;
+  const clientEmail = client.email?.trim().toLowerCase()
+    || externalClient?.email?.trim().toLowerCase()
+    || null;
+
+  if (!clientPlan) {
+    return { error: "Defina o plano de reuniões deste cliente." };
   }
-  if (!externalClient.email?.trim()) {
-    return { error: "O cadastro externo deste cliente não possui e-mail." };
-  }
-  if (!externalClient.whatsapp_group_id?.trim()) {
+  if (!clientGroupId) {
     return { error: "Este cliente não possui grupo do WhatsApp configurado." };
   }
 
@@ -132,14 +146,15 @@ export async function sendClientBookingLinkAction(
     ? "https://task.agenciaf3f.com.br"
     : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const bookingUrl = `${appUrl}/agendar/acesso/${rawToken}`;
-  const durationMinutes = getMeetingDurationMinutes(externalClient.plano);
-  const recurrence = getMeetingRecurrence(externalClient.plano);
+  const durationMinutes = getMeetingDurationMinutes(clientPlan);
+  const recurrence = getMeetingRecurrence(clientPlan);
   const message = buildMessage({
-    clientName: externalClient.nome || client.name,
+    clientName,
     managerName: manager.name,
     bookingUrl,
     durationMinutes,
     recurrence,
+    testMode,
   });
 
   const magicLink = await prisma.bookingMagicLink.create({
@@ -149,32 +164,23 @@ export async function sendClientBookingLinkAction(
       managerId: manager.id,
       createdById: user.userId,
       tokenHash,
-      clientEmail: externalClient.email.trim().toLowerCase(),
-      clientName: externalClient.nome || client.name,
-      clientPlan: externalClient.plano?.trim() || null,
-      clientGroupId: externalClient.whatsapp_group_id.trim(),
+      clientEmail,
+      clientName,
+      clientPlan,
+      clientGroupId,
       expiresAt,
     },
     select: { id: true },
   });
 
-  const delivery = await deliverWebhook(user.companyId, "meeting.booking_link_requested", {
-    clientId: client.id,
-    clientName: externalClient.nome || client.name,
-    clientEmail: externalClient.email.trim().toLowerCase(),
-    whatsappGroupId: externalClient.whatsapp_group_id.trim(),
-    managerId: manager.id,
-    managerName: manager.name,
-    plan: externalClient.plano,
-    durationMinutes,
-    recurrence,
-    bookingUrl,
+  const delivery = await sendWhatsAppText({
+    groupId: clientGroupId,
     message,
-    expiresAt: expiresAt.toISOString(),
+    trackId: magicLink.id,
   });
 
   if (!delivery.delivered) {
-    if (delivery.reason === "not_configured") {
+    if (delivery.reason !== "request_failed") {
       await prisma.bookingMagicLink.update({
         where: { id: magicLink.id },
         data: { revokedAt: new Date() },
@@ -182,7 +188,9 @@ export async function sendClientBookingLinkAction(
     }
     return {
       error: delivery.reason === "not_configured"
-        ? "Configure o webhook do WhatsApp antes de enviar links de reunião."
+        ? "A integração com a UAZAPI não está configurada corretamente."
+        : delivery.reason === "rejected"
+          ? `A UAZAPI recusou o envio${delivery.status ? ` (HTTP ${delivery.status})` : ""}.`
         : "Não foi possível confirmar o envio. Verifique o grupo antes de tentar novamente.",
     };
   }
@@ -208,8 +216,9 @@ export async function sendClientBookingLinkAction(
       durationMinutes,
       recurrence,
       expiresAt: expiresAt.toISOString(),
+      testMode: delivery.mode === "test",
     },
   });
 
-  return { success: true, durationMinutes, recurrence };
+  return { success: true, durationMinutes, recurrence, testMode: delivery.mode === "test" };
 }

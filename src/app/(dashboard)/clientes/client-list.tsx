@@ -14,6 +14,9 @@ type ClientItem = {
   avatarUrl: string | null;
   description: string | null;
   email: string | null;
+  meetingPlan: string | null;
+  whatsappGroupId: string | null;
+  whatsappGroupName: string | null;
   managerId: string | null;
   manager: { id: string; name: string } | null;
   deletedAt: Date | null;

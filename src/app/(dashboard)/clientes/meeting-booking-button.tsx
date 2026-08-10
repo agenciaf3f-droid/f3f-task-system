@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { sendClientBookingLinkAction } from "./meeting-actions";
 
-export function MeetingBookingButton({ clientId }: { clientId: string }) {
+export function MeetingBookingButton({ clientId, testMode = false }: { clientId: string; testMode?: boolean }) {
   const [sent, setSent] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -21,7 +21,11 @@ export function MeetingBookingButton({ clientId }: { clientId: string }) {
       setSent(true);
       const duration = result.durationMinutes === 60 ? "1 hora" : `${result.durationMinutes} min`;
       const frequency = result.recurrence === "weekly" ? "semanal" : "mensal";
-      toast.success(`Link enviado no grupo do WhatsApp · ${duration}, ${frequency}.`);
+      toast.success(
+        result.testMode
+          ? `Teste enviado ao grupo autorizado · ${duration}, ${frequency}.`
+          : `Link enviado no grupo do WhatsApp · ${duration}, ${frequency}.`,
+      );
     });
   }
 
@@ -41,7 +45,13 @@ export function MeetingBookingButton({ clientId }: { clientId: string }) {
       ) : (
         <CalendarPlus />
       )}
-      {isPending ? "Enviando..." : sent ? "Enviar novamente" : "Agendar reunião"}
+      {isPending
+        ? "Enviando..."
+        : sent
+          ? "Enviar novamente"
+          : testMode
+            ? "Testar agendamento"
+            : "Agendar reunião"}
     </Button>
   );
 }

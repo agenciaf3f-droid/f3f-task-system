@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { projectVisibilityFilter, taskVisibilityFilter } from "@/lib/task-visibility";
-import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, ArrowLeft, Calendar, ListTodo, User } from "lucide-react";
+import { FolderOpen, Plus, CheckCircle2, TrendingUp, Archive, Hash, Pencil, ArrowLeft, Calendar, ListTodo, User, MessageCircle } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { ProjectClientList } from "./project-client-list";
 import { StatusBadge } from "@/components/tasks/task-badges";
@@ -33,7 +33,15 @@ export default async function ProjetosPage({
     const [client, projects, relatedTasks] = await Promise.all([
       prisma.client.findFirst({
         where: { id: clientId, companyId: user.companyId, deletedAt: null },
-        select: { id: true, name: true, color: true },
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          meetingPlan: true,
+          whatsappGroupId: true,
+          whatsappGroupName: true,
+          managerId: true,
+        },
       }),
       prisma.project.findMany({
         where: projectWhere,
@@ -115,10 +123,18 @@ export default async function ProjetosPage({
                 <p className="text-sm text-neutral-500 mt-0.5">
                   {active.length} projeto{active.length !== 1 ? "s" : ""} ativo{active.length !== 1 ? "s" : ""}
                 </p>
+                {client.meetingPlan && client.whatsappGroupId && client.managerId ? (
+                  <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3" />
+                    Agendamento configurado · {client.meetingPlan} · {client.whatsappGroupName || "grupo vinculado"}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600 mt-1">Complete plano, grupo e gestor para agendar reuniões.</p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <MeetingBookingButton clientId={client.id} />
+              <MeetingBookingButton clientId={client.id} testMode={process.env.UAZAPI_MODE === "test"} />
               <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
                 <Plus className="w-4 h-4 mr-2" />
                 Novo projeto

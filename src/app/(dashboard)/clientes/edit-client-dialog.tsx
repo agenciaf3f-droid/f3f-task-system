@@ -17,6 +17,9 @@ interface EditClientDialogProps {
     avatarUrl: string | null;
     description: string | null;
     email: string | null;
+    meetingPlan: string | null;
+    whatsappGroupId: string | null;
+    whatsappGroupName: string | null;
     managerId: string | null;
   };
   managers: { id: string; name: string }[];
@@ -70,7 +73,7 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar cliente</DialogTitle>
           </DialogHeader>
@@ -120,15 +123,53 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
               <select
                 id="managerId"
                 name="managerId"
+                required
                 disabled={isPending}
                 defaultValue={client.managerId ?? ""}
                 className="border border-neutral-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">— Sem gestor —</option>
+                <option value="">Selecione um gestor</option>
                 {managers.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="meetingPlan">Plano</Label>
+              <Input
+                id="meetingPlan"
+                name="meetingPlan"
+                defaultValue={client.meetingPlan ?? ""}
+                placeholder="Ex: 16 FASES"
+                required
+                disabled={isPending}
+              />
+              <p className="text-xs text-neutral-400">Define a duração e a frequência das reuniões.</p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="whatsappGroupName">Grupo do WhatsApp</Label>
+              <Input
+                id="whatsappGroupName"
+                name="whatsappGroupName"
+                defaultValue={client.whatsappGroupName ?? ""}
+                placeholder="Ex: F3F - Cliente - Plano"
+                required
+                disabled={isPending}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="whatsappGroupId">ID do grupo</Label>
+              <Input
+                id="whatsappGroupId"
+                name="whatsappGroupId"
+                defaultValue={client.whatsappGroupId ?? ""}
+                placeholder="120363...@g.us"
+                required
+                disabled={isPending}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -141,7 +182,7 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
                 placeholder="cliente@empresa.com"
                 disabled={isPending}
               />
-              <p className="text-xs text-neutral-400">Usado para localizar o plano e o grupo do WhatsApp.</p>
+              <p className="text-xs text-neutral-400">Usado como identificação adicional do cliente.</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

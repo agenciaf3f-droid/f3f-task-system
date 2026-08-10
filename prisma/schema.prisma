@@ -342,18 +342,21 @@ model TaskAttachment {
 // ============================================================
 
 model Client {
-  id          String    @id @default(uuid()) @db.Uuid
-  companyId   String    @map("company_id") @db.Uuid
-  managerId   String?   @map("manager_id") @db.Uuid
-  name        String    @db.VarChar(255)
-  color       String?   @db.VarChar(7)
-  email       String?   @db.VarChar(255)
-  phone       String?   @db.VarChar(50)
-  avatarUrl   String?   @map("avatar_url")
-  description String?
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  managerId         String?   @map("manager_id") @db.Uuid
+  name              String    @db.VarChar(255)
+  color             String?   @db.VarChar(7)
+  email             String?   @db.VarChar(255)
+  phone             String?   @db.VarChar(50)
+  meetingPlan       String?   @map("meeting_plan") @db.VarChar(100)
+  whatsappGroupId   String?   @map("whatsapp_group_id") @db.VarChar(255)
+  whatsappGroupName String?   @map("whatsapp_group_name") @db.VarChar(255)
+  avatarUrl         String?   @map("avatar_url")
+  description       String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
 
   company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   manager           User?              @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
@@ -363,6 +366,7 @@ model Client {
 
   @@index([companyId])
   @@index([managerId])
+  @@index([whatsappGroupId])
   @@map("clients")
 }
 
@@ -612,7 +616,7 @@ model BookingMagicLink {
   managerId     String    @map("manager_id") @db.Uuid
   createdById   String    @map("created_by") @db.Uuid
   tokenHash     String    @unique @map("token_hash") @db.VarChar(64)
-  clientEmail   String    @map("client_email") @db.VarChar(255)
+  clientEmail   String?   @map("client_email") @db.VarChar(255)
   clientName    String    @map("client_name") @db.VarChar(255)
   clientPlan    String?   @map("client_plan") @db.VarChar(255)
   clientGroupId String    @map("client_group_id") @db.VarChar(255)

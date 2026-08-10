@@ -96,9 +96,9 @@ Banco externo NÃO é controlado por esta app — apenas leitura para login. Has
 
 Fluxo principal (sem login):
 1. No perfil `/projetos?clientId=...`, `Agendar reunião` chama `sendClientBookingLinkAction()`
-2. A action encontra plano + `whatsapp_group_id` no banco externo por e-mail (fallback único por nome)
+2. A action usa `Client.meetingPlan` + `Client.whatsappGroupId`; clientes legados usam o banco externo por e-mail (fallback único por nome)
 3. Cria `BookingMagicLink`: token aleatório, apenas SHA-256 salvo, validade de 7 dias
-4. Envia `meeting.booking_link_requested` ao `WebhookConfig` da empresa com `whatsappGroupId`, `message` e `bookingUrl`
+4. `sendWhatsAppText()` envia a mensagem diretamente para `POST {UAZAPI_SERVER_URL}/send/text`
 5. Cliente abre `/agendar/acesso/[token]` → token válido cria `f3f_client_session` e redireciona para a agenda do gestor
 6. Cliente escolhe horário (respeitando `CalendarAvailability`) → `POST /api/agendar/[token]/book`
 7. Duração e recorrência vêm de `clientPlan`; o cliente não escolhe nem envia essas regras
@@ -106,11 +106,11 @@ Fluxo principal (sem login):
 
 Fluxo legado por login continua disponível em `/agendar/[token]/login` para links antigos.
 
-Evento do webhook WhatsApp:
-- `event`: `meeting.booking_link_requested`
-- `data.whatsappGroupId`: destino do grupo
-- `data.message`: texto pronto para envio
-- `data.bookingUrl`: link mágico individual
+Configuração UAZAPI (server-only):
+- `UAZAPI_SERVER_URL`: URL da instância
+- `UAZAPI_INSTANCE_TOKEN`: token Sensitive da instância
+- `UAZAPI_MODE`: `test` ou `production`
+- `UAZAPI_TEST_GROUP_ID`: destino obrigatório durante a homologação
 - O endpoint precisa responder HTTP 2xx para o Task considerar o envio confirmado.
 
 Protocolo obrigatório de testes do WhatsApp:
@@ -119,6 +119,7 @@ Protocolo obrigatório de testes do WhatsApp:
 - Nunca testar mensagens automáticas em grupos reais de outros clientes.
 - Credenciais e tokens da UAZAPI devem existir apenas como secrets de ambiente; nunca em código, commits, logs ou documentação.
 - Antes de qualquer teste, resolver e validar o JID do grupo selecionado (`...@g.us`) e bloquear o envio se ele não corresponder ao grupo autorizado.
+- Em `UAZAPI_MODE=test`, somente administradores enviam e o servidor força o JID autorizado, ignorando o destino do cliente.
 
 ---
 
@@ -141,6 +142,7 @@ Protocolo obrigatório de testes do WhatsApp:
 
 - **User**: + `calendarSlug` (unique, nullable), `calendarToken` (unique, nullable) — para link público
 - **CalendarAvailability**: `userId`, `dayOfWeek` (0-6), `startTime`, `endTime` (HH:MM); unique `[userId, dayOfWeek]`
+- **Client**: + `meetingPlan`, `whatsappGroupId`, `whatsappGroupName` para agendamento sem lookup frágil
 - **Meeting**: `userId`, `date` (YYYY-MM-DD), `startTime`, `endTime`, `status` (default `confirmed`), `googleEventId`, `clientName`, `clientGroupId`, `clientPlan`, `recurrenceRule` (JSON), `recurrenceParentId` (self); unique `[userId, date, startTime]`
 
 ---
