@@ -1,6 +1,7 @@
 name: Sincronizar clientes
 
 on:
+  # Também valida o fluxo quando a própria integração é alterada na main.
   push:
     branches:
       - main
