@@ -115,6 +115,7 @@ Evento do webhook WhatsApp:
 
 Protocolo obrigatório de testes do WhatsApp:
 - Todo envio de teste deve usar exclusivamente o grupo **`F3F - Arthur - 16 FASES`**.
+- JID autorizado para testes: **`120363290811576538@g.us`**.
 - Nunca testar mensagens automáticas em grupos reais de outros clientes.
 - Credenciais e tokens da UAZAPI devem existir apenas como secrets de ambiente; nunca em código, commits, logs ou documentação.
 - Antes de qualquer teste, resolver e validar o JID do grupo selecionado (`...@g.us`) e bloquear o envio se ele não corresponder ao grupo autorizado.
