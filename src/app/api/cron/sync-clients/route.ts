@@ -27,7 +27,11 @@ async function isAuthorized(request: Request): Promise<boolean> {
     return payload.repository === GITHUB_REPOSITORY
       && payload.ref === "refs/heads/main"
       && payload.workflow_ref === GITHUB_WORKFLOW_REF
-      && (payload.event_name === "schedule" || payload.event_name === "workflow_dispatch");
+      && (
+        payload.event_name === "push"
+        || payload.event_name === "schedule"
+        || payload.event_name === "workflow_dispatch"
+      );
   } catch {
     return false;
   }
