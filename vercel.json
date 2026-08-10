@@ -3,6 +3,6 @@
   "crons": [
     { "path": "/api/cron/recurrence", "schedule": "0 3 * * *" },
     { "path": "/api/cron/sync-calendar", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/sync-clients", "schedule": "*/10 * * * *" }
+    { "path": "/api/cron/sync-clients", "schedule": "15 3 * * *" }
   ]
 }

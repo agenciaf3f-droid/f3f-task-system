@@ -1,0 +1,37 @@
+name: Sincronizar clientes
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sync-clients
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gerar identidade assinada do GitHub
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('f3f-task-client-sync')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Sincronizar planilha com o Task
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 \
+            --header "Authorization: Bearer ${OIDC_TOKEN}" \
+            https://task.agenciaf3f.com.br/api/cron/sync-clients

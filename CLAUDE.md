@@ -127,8 +127,8 @@ Protocolo obrigatório de testes do WhatsApp:
 ## Sincronização automática de clientes
 
 - **Fonte:** CSV público da planilha de grupos F3F.
-- **Cron:** `/api/cron/sync-clients`, a cada 10 minutos via `vercel.json`.
-- **Auth:** `CRON_SECRET` enviado pela Vercel como `Authorization: Bearer ...`.
+- **Cron principal:** GitHub Actions chama `/api/cron/sync-clients` a cada 10 minutos usando OIDC assinado e restrito ao workflow da `main`.
+- **Fallback:** Vercel executa a mesma rota uma vez ao dia via `vercel.json`, autenticada por `CRON_SECRET`.
 - **Campos:** `Grupo`, `Gestor Responsável`, `Status`, `ID Grupo (Uazapi)` e `Plano`.
 - **Identidade:** `ID Grupo (Uazapi)`; fallback por nome apenas para cliente legado sem ID.
 - **Ativo:** cria, atualiza ou restaura o cliente e vincula o gestor interno pelo nome.
