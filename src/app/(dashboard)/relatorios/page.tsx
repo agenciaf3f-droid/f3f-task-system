@@ -1,29 +1,12 @@
 import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { BarChart3, TrendingUp, Users, CheckCircle2, AlertCircle } from "lucide-react";
+import { BarChart3, TrendingUp, Users, CheckCircle2, AlertCircle, ClockAlert } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { endOfDay, startOfDay, startOfMonth, subDays } from "date-fns";
+import { startOfDay } from "date-fns";
 import { ReportPeriodFilter } from "./period-filter";
-
-const PERIODS = ["today", "yesterday", "last7", "month"] as const;
-type Period = (typeof PERIODS)[number];
-
-function getPeriodRange(period: Period, now: Date) {
-  const end = endOfDay(now);
-  switch (period) {
-    case "today":
-      return { start: startOfDay(now), end, label: "Hoje" };
-    case "yesterday": {
-      const yesterday = subDays(now, 1);
-      return { start: startOfDay(yesterday), end: endOfDay(yesterday), label: "Ontem" };
-    }
-    case "last7":
-      return { start: startOfDay(subDays(now, 6)), end, label: "Últimos 7 dias" };
-    default:
-      return { start: startOfMonth(now), end, label: "Este mês" };
-  }
-}
+import { completedLate } from "@/lib/task-delay";
+import { getReportPeriodRange, parseReportPeriod } from "@/lib/report-period";
 
 export default async function RelatoriosPage({
   searchParams,
@@ -33,23 +16,35 @@ export default async function RelatoriosPage({
   const user = await requireRole(["admin", "manager"]);
   const companyId = user.companyId;
   const sp = await searchParams;
-  const period: Period = PERIODS.includes(sp.period as Period) ? sp.period as Period : "month";
+  const period = parseReportPeriod(sp.period);
 
   const now = new Date();
   const todayStart = startOfDay(now);
-  const { start, end, label: periodLabel } = getPeriodRange(period, now);
+  const { start, end, label: periodLabel } = getReportPeriodRange(period, now);
   const createdInPeriod = { gte: start, lte: end };
 
   // Global stats
   const [
     totalTasks,
     doneTasks,
+    completedLateCandidates,
     overdueTasks,
     doneInPeriod,
     createdInPeriodCount,
   ] = await Promise.all([
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: { notIn: ["cancelled"] } } }),
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
+    prisma.task.findMany({
+      where: {
+        companyId,
+        deletedAt: null,
+        parentTaskId: null,
+        status: "done",
+        dueDate: { not: null },
+        completedAt: createdInPeriod,
+      },
+      select: { dueDate: true, completedAt: true },
+    }),
     // A tarefa vence no próprio dia do prazo; só é atrasada a partir do dia seguinte.
     prisma.task.count({ where: { companyId, deletedAt: null, archivedAt: null, dueDate: { lt: todayStart }, status: { notIn: ["done", "cancelled"] } } }),
     prisma.task.count({ where: { companyId, deletedAt: null, createdAt: createdInPeriod, status: "done" } }),
@@ -57,6 +52,9 @@ export default async function RelatoriosPage({
   ]);
 
   const completionRate = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+  const completedLateTasks = completedLateCandidates.filter(
+    (task) => task.dueDate && task.completedAt && completedLate(task.dueDate, task.completedAt),
+  ).length;
 
   // Per-user stats
   const usersWithStats = await prisma.user.findMany({
@@ -129,7 +127,7 @@ export default async function RelatoriosPage({
       </div>
 
       {/* Global KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <Card className="border-neutral-200 shadow-none">
           <CardHeader className="pb-1">
             <CardTitle className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Total de tarefas</CardTitle>
@@ -151,6 +149,23 @@ export default async function RelatoriosPage({
             <p className="text-xs text-green-600 mt-1">{doneTasks} concluídas</p>
           </CardContent>
         </Card>
+
+        <Link
+          href={`/relatorios/concluidas-em-atraso?period=${period}`}
+          className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        >
+          <Card className="h-full border-amber-200 bg-amber-50 shadow-none transition-all hover:border-amber-300 hover:shadow-sm">
+            <CardHeader className="pb-1">
+              <CardTitle className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-amber-700">
+                <ClockAlert className="h-3.5 w-3.5" />Concluídas em atraso
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-amber-800">{completedLateTasks}</p>
+              <p className="mt-1 text-xs text-amber-600">Ver tarefas concluídas após o prazo</p>
+            </CardContent>
+          </Card>
+        </Link>
 
         <Link href="/relatorios/atrasadas" className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400">
         <Card className="border-red-200 bg-red-50 shadow-none h-full transition-all hover:border-red-300 hover:shadow-sm">
