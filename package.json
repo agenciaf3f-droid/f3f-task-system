@@ -11,6 +11,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:deploy:vercel": "node scripts/deploy-migrations.mjs",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "typecheck": "tsc --noEmit"
