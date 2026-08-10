@@ -62,9 +62,6 @@ export async function sendClientBookingLinkAction(
 ): Promise<SendBookingLinkResult> {
   const user = await requireAuth();
   const testMode = isUazapiTestMode();
-  if (testMode && user.role !== "admin") {
-    return { error: "O envio de teste está restrito aos administradores." };
-  }
   const parsedClientId = z.string().uuid().safeParse(clientId);
   if (!parsedClientId.success) return { error: "Cliente inválido." };
 
