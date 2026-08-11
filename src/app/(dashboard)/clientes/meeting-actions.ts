@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { findClientForBooking } from "@/lib/external-db";
 import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-duration";
-import { isUazapiTestMode, sendWhatsAppText } from "@/lib/whatsapp";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 
@@ -53,30 +53,27 @@ export async function getClientScheduledMeetingAction(
 
 function buildMessage({
   clientName,
+  managerName,
   bookingUrl,
   durationMinutes,
   recurrence,
-  testMode,
 }: {
   clientName: string;
+  managerName: string;
   bookingUrl: string;
   durationMinutes: number;
   recurrence: "weekly" | "monthly";
-  testMode: boolean;
 }): string {
-  const firstName = clientName.trim().split(/\s+/)[0] || clientName;
   const duration = durationMinutes === 60 ? "1 hora" : `${durationMinutes} minutos`;
   const frequency = recurrence === "weekly" ? "semanal" : "mensal";
 
   return [
-    ...(testMode ? ["🧪 TESTE DO AGENDAMENTO", ""] : []),
-    `Olá, ${firstName}! 👋`,
+    `Olá, ${clientName} 👋`,
     "",
-    `Sua reunião com ${clientName} já pode ser agendada.`,
+    `Sua reunião com ${managerName} já pode ser agendada.`,
     `Duração: ${duration} · Frequência: ${frequency}.`,
     "",
-    "Escolha o melhor dia e horário pelo seu link pessoal:",
-    bookingUrl,
+    `Escolha o melhor dia e horário pelo seu link pessoal: ${bookingUrl}`,
     "",
     "Este link é pessoal e válido por 7 dias. Não é necessário fazer login.",
   ].join("\n");
@@ -86,7 +83,6 @@ export async function sendClientBookingLinkAction(
   clientId: string,
 ): Promise<SendBookingLinkResult> {
   const user = await requireAuth();
-  const testMode = isUazapiTestMode();
   const parsedClientId = z.string().uuid().safeParse(clientId);
   if (!parsedClientId.success) return { error: "Cliente inválido." };
 
@@ -160,10 +156,10 @@ export async function sendClientBookingLinkAction(
   const recurrence = getMeetingRecurrence(clientPlan);
   const message = buildMessage({
     clientName,
+    managerName: manager.name,
     bookingUrl,
     durationMinutes,
     recurrence,
-    testMode,
   });
 
   const magicLink = await prisma.bookingMagicLink.create({
