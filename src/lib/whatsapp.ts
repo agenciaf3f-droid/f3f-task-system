@@ -57,8 +57,16 @@ export async function listWhatsAppGroups(): Promise<WhatsAppGroup[]> {
 
   const response = await fetch(`${config.serverUrl}/group/list?force=false`, {
     method: "POST",
-    headers: { token: config.token },
-    body: "",
+    headers: {
+      "Content-Type": "application/json",
+      token: config.token,
+    },
+    body: JSON.stringify({
+      limit: 1000,
+      offset: 0,
+      force: false,
+      noParticipants: true,
+    }),
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });

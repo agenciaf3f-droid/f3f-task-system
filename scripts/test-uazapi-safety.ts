@@ -5,6 +5,7 @@ const authorizedGroup = "120363290811576538@g.us";
 const originalFetch = globalThis.fetch;
 let requestCount = 0;
 let destination = "";
+let groupListBody: Record<string, unknown> | null = null;
 
 process.env.UAZAPI_MODE = "test";
 process.env.UAZAPI_SERVER_URL = "https://example.uazapi.com";
@@ -14,6 +15,7 @@ process.env.UAZAPI_TEST_GROUP_ID = authorizedGroup;
 globalThis.fetch = (async (_input, init) => {
   requestCount += 1;
   if (String(_input).endsWith("/group/list?force=false")) {
+    groupListBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return Response.json([
       { JID: authorizedGroup, Name: "Nome atual diferente da planilha" },
     ]);
@@ -27,6 +29,12 @@ async function main() {
   try {
     assert.equal(await verifyWhatsAppGroupDestination(authorizedGroup), true);
     assert.equal(await verifyWhatsAppGroupDestination("120363000000000000@g.us"), false);
+    assert.deepEqual(groupListBody, {
+      limit: 1000,
+      offset: 0,
+      force: false,
+      noParticipants: true,
+    });
 
     const forced = await sendWhatsAppText({
       groupId: "120363000000000000@g.us",
