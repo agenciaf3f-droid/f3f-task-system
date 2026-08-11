@@ -61,8 +61,8 @@ const taskSchema = z.object({
 
 const createTaskSchema = taskSchema.extend({
   assigneeId: z.string().uuid("Responsável obrigatório"),
-  dueDate: z.string().min(1, "Prazo obrigatório").refine(
-    (value) => !Number.isNaN(parseDateInput(value)?.getTime()),
+  dueDate: optStr.refine(
+    (value) => !value || Boolean(parseDateInput(value)),
     "Prazo inválido",
   ),
 });
@@ -137,7 +137,7 @@ export async function createTaskAction(
   const validSectorId = await resolveCompanySector(sectorId, user.companyId);
   if (sectorId && !validSectorId) return { error: "Setor inválido." };
   const parsedDueDate = parseDateInput(dueDate);
-  if (!parsedDueDate) return { error: "Prazo inválido." };
+  if (dueDate && !parsedDueDate) return { error: "Prazo inválido." };
   const project = projectId
     ? await prisma.project.findFirst({
         where: { id: projectId, companyId: user.companyId, deletedAt: null },
