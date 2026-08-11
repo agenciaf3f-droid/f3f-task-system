@@ -129,7 +129,7 @@ export async function sendWhatsAppText({
       body: JSON.stringify({
         number: destination,
         text: message,
-        linkPreview: true,
+        linkPreview: false,
         track_id: trackId,
         async: false,
       }),

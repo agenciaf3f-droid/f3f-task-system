@@ -6,6 +6,7 @@ const originalFetch = globalThis.fetch;
 let requestCount = 0;
 let destination = "";
 let groupListBody: Record<string, unknown> | null = null;
+let sendBody: Record<string, unknown> | null = null;
 
 process.env.UAZAPI_MODE = "test";
 process.env.UAZAPI_SERVER_URL = "https://example.uazapi.com";
@@ -20,8 +21,9 @@ globalThis.fetch = (async (_input, init) => {
       { JID: authorizedGroup, Name: "Nome atual diferente da planilha" },
     ]);
   }
-  const body = JSON.parse(String(init?.body)) as { number?: string };
-  destination = body.number ?? "";
+  const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+  sendBody = body;
+  destination = typeof body.number === "string" ? body.number : "";
   return new Response("{}", { status: 200 });
 }) as typeof fetch;
 
@@ -43,6 +45,7 @@ async function main() {
     });
     assert.equal(forced.delivered, true);
     assert.equal(destination, authorizedGroup);
+    assert.equal(sendBody?.linkPreview, false);
     assert.equal(requestCount, 3);
 
     process.env.UAZAPI_TEST_GROUP_ID = "120363999999999999@g.us";
