@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { findClientForBooking } from "@/lib/external-db";
 import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-duration";
-import { sendWhatsAppText } from "@/lib/whatsapp";
+import { sendWhatsAppText, verifyWhatsAppGroupDestination } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import { fetchPublishedClientSheet, resolveManager } from "@/lib/client-sheet-sync";
@@ -165,6 +165,18 @@ export async function sendClientBookingLinkAction(
   const verifiedClientName = sheetClient.clientName;
   const verifiedClientPlan = sheetClient.plan;
   const verifiedGroupId = sheetClient.whatsappGroupId;
+
+  try {
+    const destinationMatches = await verifyWhatsAppGroupDestination({
+      groupId: verifiedGroupId,
+      expectedName: sheetClient.groupName,
+    });
+    if (!destinationMatches) {
+      return { error: "Envio bloqueado: o ID e o nome do grupo não coincidem na UAZAPI." };
+    }
+  } catch {
+    return { error: "Envio bloqueado: não foi possível confirmar o grupo diretamente na UAZAPI." };
+  }
 
   let hostToken = manager.calendarSlug || manager.calendarToken;
   if (!hostToken) {

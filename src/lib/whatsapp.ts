@@ -41,6 +41,64 @@ export function isUazapiConfigured(): boolean {
   return getConfiguration() !== null;
 }
 
+type WhatsAppGroup = { id: string; name: string };
+
+function readString(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+export async function listWhatsAppGroups(): Promise<WhatsAppGroup[]> {
+  const config = getConfiguration();
+  if (!config) throw new Error("UAZAPI não configurada.");
+
+  const response = await fetch(`${config.serverUrl}/group/list?force=false`, {
+    method: "POST",
+    headers: { token: config.token },
+    body: "",
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`UAZAPI respondeu HTTP ${response.status}.`);
+
+  const payload: unknown = await response.json();
+  const container = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null;
+  const entries = Array.isArray(payload)
+    ? payload
+    : [container?.groups, container?.data, container?.result].find(Array.isArray) ?? [];
+
+  return entries.flatMap((entry): WhatsAppGroup[] => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    const id = readString(record, ["JID", "jid", "id", "ID", "groupId", "group_id", "remoteJid"]);
+    const name = readString(record, ["Name", "name", "subject", "Subject", "groupName"]);
+    return GROUP_ID_PATTERN.test(id) && name ? [{ id, name }] : [];
+  });
+}
+
+export async function verifyWhatsAppGroupDestination({
+  groupId,
+  expectedName,
+}: {
+  groupId: string;
+  expectedName: string;
+}): Promise<boolean> {
+  const normalize = (value: string) => value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  const groups = await listWhatsAppGroups();
+  const group = groups.find((candidate) => candidate.id === groupId);
+  return Boolean(group && normalize(group.name) === normalize(expectedName));
+}
+
 export async function sendWhatsAppText({
   groupId,
   message,

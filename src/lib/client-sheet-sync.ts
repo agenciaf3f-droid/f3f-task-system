@@ -1,6 +1,7 @@
 import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pickColor } from "@/lib/color";
+import { listWhatsAppGroups } from "@/lib/whatsapp";
 
 const COMPANY_SLUG = "agencia-f3f";
 const SHEET_CSV_URL =
@@ -222,7 +223,7 @@ export function resolveManager(users: Manager[], sheetName: string): Manager | n
 }
 
 export async function auditBookingDestinations(): Promise<BookingDestinationAudit> {
-  const [sheet, company] = await Promise.all([
+  const [sheet, company, whatsappGroups] = await Promise.all([
     fetchPublishedClientSheet(),
     prisma.company.findFirst({
       where: { slug: COMPANY_SLUG, deletedAt: null },
@@ -247,6 +248,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
         },
       },
     }),
+    listWhatsAppGroups(),
   ]);
   if (!company) throw new Error(`Empresa ${COMPANY_SLUG} não encontrada.`);
 
@@ -254,6 +256,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
   const activeRows = sheet.rows.filter((row) => row.status === "active");
   const sheetGroupCounts = new Map<string, number>();
   const clientsByGroup = new Map<string, typeof company.clients>();
+  const whatsappGroupsById = new Map(whatsappGroups.map((group) => [group.id, group]));
 
   for (const row of activeRows) {
     sheetGroupCounts.set(row.whatsappGroupId, (sheetGroupCounts.get(row.whatsappGroupId) ?? 0) + 1);
@@ -272,6 +275,12 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
     const rowIssues: string[] = [];
     if ((sheetGroupCounts.get(row.whatsappGroupId) ?? 0) !== 1) {
       rowIssues.push("ID UAZAPI duplicado na planilha");
+    }
+    const whatsappGroup = whatsappGroupsById.get(row.whatsappGroupId);
+    if (!whatsappGroup) {
+      rowIssues.push("ID não encontrado na instância UAZAPI");
+    } else if (normalize(whatsappGroup.name) !== normalize(row.groupName)) {
+      rowIssues.push("nome do grupo diverge da UAZAPI");
     }
     const matches = clientsByGroup.get(row.whatsappGroupId) ?? [];
     if (matches.length !== 1) {
