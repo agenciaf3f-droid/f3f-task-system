@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { sendWhatsAppText } from "../src/lib/whatsapp";
+import { sendWhatsAppText, verifyWhatsAppGroupDestination } from "../src/lib/whatsapp";
 
 const authorizedGroup = "120363290811576538@g.us";
 const originalFetch = globalThis.fetch;
@@ -13,6 +13,11 @@ process.env.UAZAPI_TEST_GROUP_ID = authorizedGroup;
 
 globalThis.fetch = (async (_input, init) => {
   requestCount += 1;
+  if (String(_input).endsWith("/group/list?force=false")) {
+    return Response.json([
+      { JID: authorizedGroup, Name: "Nome atual diferente da planilha" },
+    ]);
+  }
   const body = JSON.parse(String(init?.body)) as { number?: string };
   destination = body.number ?? "";
   return new Response("{}", { status: 200 });
@@ -20,6 +25,9 @@ globalThis.fetch = (async (_input, init) => {
 
 async function main() {
   try {
+    assert.equal(await verifyWhatsAppGroupDestination(authorizedGroup), true);
+    assert.equal(await verifyWhatsAppGroupDestination("120363000000000000@g.us"), false);
+
     const forced = await sendWhatsAppText({
       groupId: "120363000000000000@g.us",
       message: "Teste",
@@ -27,7 +35,7 @@ async function main() {
     });
     assert.equal(forced.delivered, true);
     assert.equal(destination, authorizedGroup);
-    assert.equal(requestCount, 1);
+    assert.equal(requestCount, 3);
 
     process.env.UAZAPI_TEST_GROUP_ID = "120363999999999999@g.us";
     const blocked = await sendWhatsAppText({
@@ -36,7 +44,7 @@ async function main() {
       trackId: "test-2",
     });
     assert.deepEqual(blocked, { delivered: false, reason: "not_configured" });
-    assert.equal(requestCount, 1);
+    assert.equal(requestCount, 3);
 
     console.log("UAZAPI safety checks passed");
   } finally {

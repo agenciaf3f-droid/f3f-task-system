@@ -167,12 +167,9 @@ export async function sendClientBookingLinkAction(
   const verifiedGroupId = sheetClient.whatsappGroupId;
 
   try {
-    const destinationMatches = await verifyWhatsAppGroupDestination({
-      groupId: verifiedGroupId,
-      expectedName: sheetClient.groupName,
-    });
+    const destinationMatches = await verifyWhatsAppGroupDestination(verifiedGroupId);
     if (!destinationMatches) {
-      return { error: "Envio bloqueado: o ID e o nome do grupo não coincidem na UAZAPI." };
+      return { error: "Envio bloqueado: o ID do grupo não foi encontrado na UAZAPI." };
     }
   } catch {
     return { error: "Envio bloqueado: não foi possível confirmar o grupo diretamente na UAZAPI." };

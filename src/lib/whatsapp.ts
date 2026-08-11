@@ -81,22 +81,9 @@ export async function listWhatsAppGroups(): Promise<WhatsAppGroup[]> {
   });
 }
 
-export async function verifyWhatsAppGroupDestination({
-  groupId,
-  expectedName,
-}: {
-  groupId: string;
-  expectedName: string;
-}): Promise<boolean> {
-  const normalize = (value: string) => value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+export async function verifyWhatsAppGroupDestination(groupId: string): Promise<boolean> {
   const groups = await listWhatsAppGroups();
-  const group = groups.find((candidate) => candidate.id === groupId);
-  return Boolean(group && normalize(group.name) === normalize(expectedName));
+  return groups.some((candidate) => candidate.id === groupId);
 }
 
 export async function sendWhatsAppText({
