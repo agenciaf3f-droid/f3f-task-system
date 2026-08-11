@@ -8,7 +8,6 @@ import { findClientForBooking } from "@/lib/external-db";
 import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-duration";
 import { isUazapiTestMode, sendWhatsAppText } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
-import { projectVisibilityFilter } from "@/lib/task-visibility";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 const MAGIC_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -114,18 +113,6 @@ export async function sendClientBookingLinkAction(
     },
   });
   if (!client) return { error: "Cliente não encontrado." };
-
-  if (user.role === "member" && client.managerId !== user.userId) {
-    const visibleProject = await prisma.project.findFirst({
-      where: {
-        clientId: client.id,
-        deletedAt: null,
-        AND: projectVisibilityFilter(user),
-      },
-      select: { id: true },
-    });
-    if (!visibleProject) return { error: "Você não tem permissão para enviar este link." };
-  }
 
   const manager = client.manager;
   if (!manager || !manager.isActive || manager.deletedAt) {
