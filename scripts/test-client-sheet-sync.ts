@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   extractClientName,
+  isSafeClientNameVariant,
   parseClientSheet,
   parseCsv,
   resolveManager,
@@ -29,5 +30,9 @@ assert.equal(
   resolveManager([{ id: "1", name: "Rafinha Silva" }], "Rafhael")?.id,
   "1",
 );
+assert.equal(isSafeClientNameVariant("Karine Xavier", "Karine Xavier de Oliveira"), true);
+assert.equal(isSafeClientNameVariant("Frederico Silva de Farias", "Frederico Silva de Faria"), true);
+assert.equal(isSafeClientNameVariant("Adriana Cristina de Costa Leite", "Adriana Cristina da Costa Leite"), true);
+assert.equal(isSafeClientNameVariant("Douglas José da Silva", "Douglas Vieira"), false);
 
 console.log("Client sheet sync checks passed");

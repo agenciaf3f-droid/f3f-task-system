@@ -58,6 +58,17 @@ export type BookingDestinationAudit = {
   issues: string[];
 };
 
+export type ClientDuplicateAudit = {
+  candidates: Array<{
+    canonicalName: string;
+    duplicateNames: string[];
+    projects: number;
+    tasks: number;
+    bookingLinks: number;
+  }>;
+  ambiguous: Array<{ clientName: string; possibleTargets: string[] }>;
+};
+
 function normalize(value: string): string {
   return value
     .normalize("NFD")
@@ -70,6 +81,52 @@ function normalize(value: string): string {
 
 function clean(value: string): string {
   return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const NAME_STOP_WORDS = new Set(["a", "o", "e", "da", "das", "de", "do", "dos"]);
+
+function meaningfulNameTokens(value: string): string[] {
+  return normalize(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter((token) => token && !NAME_STOP_WORDS.has(token));
+}
+
+function editDistance(left: string, right: string): number {
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = previous[0];
+    previous[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const above = previous[rightIndex];
+      previous[rightIndex] = left[leftIndex - 1] === right[rightIndex - 1]
+        ? diagonal
+        : 1 + Math.min(diagonal, previous[rightIndex - 1], above);
+      diagonal = above;
+    }
+  }
+  return previous[right.length];
+}
+
+export function isSafeClientNameVariant(left: string, right: string): boolean {
+  if (normalize(left) === normalize(right)) return true;
+  const leftTokens = meaningfulNameTokens(left);
+  const rightTokens = meaningfulNameTokens(right);
+  if (leftTokens.length === 0 || rightTokens.length === 0) return false;
+
+  const shorter = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const longer = leftTokens.length <= rightTokens.length ? rightTokens : leftTokens;
+  const longerSet = new Set(longer);
+  if (
+    shorter.length >= 2
+    && shorter.every((token) => longerSet.has(token))
+    && shorter.length / longer.length >= 0.5
+  ) return true;
+
+  const leftCompact = leftTokens.join("");
+  const rightCompact = rightTokens.join("");
+  return Math.min(leftCompact.length, rightCompact.length) >= 12
+    && editDistance(leftCompact, rightCompact) <= 2;
 }
 
 function escapeRegExp(value: string): string {
@@ -317,6 +374,65 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
     blocked: activeRows.length - ready,
     issues: issues.slice(0, 100),
   };
+}
+
+export async function auditClientNameDuplicates(): Promise<ClientDuplicateAudit> {
+  const [sheet, company] = await Promise.all([
+    fetchPublishedClientSheet(),
+    prisma.company.findFirst({
+      where: { slug: COMPANY_SLUG, deletedAt: null },
+      select: {
+        clients: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            whatsappGroupId: true,
+            _count: { select: { projects: true, tasks: true, bookingMagicLinks: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  if (!company) throw new Error(`Empresa ${COMPANY_SLUG} não encontrada.`);
+
+  const activeRows = sheet.rows.filter((row) => row.status === "active");
+  const activeGroups = new Set(activeRows.map((row) => row.whatsappGroupId));
+  const groupedCandidates = new Map<string, {
+    canonicalName: string;
+    duplicateNames: string[];
+    projects: number;
+    tasks: number;
+    bookingLinks: number;
+  }>();
+  const ambiguous: ClientDuplicateAudit["ambiguous"] = [];
+
+  for (const client of company.clients) {
+    if (client.whatsappGroupId && activeGroups.has(client.whatsappGroupId)) continue;
+    const targets = activeRows.filter((row) => isSafeClientNameVariant(client.name, row.clientName));
+    if (targets.length !== 1) {
+      if (targets.length > 1) {
+        ambiguous.push({ clientName: client.name, possibleTargets: targets.map((row) => row.clientName) });
+      }
+      continue;
+    }
+
+    const target = targets[0];
+    const current = groupedCandidates.get(target.whatsappGroupId) ?? {
+      canonicalName: target.clientName,
+      duplicateNames: [],
+      projects: 0,
+      tasks: 0,
+      bookingLinks: 0,
+    };
+    current.duplicateNames.push(client.name);
+    current.projects += client._count.projects;
+    current.tasks += client._count.tasks;
+    current.bookingLinks += client._count.bookingMagicLinks;
+    groupedCandidates.set(target.whatsappGroupId, current);
+  }
+
+  return { candidates: [...groupedCandidates.values()], ambiguous };
 }
 
 export async function syncClientsFromPublishedSheet({
