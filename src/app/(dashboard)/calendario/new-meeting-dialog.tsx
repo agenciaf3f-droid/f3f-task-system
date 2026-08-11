@@ -75,26 +75,26 @@ export function NewMeetingDialog({
             />
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Responsável
               <select
                 name="hostId"
                 defaultValue={currentUserId}
                 disabled={!canManageAll}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                className="h-10 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
               >
                 {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
               </select>
               {!canManageAll ? <input type="hidden" name="hostId" value={currentUserId} /> : null}
             </label>
 
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Cliente (opcional)
               <select
                 name="clientId"
                 defaultValue=""
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               >
                 <option value="">Sem cliente</option>
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -114,25 +114,25 @@ export function NewMeetingDialog({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-4">
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Início
               <input
                 type="time"
                 name="startTime"
                 required
                 defaultValue="09:00"
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </label>
-            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
               Término
               <input
                 type="time"
                 name="endTime"
                 required
                 defaultValue="09:30"
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
             </label>
           </div>
@@ -143,7 +143,7 @@ export function NewMeetingDialog({
             </p>
           ) : null}
 
-          <div className="mt-1 flex justify-end gap-2">
+          <div className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={() => setOpen(false)}
