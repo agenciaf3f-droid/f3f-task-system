@@ -55,14 +55,14 @@ export function TaskDueDateEditor({
       onClick={() => setEditing(true)}
       disabled={!canEdit || isPending}
       title={canEdit ? "Alterar prazo" : undefined}
-      className="group flex items-center gap-2 text-neutral-600 disabled:cursor-default"
+      className="group flex items-center gap-2 text-neutral-600 transition-colors enabled:hover:text-blue-600 disabled:cursor-default"
     >
       {isPending
         ? <Loader2 className="w-4 h-4 shrink-0 animate-spin text-neutral-400" />
         : <Calendar className="w-4 h-4 shrink-0 text-neutral-400" />}
       <span className={value ? "" : "text-neutral-400"}>{label}</span>
       {canEdit && !isPending && (
-        <Pencil className="w-3 h-3 text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        <Pencil className="w-3 h-3 text-neutral-400" />
       )}
     </button>
   );
