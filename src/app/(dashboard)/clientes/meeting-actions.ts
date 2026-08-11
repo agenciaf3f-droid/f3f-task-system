@@ -9,6 +9,7 @@ import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-d
 import { isUazapiTestMode, sendWhatsAppText } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { projectVisibilityFilter } from "@/lib/task-visibility";
+import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 const MAGIC_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -22,6 +23,33 @@ export type SendBookingLinkResult = {
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+export async function getClientScheduledMeetingAction(
+  clientId: string,
+): Promise<{ date?: string }> {
+  const user = await requireAuth();
+  const parsedClientId = z.string().uuid().safeParse(clientId);
+  if (!parsedClientId.success) return {};
+
+  const client = await prisma.client.findFirst({
+    where: { id: parsedClientId.data, companyId: user.companyId, deletedAt: null },
+    select: { whatsappGroupId: true },
+  });
+  if (!client?.whatsappGroupId) return {};
+
+  const meeting = await prisma.meeting.findFirst({
+    where: {
+      clientGroupId: client.whatsappGroupId,
+      status: "confirmed",
+      date: { gte: todayInBrazil() },
+      user: { companyId: user.companyId },
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    select: { date: true },
+  });
+
+  return meeting ? { date: meeting.date } : {};
 }
 
 function buildMessage({

@@ -10,6 +10,7 @@ import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator"
 import { format } from "date-fns";
 import { MeetingBookingButton } from "../clientes/meeting-booking-button";
 import { isUazapiConfigured } from "@/lib/whatsapp";
+import { todayInBrazil } from "@/lib/meeting-recurrence";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -120,6 +121,18 @@ export default async function ProjetosPage({
       !isUazapiConfigured() ? "integração UAZAPI não configurada" : null,
     ].filter((issue): issue is string => Boolean(issue));
     const bookingReady = bookingIssues.length === 0;
+    const scheduledMeeting = client.whatsappGroupId
+      ? await prisma.meeting.findFirst({
+          where: {
+            clientGroupId: client.whatsappGroupId,
+            status: "confirmed",
+            date: { gte: todayInBrazil() },
+            user: { companyId: user.companyId },
+          },
+          orderBy: [{ date: "asc" }, { startTime: "asc" }],
+          select: { date: true },
+        })
+      : null;
 
     return (
       <div className="flex flex-col gap-8">
@@ -160,8 +173,8 @@ export default async function ProjetosPage({
             <div className="flex items-center gap-2">
               <MeetingBookingButton
                 clientId={client.id}
-                testMode={process.env.UAZAPI_MODE === "test"}
                 disabledReason={bookingReady ? undefined : bookingIssues.join("; ")}
+                initialScheduledDate={scheduledMeeting?.date}
               />
               <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
                 <Plus className="w-4 h-4 mr-2" />

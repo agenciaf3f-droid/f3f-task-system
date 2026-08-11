@@ -325,6 +325,7 @@ export function WeekCalendar({
   clients,
   canManageAll,
   defaultDate,
+  focusDate,
 }: {
   gridStart: string;
   monthRefIso: string;
@@ -338,6 +339,7 @@ export function WeekCalendar({
   clients: Option[];
   canManageAll: boolean;
   defaultDate: string;
+  focusDate?: string;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -349,7 +351,7 @@ export function WeekCalendar({
   const [savingSlug, startSaveSlug] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
-  const [openDayDate, setOpenDayDate] = useState<string | null>(null);
+  const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
   // "Minhas" mantém também reuniões shared (Daily 10h, Reunião de Gestores)

@@ -27,7 +27,7 @@ function getMonthGridRange(monthRef: Date): { gridStart: Date; gridEnd: Date; fi
 export default async function CalendarioPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ month?: string }>;
+  searchParams?: Promise<{ month?: string; date?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
@@ -108,6 +108,7 @@ export default async function CalendarioPage({
       clients={clients}
       canManageAll={canManageAll}
       defaultDate={todayInBrazil()}
+      focusDate={sp?.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined}
     />
   );
 }

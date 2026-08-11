@@ -1,22 +1,41 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CalendarPlus, Check, Loader2 } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CalendarCheck, CalendarPlus, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { sendClientBookingLinkAction } from "./meeting-actions";
+import { getClientScheduledMeetingAction, sendClientBookingLinkAction } from "./meeting-actions";
 
 export function MeetingBookingButton({
   clientId,
-  testMode = false,
   disabledReason,
+  initialScheduledDate,
 }: {
   clientId: string;
-  testMode?: boolean;
   disabledReason?: string;
+  initialScheduledDate?: string;
 }) {
+  const router = useRouter();
   const [sent, setSent] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(initialScheduledDate);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (scheduledDate) return;
+
+    const checkStatus = async () => {
+      const result = await getClientScheduledMeetingAction(clientId);
+      if (result.date) setScheduledDate(result.date);
+    };
+    const interval = window.setInterval(checkStatus, 15_000);
+    return () => window.clearInterval(interval);
+  }, [clientId, scheduledDate]);
+
+  function openScheduledMeeting() {
+    if (!scheduledDate) return;
+    router.push(`/calendario?month=${scheduledDate.slice(0, 7)}&date=${scheduledDate}`);
+  }
 
   function sendBookingLink() {
     startTransition(async () => {
@@ -42,27 +61,29 @@ export function MeetingBookingButton({
       type="button"
       variant="outline"
       size="lg"
-      onClick={sendBookingLink}
-      disabled={isPending || Boolean(disabledReason)}
-      title={disabledReason}
-      className={sent ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : ""}
+      onClick={scheduledDate ? openScheduledMeeting : sendBookingLink}
+      disabled={!scheduledDate && (isPending || Boolean(disabledReason))}
+      title={scheduledDate ? "Abrir reunião no calendário" : disabledReason}
+      className={scheduledDate || sent ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : ""}
     >
-      {isPending ? (
+      {scheduledDate ? (
+        <CalendarCheck />
+      ) : isPending ? (
         <Loader2 className="animate-spin" />
       ) : sent ? (
         <Check />
       ) : (
         <CalendarPlus />
       )}
-      {disabledReason
+      {scheduledDate
+        ? "Reunião agendada"
+        : disabledReason
         ? "Agendamento indisponível"
         : isPending
         ? "Enviando..."
         : sent
           ? "Enviar novamente"
-          : testMode
-            ? "Testar agendamento"
-            : "Agendar reunião"}
+          : "Agendar reunião"}
     </Button>
   );
 }
