@@ -605,7 +605,8 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
     where: { id: taskId, companyId: user.companyId },
     data: { dueDate: parseDateInput(dueDate) },
   });
-  
+
+  revalidatePath(`/tarefas/${taskId}`);
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
 }
 
