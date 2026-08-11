@@ -71,7 +71,7 @@ async function main() {
       continue;
     }
     const client = matches[0];
-    const manager = resolveManager(company.users, row.managerName);
+    const manager = resolveManager(company.users, row.managerName, row.clientName);
     if (client.name !== row.clientName) issues.push(`${label}: nome diverge do sistema.`);
     if (client.meetingPlan !== row.plan) issues.push(`${label}: plano diverge do sistema.`);
     if (client.whatsappGroupName !== row.groupName) issues.push(`${label}: nome do grupo diverge do sistema.`);

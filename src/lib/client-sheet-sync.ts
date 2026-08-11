@@ -277,10 +277,19 @@ function uniqueManagerMap(users: Manager[], keyFor: (user: Manager) => string) {
   );
 }
 
-export function resolveManager(users: Manager[], sheetName: string): Manager | null {
+export function resolveManager(
+  users: Manager[],
+  sheetName: string,
+  clientName?: string,
+): Manager | null {
   const byName = uniqueManagerMap(users, (user) => normalize(user.name));
   const byFirstName = uniqueManagerMap(users, (user) => normalize(user.name).split(" ")[0]);
   const normalizedName = normalize(sheetName);
+  const firstName = normalizedName.split(" ")[0];
+  if (["rafinha", "rafhael", "raphael"].includes(firstName)) {
+    const correctedManager = normalize(clientName ?? "") === "arthur" ? "denzel" : "amorim";
+    return byName.get(correctedManager) ?? byFirstName.get(correctedManager) ?? null;
+  }
   const alias = MANAGER_ALIASES[normalizedName];
   return byName.get(normalizedName)
     ?? byFirstName.get(normalizedName)
@@ -353,7 +362,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
       rowIssues.push(`esperado 1 cliente ativo no sistema; encontrado ${matches.length}`);
     } else {
       const client = matches[0];
-      const manager = resolveManager(company.users, row.managerName);
+      const manager = resolveManager(company.users, row.managerName, row.clientName);
       if (client.name !== row.clientName) rowIssues.push("nome diverge do sistema");
       if (client.meetingPlan !== row.plan) rowIssues.push("plano diverge do sistema");
       if (client.whatsappGroupName !== row.groupName) rowIssues.push("nome do grupo diverge do sistema");
@@ -688,7 +697,7 @@ export async function syncClientsFromPublishedSheet({
       continue;
     }
 
-    const manager = resolveManager(company.users, row.managerName);
+    const manager = resolveManager(company.users, row.managerName, row.clientName);
     if (!manager) {
       result.skipped += 1;
       result.issues.push(`Linha ${row.rowNumber}: gestor "${row.managerName}" não encontrado.`);

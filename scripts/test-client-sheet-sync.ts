@@ -27,8 +27,12 @@ assert.equal(
   "Cliente Antigo",
 );
 assert.equal(
-  resolveManager([{ id: "1", name: "Rafinha Silva" }], "Rafhael")?.id,
+  resolveManager([{ id: "1", name: "Amorim" }], "Rafhael", "Outro cliente")?.id,
   "1",
+);
+assert.equal(
+  resolveManager([{ id: "2", name: "Denzel" }], "Rafinha", "Arthur")?.id,
+  "2",
 );
 assert.equal(isSafeClientNameVariant("Karine Xavier", "Karine Xavier de Oliveira"), true);
 assert.equal(isSafeClientNameVariant("Frederico Silva de Farias", "Frederico Silva de Faria"), true);

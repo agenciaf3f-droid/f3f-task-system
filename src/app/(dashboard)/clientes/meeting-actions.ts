@@ -153,6 +153,7 @@ export async function sendClientBookingLinkAction(
   const sheetManager = resolveManager(
     [{ id: manager.id, name: manager.name }],
     sheetClient.managerName,
+    sheetClient.clientName,
   );
   if (
     sheetClient.clientName !== client.name
