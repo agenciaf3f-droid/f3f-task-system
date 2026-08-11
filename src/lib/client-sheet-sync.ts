@@ -11,7 +11,7 @@ const MANAGER_ALIASES: Record<string, string> = {
   raphael: "rafinha",
 };
 
-type SheetClient = {
+export type SheetClient = {
   groupName: string;
   clientName: string;
   managerName: string;
@@ -21,6 +21,22 @@ type SheetClient = {
   rowNumber: number;
 };
 
+export async function fetchPublishedClientSheet(): Promise<{
+  rows: SheetClient[];
+  issues: string[];
+  sourceRows: number;
+}> {
+  const response = await fetch(`${SHEET_CSV_URL}&_=${Date.now()}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`Planilha respondeu HTTP ${response.status}.`);
+
+  const csv = await response.text();
+  if (csv.length > 5_000_000) throw new Error("Planilha excede o limite de 5 MB.");
+  return parseClientSheet(csv);
+}
+
 export type ClientSheetSyncResult = {
   rows: number;
   created: number;
@@ -29,6 +45,15 @@ export type ClientSheetSyncResult = {
   deduplicated: number;
   unchanged: number;
   skipped: number;
+  issues: string[];
+};
+
+export type BookingDestinationAudit = {
+  sourceRows: number;
+  activeValidRows: number;
+  activeSystemClients: number;
+  ready: number;
+  blocked: number;
   issues: string[];
 };
 
@@ -196,18 +221,99 @@ export function resolveManager(users: Manager[], sheetName: string): Manager | n
     ?? null;
 }
 
+export async function auditBookingDestinations(): Promise<BookingDestinationAudit> {
+  const [sheet, company] = await Promise.all([
+    fetchPublishedClientSheet(),
+    prisma.company.findFirst({
+      where: { slug: COMPANY_SLUG, deletedAt: null },
+      select: {
+        users: {
+          where: { isActive: true, deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            _count: { select: { calendarAvailability: true } },
+          },
+        },
+        clients: {
+          where: { deletedAt: null },
+          select: {
+            name: true,
+            managerId: true,
+            meetingPlan: true,
+            whatsappGroupId: true,
+            whatsappGroupName: true,
+          },
+        },
+      },
+    }),
+  ]);
+  if (!company) throw new Error(`Empresa ${COMPANY_SLUG} não encontrada.`);
+
+  const issues = [...sheet.issues];
+  const activeRows = sheet.rows.filter((row) => row.status === "active");
+  const sheetGroupCounts = new Map<string, number>();
+  const clientsByGroup = new Map<string, typeof company.clients>();
+
+  for (const row of activeRows) {
+    sheetGroupCounts.set(row.whatsappGroupId, (sheetGroupCounts.get(row.whatsappGroupId) ?? 0) + 1);
+  }
+  for (const client of company.clients) {
+    if (!client.whatsappGroupId) continue;
+    clientsByGroup.set(client.whatsappGroupId, [
+      ...(clientsByGroup.get(client.whatsappGroupId) ?? []),
+      client,
+    ]);
+  }
+
+  let ready = 0;
+  for (const row of activeRows) {
+    const label = `Linha ${row.rowNumber} (${row.clientName})`;
+    const rowIssues: string[] = [];
+    if ((sheetGroupCounts.get(row.whatsappGroupId) ?? 0) !== 1) {
+      rowIssues.push("ID UAZAPI duplicado na planilha");
+    }
+    const matches = clientsByGroup.get(row.whatsappGroupId) ?? [];
+    if (matches.length !== 1) {
+      rowIssues.push(`esperado 1 cliente ativo no sistema; encontrado ${matches.length}`);
+    } else {
+      const client = matches[0];
+      const manager = resolveManager(company.users, row.managerName);
+      if (client.name !== row.clientName) rowIssues.push("nome diverge do sistema");
+      if (client.meetingPlan !== row.plan) rowIssues.push("plano diverge do sistema");
+      if (client.whatsappGroupName !== row.groupName) rowIssues.push("nome do grupo diverge do sistema");
+      if (!manager || client.managerId !== manager.id) rowIssues.push("gestor diverge do sistema");
+      const managerAvailability = manager
+        ? company.users.find((user) => user.id === manager.id)?._count.calendarAvailability
+        : null;
+      if (managerAvailability === 0) rowIssues.push("gestor sem disponibilidade");
+    }
+
+    if (rowIssues.length === 0) ready += 1;
+    else issues.push(`${label}: ${rowIssues.join("; ")}.`);
+  }
+
+  const activeSheetGroups = new Set(activeRows.map((row) => row.whatsappGroupId));
+  for (const client of company.clients) {
+    if (!client.whatsappGroupId || !activeSheetGroups.has(client.whatsappGroupId)) {
+      issues.push(`Cliente ativo no sistema sem linha ativa válida na planilha: ${client.name}.`);
+    }
+  }
+
+  return {
+    sourceRows: sheet.sourceRows,
+    activeValidRows: activeRows.length,
+    activeSystemClients: company.clients.length,
+    ready,
+    blocked: activeRows.length - ready,
+    issues: issues.slice(0, 100),
+  };
+}
+
 export async function syncClientsFromPublishedSheet({
   dryRun = false,
 }: { dryRun?: boolean } = {}): Promise<ClientSheetSyncResult> {
-  const response = await fetch(`${SHEET_CSV_URL}&_=${Date.now()}`, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!response.ok) throw new Error(`Planilha respondeu HTTP ${response.status}.`);
-
-  const csv = await response.text();
-  if (csv.length > 5_000_000) throw new Error("Planilha excede o limite de 5 MB.");
-  const parsed = parseClientSheet(csv);
+  const parsed = await fetchPublishedClientSheet();
   const company = await prisma.company.findFirst({
     where: { slug: COMPANY_SLUG, deletedAt: null },
     select: {

@@ -9,6 +9,7 @@ import { getMeetingDurationMinutes, getMeetingRecurrence } from "@/lib/meeting-d
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
+import { fetchPublishedClientSheet, resolveManager } from "@/lib/client-sheet-sync";
 
 const MAGIC_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -124,7 +125,6 @@ export async function sendClientBookingLinkAction(
     : null;
   const clientPlan = client.meetingPlan?.trim() || externalClient?.plano?.trim();
   const clientGroupId = client.whatsappGroupId?.trim() || externalClient?.whatsapp_group_id?.trim();
-  const clientName = externalClient?.nome?.trim() || client.name;
   const clientEmail = client.email?.trim().toLowerCase()
     || externalClient?.email?.trim().toLowerCase()
     || null;
@@ -135,6 +135,36 @@ export async function sendClientBookingLinkAction(
   if (!clientGroupId) {
     return { error: "Este cliente não possui grupo do WhatsApp configurado." };
   }
+
+  let sheetClient;
+  try {
+    const sheet = await fetchPublishedClientSheet();
+    const groupMatches = sheet.rows.filter(
+      (row) => row.status === "active" && row.whatsappGroupId === clientGroupId,
+    );
+    if (groupMatches.length !== 1) {
+      return { error: "Envio bloqueado: o grupo deste cliente não possui uma linha ativa e única na planilha." };
+    }
+    sheetClient = groupMatches[0];
+  } catch {
+    return { error: "Envio bloqueado: não foi possível validar o destino na planilha agora." };
+  }
+
+  const sheetManager = resolveManager(
+    [{ id: manager.id, name: manager.name }],
+    sheetClient.managerName,
+  );
+  if (
+    sheetClient.clientName !== client.name
+    || sheetClient.plan !== clientPlan
+    || sheetManager?.id !== manager.id
+  ) {
+    return { error: "Envio bloqueado: cliente, gestor ou plano diverge da planilha. Aguarde a sincronização." };
+  }
+
+  const verifiedClientName = sheetClient.clientName;
+  const verifiedClientPlan = sheetClient.plan;
+  const verifiedGroupId = sheetClient.whatsappGroupId;
 
   let hostToken = manager.calendarSlug || manager.calendarToken;
   if (!hostToken) {
@@ -152,10 +182,10 @@ export async function sendClientBookingLinkAction(
     ? "https://task.agenciaf3f.com.br"
     : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const bookingUrl = `${appUrl}/agendar/acesso/${rawToken}`;
-  const durationMinutes = getMeetingDurationMinutes(clientPlan);
-  const recurrence = getMeetingRecurrence(clientPlan);
+  const durationMinutes = getMeetingDurationMinutes(verifiedClientPlan);
+  const recurrence = getMeetingRecurrence(verifiedClientPlan);
   const message = buildMessage({
-    clientName,
+    clientName: verifiedClientName,
     managerName: manager.name,
     bookingUrl,
     durationMinutes,
@@ -170,16 +200,16 @@ export async function sendClientBookingLinkAction(
       createdById: user.userId,
       tokenHash,
       clientEmail,
-      clientName,
-      clientPlan,
-      clientGroupId,
+      clientName: verifiedClientName,
+      clientPlan: verifiedClientPlan,
+      clientGroupId: verifiedGroupId,
       expiresAt,
     },
     select: { id: true },
   });
 
   const delivery = await sendWhatsAppText({
-    groupId: clientGroupId,
+    groupId: verifiedGroupId,
     message,
     trackId: magicLink.id,
   });

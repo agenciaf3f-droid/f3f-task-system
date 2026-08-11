@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { syncClientsFromPublishedSheet } from "@/lib/client-sheet-sync";
+import { auditBookingDestinations, syncClientsFromPublishedSheet } from "@/lib/client-sheet-sync";
 
 const GITHUB_JWKS = createRemoteJWKSet(
   new URL("https://token.actions.githubusercontent.com/.well-known/jwks"),
@@ -45,6 +45,7 @@ export async function GET(request: Request) {
   try {
     const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
     const result = await syncClientsFromPublishedSheet({ dryRun });
+    const bookingAudit = await auditBookingDestinations();
     console.info("[client-sheet-sync] completed", {
       dryRun,
       rows: result.rows,
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
       deduplicated: result.deduplicated,
       skipped: result.skipped,
     });
-    return NextResponse.json({ ok: true, dryRun, ...result });
+    return NextResponse.json({ ok: true, dryRun, ...result, bookingAudit });
   } catch (error) {
     console.error("[client-sheet-sync] failed", error);
     return NextResponse.json({ ok: false, error: "sync_failed" }, { status: 500 });
