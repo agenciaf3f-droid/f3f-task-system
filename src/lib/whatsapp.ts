@@ -37,6 +37,10 @@ export function isUazapiTestMode(): boolean {
   return getMode() === "test";
 }
 
+export function isUazapiConfigured(): boolean {
+  return getConfiguration() !== null;
+}
+
 export async function sendWhatsAppText({
   groupId,
   message,

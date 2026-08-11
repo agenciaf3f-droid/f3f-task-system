@@ -51,6 +51,7 @@ export async function GET(request: Request) {
       created: result.created,
       updated: result.updated,
       archived: result.archived,
+      deduplicated: result.deduplicated,
       skipped: result.skipped,
     });
     return NextResponse.json({ ok: true, dryRun, ...result });

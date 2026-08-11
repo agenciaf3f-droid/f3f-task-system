@@ -26,6 +26,7 @@ export type ClientSheetSyncResult = {
   created: number;
   updated: number;
   archived: number;
+  deduplicated: number;
   unchanged: number;
   skipped: number;
   issues: string[];
@@ -51,7 +52,7 @@ function escapeRegExp(value: string): string {
 
 export function extractClientName(groupName: string, plan: string): string {
   let name = clean(groupName)
-    .replace(/\(fechado\)/gi, "")
+    .replace(/\(\s*fechado\s*\)/gi, "")
     .replace(/^\s*f3f\s*-\s*/i, "")
     .trim();
 
@@ -219,10 +220,16 @@ export async function syncClientsFromPublishedSheet({
         select: {
           id: true,
           name: true,
+          email: true,
+          phone: true,
+          color: true,
+          avatarUrl: true,
+          description: true,
           managerId: true,
           meetingPlan: true,
           whatsappGroupId: true,
           whatsappGroupName: true,
+          createdAt: true,
           deletedAt: true,
         },
       },
@@ -244,9 +251,14 @@ export async function syncClientsFromPublishedSheet({
   }
 
   const sourceNameCounts = new Map<string, number>();
+  const sourceGroupCounts = new Map<string, number>();
   for (const row of parsed.rows) {
     const nameKey = normalize(row.clientName);
     sourceNameCounts.set(nameKey, (sourceNameCounts.get(nameKey) ?? 0) + 1);
+    sourceGroupCounts.set(
+      row.whatsappGroupId,
+      (sourceGroupCounts.get(row.whatsappGroupId) ?? 0) + 1,
+    );
   }
 
   const result: ClientSheetSyncResult = {
@@ -254,25 +266,79 @@ export async function syncClientsFromPublishedSheet({
     created: 0,
     updated: 0,
     archived: 0,
+    deduplicated: 0,
     unchanged: 0,
     skipped: parsed.issues.length,
     issues: parsed.issues.slice(0, 50),
   };
 
+  const reportedDuplicateSourceGroups = new Set<string>();
+
   for (const row of parsed.rows) {
-    const groupMatches = clientsByGroup.get(row.whatsappGroupId) ?? [];
-    if (groupMatches.length > 1) {
+    if ((sourceGroupCounts.get(row.whatsappGroupId) ?? 0) > 1) {
       result.skipped += 1;
-      result.issues.push(`Linha ${row.rowNumber}: ID UAZAPI duplicado no sistema.`);
+      if (!reportedDuplicateSourceGroups.has(row.whatsappGroupId)) {
+        reportedDuplicateSourceGroups.add(row.whatsappGroupId);
+        result.issues.push(`ID UAZAPI ${row.whatsappGroupId} duplicado na planilha; linhas ignoradas.`);
+      }
       continue;
     }
 
-    let existing = groupMatches[0];
     const nameKey = normalize(row.clientName);
-    if (!existing && sourceNameCounts.get(nameKey) === 1) {
-      const nameMatches = (clientsByName.get(nameKey) ?? [])
-        .filter((client) => !client.whatsappGroupId);
-      if (nameMatches.length === 1) existing = nameMatches[0];
+    const groupMatches = clientsByGroup.get(row.whatsappGroupId) ?? [];
+    const nameMatches = sourceNameCounts.get(nameKey) === 1
+      ? clientsByName.get(nameKey) ?? []
+      : [];
+    const candidates = [...new Map(
+      [...groupMatches, ...nameMatches].map((client) => [client.id, client]),
+    ).values()].sort((a, b) => {
+      const score = (client: typeof a) =>
+        (client.deletedAt ? 0 : 16)
+        + (client.whatsappGroupId === row.whatsappGroupId ? 8 : 0)
+        + (client.managerId ? 4 : 0)
+        + (client.meetingPlan ? 2 : 0)
+        + (client.whatsappGroupName ? 1 : 0);
+      return score(b) - score(a) || a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    const existing = candidates[0];
+    const duplicates = candidates.slice(1);
+    if (existing && duplicates.length > 0) {
+      const duplicateIds = duplicates.map((client) => client.id);
+      const firstValue = <K extends "email" | "phone" | "color" | "avatarUrl" | "description">(key: K) =>
+        candidates.find((client) => client[key])?.[key] ?? null;
+
+      if (!dryRun) {
+        await prisma.$transaction([
+          prisma.project.updateMany({
+            where: { clientId: { in: duplicateIds } },
+            data: { clientId: existing.id },
+          }),
+          prisma.task.updateMany({
+            where: { clientId: { in: duplicateIds } },
+            data: { clientId: existing.id },
+          }),
+          prisma.bookingMagicLink.updateMany({
+            where: { clientId: { in: duplicateIds } },
+            data: { clientId: existing.id },
+          }),
+          prisma.client.update({
+            where: { id: existing.id },
+            data: {
+              email: firstValue("email"),
+              phone: firstValue("phone"),
+              color: firstValue("color"),
+              avatarUrl: firstValue("avatarUrl"),
+              description: firstValue("description"),
+            },
+          }),
+          prisma.client.deleteMany({ where: { id: { in: duplicateIds } } }),
+        ]);
+      }
+
+      result.deduplicated += duplicates.length;
+      clientsByGroup.set(row.whatsappGroupId, [existing]);
+      clientsByName.set(nameKey, [existing]);
     }
 
     if (row.status === "inactive") {
@@ -308,19 +374,32 @@ export async function syncClientsFromPublishedSheet({
 
     if (!existing) {
       if (!dryRun) {
-        const created = await prisma.client.create({
-          data: {
+        const created = await prisma.client.upsert({
+          where: {
+            companyId_whatsappGroupId: {
+              companyId: company.id,
+              whatsappGroupId: row.whatsappGroupId,
+            },
+          },
+          create: {
             companyId: company.id,
             color: pickColor(row.clientName),
             ...data,
           },
+          update: data,
           select: {
             id: true,
             name: true,
+            email: true,
+            phone: true,
+            color: true,
+            avatarUrl: true,
+            description: true,
             managerId: true,
             meetingPlan: true,
             whatsappGroupId: true,
             whatsappGroupName: true,
+            createdAt: true,
             deletedAt: true,
           },
         });

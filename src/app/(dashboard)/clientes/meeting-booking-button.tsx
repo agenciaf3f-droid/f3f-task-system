@@ -6,7 +6,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { sendClientBookingLinkAction } from "./meeting-actions";
 
-export function MeetingBookingButton({ clientId, testMode = false }: { clientId: string; testMode?: boolean }) {
+export function MeetingBookingButton({
+  clientId,
+  testMode = false,
+  disabledReason,
+}: {
+  clientId: string;
+  testMode?: boolean;
+  disabledReason?: string;
+}) {
   const [sent, setSent] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -35,7 +43,8 @@ export function MeetingBookingButton({ clientId, testMode = false }: { clientId:
       variant="outline"
       size="lg"
       onClick={sendBookingLink}
-      disabled={isPending}
+      disabled={isPending || Boolean(disabledReason)}
+      title={disabledReason}
       className={sent ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : ""}
     >
       {isPending ? (
@@ -45,7 +54,9 @@ export function MeetingBookingButton({ clientId, testMode = false }: { clientId:
       ) : (
         <CalendarPlus />
       )}
-      {isPending
+      {disabledReason
+        ? "Agendamento indisponível"
+        : isPending
         ? "Enviando..."
         : sent
           ? "Enviar novamente"

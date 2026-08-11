@@ -8,7 +8,7 @@ import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { pickColor } from "@/lib/color";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { ProjectStatus } from "@prisma/client";
+import { Prisma, type ProjectStatus } from "@prisma/client";
 
 // ─── Client ───────────────────────────────────────────────────
 
@@ -34,11 +34,27 @@ async function isValidClientManager(companyId: string, managerId: string) {
   return Boolean(manager);
 }
 
+async function findClientUsingGroup(companyId: string, whatsappGroupId: string, excludeId?: string) {
+  return prisma.client.findFirst({
+    where: {
+      companyId,
+      whatsappGroupId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: { id: true, name: true, deletedAt: true },
+  });
+}
+
+function isDuplicateClientGroupError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 export async function createClientAction(
   _prev: { error?: string; success?: boolean },
   formData: FormData,
 ): Promise<{ error?: string; success?: boolean }> {
   const user = await requireAuth();
+  if (user.role === "member") return { error: "Sem permissão para cadastrar clientes." };
 
   const parsed = clientSchema.safeParse({
     name: formData.get("name"),
@@ -53,20 +69,33 @@ export async function createClientAction(
   if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
     return { error: "Gestor responsável inválido." };
   }
+  const duplicate = await findClientUsingGroup(user.companyId, parsed.data.whatsappGroupId);
+  if (duplicate) {
+    return {
+      error: `Este grupo já está vinculado ao cliente "${duplicate.name}"${duplicate.deletedAt ? " (arquivado)" : ""}.`,
+    };
+  }
 
-  await prisma.client.create({
-    data: {
-      companyId: user.companyId,
-      name: parsed.data.name,
-      email: parsed.data.email || null,
-      meetingPlan: parsed.data.meetingPlan,
-      whatsappGroupId: parsed.data.whatsappGroupId,
-      whatsappGroupName: parsed.data.whatsappGroupName,
-      color: pickColor(parsed.data.name),
-      description: parsed.data.description || null,
-      managerId: parsed.data.managerId,
-    },
-  });
+  try {
+    await prisma.client.create({
+      data: {
+        companyId: user.companyId,
+        name: parsed.data.name,
+        email: parsed.data.email || null,
+        meetingPlan: parsed.data.meetingPlan,
+        whatsappGroupId: parsed.data.whatsappGroupId,
+        whatsappGroupName: parsed.data.whatsappGroupName,
+        color: pickColor(parsed.data.name),
+        description: parsed.data.description || null,
+        managerId: parsed.data.managerId,
+      },
+    });
+  } catch (error) {
+    if (isDuplicateClientGroupError(error)) {
+      return { error: "Este grupo já foi vinculado a outro cliente." };
+    }
+    throw error;
+  }
 
   revalidatePath("/projetos");
   revalidatePath("/clientes");
@@ -78,6 +107,7 @@ export async function updateClientAction(
   formData: FormData,
 ): Promise<{ error?: string; success?: boolean }> {
   const user = await requireAuth();
+  if (user.role === "member") return { error: "Sem permissão para alterar clientes." };
   const clientId = formData.get("clientId") as string;
 
   const idParsed = z.string().uuid().safeParse(clientId);
@@ -96,19 +126,36 @@ export async function updateClientAction(
   if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
     return { error: "Gestor responsável inválido." };
   }
+  const duplicate = await findClientUsingGroup(
+    user.companyId,
+    parsed.data.whatsappGroupId,
+    clientId,
+  );
+  if (duplicate) {
+    return {
+      error: `Este grupo já está vinculado ao cliente "${duplicate.name}"${duplicate.deletedAt ? " (arquivado)" : ""}.`,
+    };
+  }
 
-  await prisma.client.updateMany({
-    where: { id: clientId, companyId: user.companyId },
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email || null,
-      meetingPlan: parsed.data.meetingPlan,
-      whatsappGroupId: parsed.data.whatsappGroupId,
-      whatsappGroupName: parsed.data.whatsappGroupName,
-      description: parsed.data.description || null,
-      managerId: parsed.data.managerId,
-    },
-  });
+  try {
+    await prisma.client.updateMany({
+      where: { id: clientId, companyId: user.companyId },
+      data: {
+        name: parsed.data.name,
+        email: parsed.data.email || null,
+        meetingPlan: parsed.data.meetingPlan,
+        whatsappGroupId: parsed.data.whatsappGroupId,
+        whatsappGroupName: parsed.data.whatsappGroupName,
+        description: parsed.data.description || null,
+        managerId: parsed.data.managerId,
+      },
+    });
+  } catch (error) {
+    if (isDuplicateClientGroupError(error)) {
+      return { error: "Este grupo já foi vinculado a outro cliente." };
+    }
+    throw error;
+  }
 
   revalidatePath("/clientes");
   revalidatePath("/projetos");
@@ -172,34 +219,10 @@ export async function removeClientAvatarAction(clientId: string): Promise<{ erro
 export async function deleteClientAction(clientId: string) {
   const user = await requireAuth();
   if (user.role === "member") return { error: "Sem permissão." };
-  const now = new Date();
-
-  const projects = await prisma.project.findMany({
-    where: { clientId, companyId: user.companyId, deletedAt: null },
-    select: { id: true },
+  await prisma.client.updateMany({
+    where: { id: clientId, companyId: user.companyId },
+    data: { deletedAt: new Date() },
   });
-  const projectIds = projects.map((p) => p.id);
-
-  await prisma.$transaction([
-    prisma.task.updateMany({
-      where: {
-        OR: [
-          { projectId: { in: projectIds } },
-          { clientId },
-        ],
-        deletedAt: null,
-      },
-      data: { deletedAt: now },
-    }),
-    prisma.project.updateMany({
-      where: { id: { in: projectIds } },
-      data: { deletedAt: now },
-    }),
-    prisma.client.updateMany({
-      where: { id: clientId, companyId: user.companyId },
-      data: { deletedAt: now },
-    }),
-  ]);
 
   revalidatePath("/clientes");
   revalidatePath("/projetos");

@@ -22,6 +22,10 @@ assert.equal(parsed.rows[1].status, "inactive");
 
 assert.equal(extractClientName("F3F - (Studio) Juan Manuel - 1 FASE", "1 FASE"), "(Studio) Juan Manuel");
 assert.equal(
+  extractClientName("( FECHADO ) F3F - Cliente Antigo - 1 FASE", "1 FASE"),
+  "Cliente Antigo",
+);
+assert.equal(
   resolveManager([{ id: "1", name: "Rafinha Silva" }], "Rafhael")?.id,
   "1",
 );

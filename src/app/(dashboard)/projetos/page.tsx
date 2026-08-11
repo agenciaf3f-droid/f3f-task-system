@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/tasks/task-badges";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { format } from "date-fns";
 import { MeetingBookingButton } from "../clientes/meeting-booking-button";
+import { isUazapiConfigured } from "@/lib/whatsapp";
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -42,6 +43,14 @@ export default async function ProjetosPage({
           whatsappGroupId: true,
           whatsappGroupName: true,
           managerId: true,
+          manager: {
+            select: {
+              name: true,
+              isActive: true,
+              deletedAt: true,
+              _count: { select: { calendarAvailability: true } },
+            },
+          },
         },
       }),
       prisma.project.findMany({
@@ -100,6 +109,17 @@ export default async function ProjetosPage({
 
     const active = projectsWithStats.filter((p) => p.status !== "archived" && p.status !== "cancelled");
     const archived = projectsWithStats.filter((p) => p.status === "archived");
+    const bookingIssues = [
+      !client.meetingPlan ? "plano não preenchido" : null,
+      !client.whatsappGroupId ? "grupo UAZAPI não preenchido" : null,
+      !client.managerId || !client.manager ? "gestor não definido" : null,
+      client.manager && (!client.manager.isActive || client.manager.deletedAt) ? "gestor inativo" : null,
+      client.manager && client.manager._count.calendarAvailability === 0
+        ? `${client.manager.name} ainda não configurou disponibilidade`
+        : null,
+      !isUazapiConfigured() ? "integração UAZAPI não configurada" : null,
+    ].filter((issue): issue is string => Boolean(issue));
+    const bookingReady = bookingIssues.length === 0;
 
     return (
       <div className="flex flex-col gap-8">
@@ -125,18 +145,24 @@ export default async function ProjetosPage({
                 <p className="text-sm text-neutral-500 mt-0.5">
                   {active.length} projeto{active.length !== 1 ? "s" : ""} ativo{active.length !== 1 ? "s" : ""}
                 </p>
-                {client.meetingPlan && client.whatsappGroupId && client.managerId ? (
+                {bookingReady ? (
                   <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
                     <MessageCircle className="w-3 h-3" />
                     Agendamento configurado · {client.meetingPlan} · {client.whatsappGroupName || "grupo vinculado"}
                   </p>
                 ) : (
-                  <p className="text-xs text-amber-600 mt-1">Complete plano, grupo e gestor para agendar reuniões.</p>
+                  <p className="text-xs text-amber-600 mt-1">
+                    Agendamento indisponível: {bookingIssues.join("; ")}.
+                  </p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <MeetingBookingButton clientId={client.id} testMode={process.env.UAZAPI_MODE === "test"} />
+              <MeetingBookingButton
+                clientId={client.id}
+                testMode={process.env.UAZAPI_MODE === "test"}
+                disabledReason={bookingReady ? undefined : bookingIssues.join("; ")}
+              />
               <LinkButton href={`/projetos/novo?clientId=${client.id}`}>
                 <Plus className="w-4 h-4 mr-2" />
                 Novo projeto

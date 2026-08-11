@@ -367,7 +367,7 @@ model Client {
 
   @@index([companyId])
   @@index([managerId])
-  @@index([whatsappGroupId])
+  @@unique([companyId, whatsappGroupId])
   @@map("clients")
 }
 
