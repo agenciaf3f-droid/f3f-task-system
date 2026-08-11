@@ -12,6 +12,12 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      merge_name_duplicates:
+        description: "Unir variantes de nome comprovadas pela planilha"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -38,8 +44,13 @@ jobs:
       - name: Sincronizar planilha com o Task
         env:
           OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          MERGE_NAME_DUPLICATES: ${{ inputs.merge_name_duplicates || false }}
         run: |
+          URL="https://task.agenciaf3f.com.br/api/cron/sync-clients"
+          if [ "${MERGE_NAME_DUPLICATES}" = "true" ]; then
+            URL="${URL}?mergeNameDuplicates=1"
+          fi
           curl --fail-with-body --silent --show-error \
             --retry 2 \
             --header "Authorization: Bearer ${OIDC_TOKEN}" \
-            https://task.agenciaf3f.com.br/api/cron/sync-clients
+            "${URL}"

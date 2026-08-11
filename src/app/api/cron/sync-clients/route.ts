@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import {
   auditBookingDestinations,
   auditClientNameDuplicates,
+  mergeClientNameDuplicates,
   syncClientsFromPublishedSheet,
 } from "@/lib/client-sheet-sync";
 
@@ -48,7 +49,11 @@ export async function GET(request: Request) {
 
   try {
     const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
+    const mergeNameDuplicates = new URL(request.url).searchParams.get("mergeNameDuplicates") === "1";
     const result = await syncClientsFromPublishedSheet({ dryRun });
+    const duplicateMerge = mergeNameDuplicates && !dryRun
+      ? await mergeClientNameDuplicates()
+      : undefined;
     const [bookingAudit, duplicateAudit] = await Promise.all([
       auditBookingDestinations(),
       auditClientNameDuplicates(),
@@ -62,7 +67,14 @@ export async function GET(request: Request) {
       deduplicated: result.deduplicated,
       skipped: result.skipped,
     });
-    return NextResponse.json({ ok: true, dryRun, ...result, bookingAudit, duplicateAudit });
+    return NextResponse.json({
+      ok: true,
+      dryRun,
+      ...result,
+      duplicateMerge,
+      bookingAudit,
+      duplicateAudit,
+    });
   } catch (error) {
     console.error("[client-sheet-sync] failed", error);
     return NextResponse.json({ ok: false, error: "sync_failed" }, { status: 500 });

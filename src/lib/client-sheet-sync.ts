@@ -69,6 +69,15 @@ export type ClientDuplicateAudit = {
   ambiguous: Array<{ clientName: string; possibleTargets: string[] }>;
 };
 
+export type ClientDuplicateMergeResult = {
+  merged: number;
+  canonicalClients: number;
+  transferredProjects: number;
+  transferredTasks: number;
+  transferredBookingLinks: number;
+  ambiguous: ClientDuplicateAudit["ambiguous"];
+};
+
 function normalize(value: string): string {
   return value
     .normalize("NFD")
@@ -433,6 +442,98 @@ export async function auditClientNameDuplicates(): Promise<ClientDuplicateAudit>
   }
 
   return { candidates: [...groupedCandidates.values()], ambiguous };
+}
+
+export async function mergeClientNameDuplicates(): Promise<ClientDuplicateMergeResult> {
+  const [sheet, company] = await Promise.all([
+    fetchPublishedClientSheet(),
+    prisma.company.findFirst({
+      where: { slug: COMPANY_SLUG, deletedAt: null },
+      select: {
+        clients: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            color: true,
+            avatarUrl: true,
+            description: true,
+            whatsappGroupId: true,
+            _count: { select: { projects: true, tasks: true, bookingMagicLinks: true } },
+          },
+        },
+      },
+    }),
+  ]);
+  if (!company) throw new Error(`Empresa ${COMPANY_SLUG} não encontrada.`);
+
+  const activeRows = sheet.rows.filter((row) => row.status === "active");
+  const canonicalByGroup = new Map(
+    company.clients
+      .filter((client) => client.whatsappGroupId)
+      .map((client) => [client.whatsappGroupId!, client]),
+  );
+  const activeGroups = new Set(activeRows.map((row) => row.whatsappGroupId));
+  const mergeGroups = new Map<string, { canonical: typeof company.clients[number]; duplicates: typeof company.clients }>();
+  const ambiguous: ClientDuplicateAudit["ambiguous"] = [];
+
+  for (const client of company.clients) {
+    if (client.whatsappGroupId && activeGroups.has(client.whatsappGroupId)) continue;
+    const targets = activeRows.filter((row) => isSafeClientNameVariant(client.name, row.clientName));
+    if (targets.length !== 1) {
+      if (targets.length > 1) {
+        ambiguous.push({ clientName: client.name, possibleTargets: targets.map((row) => row.clientName) });
+      }
+      continue;
+    }
+    const canonical = canonicalByGroup.get(targets[0].whatsappGroupId);
+    if (!canonical || canonical.id === client.id) continue;
+    const group = mergeGroups.get(canonical.id) ?? { canonical, duplicates: [] };
+    group.duplicates.push(client);
+    mergeGroups.set(canonical.id, group);
+  }
+
+  const totals: ClientDuplicateMergeResult = {
+    merged: 0,
+    canonicalClients: mergeGroups.size,
+    transferredProjects: 0,
+    transferredTasks: 0,
+    transferredBookingLinks: 0,
+    ambiguous,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const { canonical, duplicates } of mergeGroups.values()) {
+      const duplicateIds = duplicates.map((client) => client.id);
+      const all = [canonical, ...duplicates];
+      const firstValue = <K extends "email" | "phone" | "color" | "avatarUrl" | "description">(key: K) =>
+        all.find((client) => client[key])?.[key] ?? null;
+
+      totals.merged += duplicates.length;
+      totals.transferredProjects += duplicates.reduce((sum, client) => sum + client._count.projects, 0);
+      totals.transferredTasks += duplicates.reduce((sum, client) => sum + client._count.tasks, 0);
+      totals.transferredBookingLinks += duplicates.reduce((sum, client) => sum + client._count.bookingMagicLinks, 0);
+
+      await tx.project.updateMany({ where: { clientId: { in: duplicateIds } }, data: { clientId: canonical.id } });
+      await tx.task.updateMany({ where: { clientId: { in: duplicateIds } }, data: { clientId: canonical.id } });
+      await tx.bookingMagicLink.updateMany({ where: { clientId: { in: duplicateIds } }, data: { clientId: canonical.id } });
+      await tx.client.update({
+        where: { id: canonical.id },
+        data: {
+          email: firstValue("email"),
+          phone: firstValue("phone"),
+          color: firstValue("color"),
+          avatarUrl: firstValue("avatarUrl"),
+          description: firstValue("description"),
+        },
+      });
+      await tx.client.deleteMany({ where: { id: { in: duplicateIds } } });
+    }
+  }, { timeout: 60_000 });
+
+  return totals;
 }
 
 export async function syncClientsFromPublishedSheet({
