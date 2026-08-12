@@ -628,14 +628,11 @@ export async function syncClientsFromPublishedSheet({
 
     const nameKey = normalize(row.clientName);
     const groupMatches = clientsByGroup.get(row.whatsappGroupId) ?? [];
-    const exactNameMatches = sourceNameCounts.get(nameKey) === 1
+    const nameMatches = sourceNameCounts.get(nameKey) === 1
       ? clientsByName.get(nameKey) ?? []
       : [];
-    const variantNameMatches = exactNameMatches.length === 0
-      ? company.clients.filter((client) => isSafeClientNameVariant(client.name, row.clientName))
-      : [];
     const candidates = [...new Map(
-      [...groupMatches, ...exactNameMatches, ...variantNameMatches].map((client) => [client.id, client]),
+      [...groupMatches, ...nameMatches].map((client) => [client.id, client]),
     ).values()].sort((a, b) => {
       const score = (client: typeof a) =>
         (client.deletedAt ? 0 : 16)
@@ -717,17 +714,16 @@ export async function syncClientsFromPublishedSheet({
       continue;
     }
 
-    const meetingPlan = row.plan || existing?.meetingPlan || "";
-    if (!meetingPlan) {
+    if (!row.plan && !existing) {
       result.skipped += 1;
-      result.issues.push(`Linha ${row.rowNumber}: plano ausente e cliente sem plano anterior.`);
+      result.issues.push(`Linha ${row.rowNumber}: plano ausente para novo cliente.`);
       continue;
     }
 
     const data = {
       name: row.clientName,
       managerId: manager.id,
-      meetingPlan,
+      meetingPlan: row.plan || existing?.meetingPlan || null,
       whatsappGroupId: row.whatsappGroupId,
       whatsappGroupName: row.groupName,
       deletedAt: null,
