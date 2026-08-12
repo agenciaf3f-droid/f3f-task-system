@@ -43,7 +43,6 @@ const COLUMNS: Column[] = [
   { id: "review",      label: "Revisão",       color: "text-amber-600",   bg: "bg-amber-50"    },
   { id: "blocked",     label: "Ajustes",       color: "text-rose-600",    bg: "bg-rose-50"     },
   { id: "done",        label: "Concluído",     color: "text-emerald-600", bg: "bg-emerald-50"  },
-  { id: "cancelled",   label: "Tarefas Canceladas", color: "text-orange-600", bg: "bg-orange-50" },
 ];
 
 const PRIORITY_DOT: Record<string, string> = {
@@ -61,7 +60,6 @@ const STATUS_DOT: Record<string, string> = {
   review:      "bg-amber-500",
   blocked:     "bg-rose-500",
   done:        "bg-emerald-500",
-  cancelled:   "bg-orange-500",
 };
 
 const STATUS_TEXT: Record<string, string> = {
@@ -70,7 +68,6 @@ const STATUS_TEXT: Record<string, string> = {
   review:      "text-amber-600",
   blocked:     "text-rose-600",
   done:        "text-emerald-600",
-  cancelled:   "text-orange-600",
 };
 
 const STATUS_TINT: Record<string, string> = {
@@ -79,7 +76,6 @@ const STATUS_TINT: Record<string, string> = {
   review:      "bg-amber-50/60",
   blocked:     "bg-rose-50/60",
   done:        "bg-emerald-50/60",
-  cancelled:   "bg-orange-50/60",
 };
 
 const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { task: Task; isDragging?: boolean; overlay?: boolean }) {
@@ -221,11 +217,12 @@ export function KanbanView({
     const groups: Record<string, Task[]> = {};
     for (const col of columns) groups[col.id] = [];
     for (const t of taskList) {
+      if (t.status === "cancelled") continue;
       const colId = statusColumnMap[t.status] ?? t.status;
       if (groups[colId]) groups[colId].push(t);
       // Colunas custom (ex: dashboard, subset de status): descarta task cujo status
       // não tem coluna — senão ela cairia na 1ª coluna e um drag reescreveria o
-      // status errado. Default (projeto, 6 colunas): mantém legacy (órfão → 1ª coluna).
+      // status errado. Default (projeto, 5 colunas): mantém legacy (órfão → 1ª coluna).
       else if (columns === COLUMNS) groups[columns[0].id].push(t);
     }
     return groups;

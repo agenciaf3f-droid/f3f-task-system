@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, TaskStatus } from "@prisma/client";
-import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Flame, LayoutList, Kanban, Plus } from "lucide-react";
+import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Flame, LayoutList, Kanban, Plus, Ban } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
 import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
 import { DashboardTaskRow } from "./dashboard-task-row";
@@ -28,10 +28,9 @@ const DASHBOARD_COLUMNS = [
   { id: "review",      label: "Revisão",             color: "text-amber-600",   bg: "bg-amber-50"    },
   { id: "blocked",     label: "Ajustes",             color: "text-rose-600",    bg: "bg-rose-50"     },
   { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
-  { id: "cancelled",   label: "Tarefas Canceladas",  color: "text-orange-600",  bg: "bg-orange-50"   },
 ];
 
-async function getDashboardData(memberId: string | null, companyId: string) {
+async function getDashboardData(memberId: string | null, companyId: string, includeCancelled: boolean) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
@@ -60,12 +59,14 @@ async function getDashboardData(memberId: string | null, companyId: string) {
       select: boardTaskSelect,
     }),
     // Board: canceladas mais recentes, disponíveis para consulta ou reativação por drag.
-    prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "cancelled" },
-      orderBy: [{ updatedAt: "desc" }],
-      take: 50,
-      select: boardTaskSelect,
-    }),
+    includeCancelled
+      ? prisma.task.findMany({
+          where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "cancelled" },
+          orderBy: [{ updatedAt: "desc" }],
+          take: 50,
+          select: boardTaskSelect,
+        })
+      : Promise.resolve([]),
     prisma.task.count({
       where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: memberScope },
     }),
@@ -81,19 +82,20 @@ async function getDashboardData(memberId: string | null, companyId: string) {
     }),
   ]);
 
-  const myTasks = [...activeMine, ...doneMine, ...cancelledMine];
+  const myTasks = [...activeMine, ...doneMine];
 
-  return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount };
+  return { myTasks, cancelledTasks: cancelledMine, overdueCount, todayCount, completedTodayCount, inProgressCount };
 }
 
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string; member?: string }>;
+  searchParams?: Promise<{ view?: string; member?: string; cancelled?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
   const view = sp?.view === "list" ? "list" : "board";
+  const showCancelled = sp?.cancelled === "1";
 
   // Exceção: cargos elevados (admin/manager/supervisor) podem ver/filtrar as
   // tarefas de qualquer membro da empresa — não só as próprias, incl. "Todos"
@@ -121,8 +123,8 @@ export default async function DashboardPage({
   const viewingUserId = viewingAll ? null : (viewingUser?.id ?? user.userId);
   const memberParam = viewingAll ? "&member=all" : viewingUser ? `&member=${viewingUser.id}` : "";
 
-  const { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
-    await getDashboardData(viewingUserId, user.companyId);
+  const { myTasks, cancelledTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
+    await getDashboardData(viewingUserId, user.companyId, showCancelled);
 
   const pendingTasks = myTasks.filter((t) => t.status !== "done" && t.status !== "cancelled");
 
@@ -203,9 +205,22 @@ export default async function DashboardPage({
       {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
       <div className="flex flex-col gap-4 min-w-0">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-base font-bold text-neutral-900">
-              {viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
-            </h2>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-base font-bold text-neutral-900">
+                {viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
+              </h2>
+              <Link
+                href={`/dashboard?view=${view}${memberParam}${showCancelled ? "" : "&cancelled=1"}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  showCancelled
+                    ? "border-orange-200 bg-orange-50 text-orange-700"
+                    : "border-neutral-200 text-neutral-500 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                }`}
+              >
+                <Ban className="w-3.5 h-3.5" />
+                {showCancelled ? "Voltar às tarefas" : "Ver tarefas canceladas"}
+              </Link>
+            </div>
             <div className="flex items-center gap-2">
               {canFilterByMember && (
                 <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
@@ -228,7 +243,28 @@ export default async function DashboardPage({
               </div>
             </div>
           </div>
-          {(view === "board" ? myTasks.length === 0 : pendingTasks.length === 0) ? (
+          {showCancelled ? (
+            cancelledTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-orange-200 rounded-2xl bg-orange-50/30">
+                <Ban className="w-9 h-9 mb-3 text-orange-300" />
+                <p className="text-sm font-semibold text-neutral-600">Nenhuma tarefa cancelada</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {cancelledTasks.map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/tarefas/${task.id}`}
+                    className="flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50/50 px-4 py-3 transition-colors hover:bg-orange-50"
+                  >
+                    <Ban className="w-4 h-4 shrink-0 text-orange-500" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-700 line-through">{task.title}</span>
+                    <span className="text-xs font-medium text-orange-700">Cancelada</span>
+                  </Link>
+                ))}
+              </div>
+            )
+          ) : (view === "board" ? myTasks.length === 0 : pendingTasks.length === 0) ? (
             <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-neutral-200 rounded-2xl bg-white">
               <CheckCircle2 className="w-10 h-10 mb-3 text-emerald-300" />
               <p className="text-sm font-semibold text-neutral-600">Tudo em dia!</p>

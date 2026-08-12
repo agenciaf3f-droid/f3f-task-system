@@ -14,7 +14,9 @@ export function TaskCheckbox({ taskId, isDone }: { taskId: string; isDone: boole
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    startTransition(() => updateTaskStatusAction(taskId, isDone ? "todo" : "done"));
+    startTransition(async () => {
+      await updateTaskStatusAction(taskId, isDone ? "todo" : "done");
+    });
   }
 
   return (

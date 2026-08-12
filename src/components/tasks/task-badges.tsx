@@ -7,7 +7,7 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; className: string }> = 
   review:      { label: "Revisão",      className: "bg-amber-200 text-amber-900 border-amber-400 font-semibold" },
   blocked:     { label: "Ajustes",      className: "bg-rose-200 text-rose-900 border-rose-400 font-semibold" },
   done:        { label: "Concluído",    className: "bg-emerald-200 text-emerald-900 border-emerald-400 font-semibold" },
-  cancelled:   { label: "Cancelado",   className: "bg-neutral-200 text-neutral-600 border-neutral-300 line-through font-semibold" },
+  cancelled:   { label: "Cancelado",   className: "bg-orange-100 text-orange-800 border-orange-300 line-through font-semibold" },
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; className: string; dot: string }> = {

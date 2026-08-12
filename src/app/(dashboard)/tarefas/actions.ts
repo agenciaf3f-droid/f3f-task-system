@@ -267,6 +267,10 @@ export async function createTaskAction(
 export async function updateTaskStatusAction(taskId: string, status: TaskStatus) {
   const user = await requireAuth();
 
+  if (status === "cancelled") {
+    return { error: "Informe o motivo do cancelamento." };
+  }
+
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: {
@@ -361,6 +365,54 @@ export async function updateTaskStatusAction(taskId: string, status: TaskStatus)
   revalidatePath("/tarefas");
   revalidatePath("/dashboard");
   if (old.projectId) revalidatePath(`/projetos/${old.projectId}`);
+}
+
+export async function cancelTaskAction(taskId: string, reason: string) {
+  const user = await requireAuth();
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 3) return { error: "Explique por que a tarefa está sendo cancelada." };
+  if (trimmedReason.length > 2000) return { error: "O motivo deve ter no máximo 2.000 caracteres." };
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
+    select: { id: true, title: true, status: true, projectId: true, assigneeId: true, createdById: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+  const canEdit = user.role === "admin"
+    || user.role === "manager"
+    || task.assigneeId === user.userId
+    || task.createdById === user.userId;
+  if (!canEdit) return { error: "Você não tem permissão para cancelar esta tarefa." };
+  if (task.status === "cancelled") return { error: "Esta tarefa já está cancelada." };
+
+  await prisma.$transaction([
+    prisma.task.update({
+      where: { id: taskId, companyId: user.companyId },
+      data: { status: "cancelled", completedAt: null },
+    }),
+    prisma.taskComment.create({
+      data: {
+        taskId,
+        userId: user.userId,
+        content: `Motivo do cancelamento: ${trimmedReason}`,
+      },
+    }),
+  ]);
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.status_changed",
+    resourceType: "task",
+    resourceId: taskId,
+    oldValue: { status: task.status },
+    newValue: { status: "cancelled", reason: trimmedReason },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
 }
 
 export async function setTaskBlockedAction(

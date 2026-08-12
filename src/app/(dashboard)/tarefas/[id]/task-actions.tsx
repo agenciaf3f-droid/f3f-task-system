@@ -2,11 +2,12 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTaskStatusAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
+import { updateTaskStatusAction, cancelTaskAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { STATUS_CONFIG } from "@/components/tasks/task-badges";
 import { Trash2, ChevronDown, Loader2, Copy, Archive, Flag } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const STATUS_ORDER: TaskStatus[] = [
   "todo","in_progress","review","blocked","done","cancelled",
@@ -25,13 +26,40 @@ export function TaskActions({
 }) {
   const [isPending, startTransition] = useTransition();
   const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const [blocked, setBlocked] = useOptimistic(isBlocked);
   const router = useRouter();
 
   function changeStatus(status: TaskStatus) {
     setShowStatusMenu(false);
+    if (status === "cancelled") {
+      setCancelError("");
+      setShowCancelDialog(true);
+      return;
+    }
     startTransition(async () => {
       await updateTaskStatusAction(taskId, status);
+    });
+  }
+
+  function confirmCancellation() {
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelError("Explique por que a tarefa está sendo cancelada.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await cancelTaskAction(taskId, reason);
+      if (result.error) {
+        setCancelError(result.error);
+        return;
+      }
+      setShowCancelDialog(false);
+      setCancelReason("");
+      setCancelError("");
+      router.refresh();
     });
   }
 
@@ -71,6 +99,7 @@ export function TaskActions({
   if (!canEdit) return null;
 
   return (
+    <>
     <div className="flex items-center gap-2 shrink-0">
       {/* Status selector */}
       <div className="relative">
@@ -167,5 +196,36 @@ export function TaskActions({
         <Trash2 className="w-4 h-4" />
       </Button>
     </div>
+    <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Por que essa tarefa está sendo cancelada?</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <textarea
+            value={cancelReason}
+            onChange={(event) => {
+              setCancelReason(event.target.value);
+              if (cancelError) setCancelError("");
+            }}
+            rows={4}
+            maxLength={2000}
+            autoFocus
+            disabled={isPending}
+            placeholder="Escreva o motivo do cancelamento..."
+            className="w-full resize-none rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200"
+          />
+          {cancelError && <p className="text-sm text-red-600">{cancelError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowCancelDialog(false)} disabled={isPending}>Voltar</Button>
+            <Button onClick={confirmCancellation} disabled={isPending || !cancelReason.trim()} className="bg-orange-600 hover:bg-orange-700">
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Cancelar tarefa
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

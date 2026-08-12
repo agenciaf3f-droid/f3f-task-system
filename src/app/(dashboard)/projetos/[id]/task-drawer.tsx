@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<string, string> = {
   review: "bg-amber-50 text-amber-700 border-amber-200",
   blocked: "bg-rose-50 text-rose-700 border-rose-200",
   done: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  cancelled: "bg-neutral-50 text-neutral-400 border-neutral-200",
+  cancelled: "bg-orange-50 text-orange-700 border-orange-200",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
