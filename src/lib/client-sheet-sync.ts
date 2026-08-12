@@ -286,6 +286,9 @@ export function resolveManager(
   const byFirstName = uniqueManagerMap(users, (user) => normalize(user.name).split(" ")[0]);
   const normalizedName = normalize(sheetName);
   const firstName = normalizedName.split(" ")[0];
+  if (normalize(clientName ?? "") === "jucilaine perin" && normalizedName === "videos") {
+    return byName.get("denzel") ?? byFirstName.get("denzel") ?? null;
+  }
   if (["rafinha", "rafhael", "raphael"].includes(firstName)) {
     const correctedManager = normalize(clientName ?? "") === "arthur" ? "denzel" : "amorim";
     return byName.get(correctedManager) ?? byFirstName.get(correctedManager) ?? null;
