@@ -73,11 +73,18 @@ export default async function CalendarioPage({
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, managerId: true },
+      select: { id: true, name: true, managerId: true, whatsappGroupId: true },
     }),
   ]);
 
   const clientManagerIndex = buildClientManagerIndex(clients);
+  const managerByGroupId = new Map(
+    clients.flatMap((client) =>
+      client.whatsappGroupId && client.managerId
+        ? [[client.whatsappGroupId, client.managerId] as const]
+        : [],
+    ),
+  );
   const userNames = new Map(users.map((item) => [item.id, item.name]));
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -88,7 +95,9 @@ export default async function CalendarioPage({
       gridStart={gridStart.toISOString()}
       monthRefIso={firstOfMonth.toISOString()}
       meetings={meetings.map((m) => {
-        const clientManagerId = findManagerByClientName(m.clientName, clientManagerIndex);
+        const clientManagerId = (m.clientGroupId
+          ? managerByGroupId.get(m.clientGroupId)
+          : null) ?? findManagerByClientName(m.clientName, clientManagerIndex);
         const hostId = clientManagerId ?? m.user.id;
 
         return {

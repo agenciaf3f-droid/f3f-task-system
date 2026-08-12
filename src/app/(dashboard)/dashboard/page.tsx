@@ -112,7 +112,7 @@ export default async function DashboardPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });
-    if (sp?.member === "all") {
+    if (sp?.member === "all" || (user.role === "admin" && !sp?.member)) {
       viewingAll = true;
     } else if (sp?.member && sp.member !== user.userId) {
       const target = members.find((m) => m.id === sp.member);

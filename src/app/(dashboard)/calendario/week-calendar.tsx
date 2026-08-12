@@ -581,25 +581,27 @@ export function WeekCalendar({
               Mês
             </button>
           </div>
-          {/* Toggle Minhas / Todas */}
-          <div className="flex items-center bg-slate-100 rounded-full p-0.5">
-            <button
-              onClick={() => setViewMode("mine")}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                viewMode === "mine" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              Minhas
-            </button>
-            <button
-              onClick={() => setViewMode("all")}
-              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                viewMode === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              Todas
-            </button>
-          </div>
+          {/* Admin já vê todas e filtra por pessoa; demais usuários alternam entre sua agenda e o conjunto permitido. */}
+          {!canFilterByUser ? (
+            <div className="flex items-center bg-slate-100 rounded-full p-0.5">
+              <button
+                onClick={() => setViewMode("mine")}
+                className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                  viewMode === "mine" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Minhas
+              </button>
+              <button
+                onClick={() => setViewMode("all")}
+                className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                  viewMode === "all" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Todas
+              </button>
+            </div>
+          ) : null}
           {canFilterByUser ? (
             <select
               value={selectedHostId}
