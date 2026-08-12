@@ -204,6 +204,7 @@ export default async function DashboardPage({
 
       {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
       <div className="flex flex-col gap-4 min-w-0">
+        {(view !== "board" || showCancelled) && (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-base font-bold text-neutral-900">
@@ -243,6 +244,7 @@ export default async function DashboardPage({
               </div>
             </div>
           </div>
+        )}
           {showCancelled ? (
             cancelledTasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-400 border border-dashed border-orange-200 rounded-2xl bg-orange-50/30">
@@ -277,6 +279,31 @@ export default async function DashboardPage({
               key={viewingAll ? "all" : viewingUserId}
               tasks={myTasks}
               columns={DASHBOARD_COLUMNS}
+              headerTitle={viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
+              cancelledHref={`/dashboard?view=${view}${memberParam}&cancelled=1`}
+              toolbarActions={
+                <div className="flex items-center gap-2">
+                  {canFilterByMember && (
+                    <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                  )}
+                  <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
+                    <Link
+                      href={`/dashboard?view=list${memberParam}`}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-neutral-500 transition-colors hover:bg-neutral-50"
+                      title="Visão lista"
+                    >
+                      <LayoutList className="w-3.5 h-3.5" />
+                    </Link>
+                    <Link
+                      href={`/dashboard?view=board${memberParam}`}
+                      className="flex items-center gap-1 bg-neutral-900 px-2.5 py-1.5 text-xs text-white transition-colors"
+                      title="Visão board"
+                    >
+                      <Kanban className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              }
             />
           ) : (
             <div className="flex flex-col gap-2">

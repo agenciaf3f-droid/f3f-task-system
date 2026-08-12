@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useState, useTransition, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -14,9 +14,11 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import Link from "next/link";
 import { isBefore, isToday, format } from "date-fns";
-import { BriefcaseBusiness, Calendar, User, AlertCircle } from "lucide-react";
-import { updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
+import { BriefcaseBusiness, Calendar, User, AlertCircle, Ban, Loader2 } from "lucide-react";
+import { cancelTaskAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 type Assignee = { id: string; name: string; avatarUrl: string | null } | null;
 
@@ -36,6 +38,7 @@ type Task = {
 };
 
 type Column = { id: string; label: string; color: string; bg: string };
+const CANCEL_DROP_ZONE_ID = "cancel-task-drop-zone";
 
 const COLUMNS: Column[] = [
   { id: "todo",        label: "A ser iniciado", color: "text-neutral-600", bg: "bg-neutral-50"  },
@@ -188,19 +191,47 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
   );
 }
 
+function CancelDropTarget({ href }: { href: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: CANCEL_DROP_ZONE_ID });
+  return (
+    <Link
+      ref={setNodeRef}
+      href={href}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all ${
+        isOver
+          ? "scale-105 border-orange-400 bg-orange-100 text-orange-800 ring-2 ring-orange-200"
+          : "border-neutral-200 text-neutral-500 hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+      }`}
+    >
+      <Ban className="w-3.5 h-3.5" />
+      {isOver ? "Solte para cancelar" : "Ver tarefas canceladas"}
+    </Link>
+  );
+}
+
 export function KanbanView({
   tasks,
   columns = COLUMNS,
   statusColumnMap = {},
+  headerTitle,
+  cancelledHref,
+  toolbarActions,
 }: {
   tasks: Task[];
   columns?: Column[];
   // Mapeia status sem coluna própria pra uma coluna existente (ex: dashboard 3 colunas:
   // review/blocked → "in_progress"). Só afeta a exibição; o drag grava o status real da coluna alvo.
   statusColumnMap?: Record<string, string>;
+  headerTitle?: string;
+  cancelledHref?: string;
+  toolbarActions?: ReactNode;
 }) {
   const [taskList, setTaskList] = useState(tasks);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [taskToCancel, setTaskToCancel] = useState<Task | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [isCancelling, startCancellation] = useTransition();
 
   // O board faz updates otimistas ao arrastar cards, por isso mantém estado
   // próprio. Ao chegar uma atualização do servidor (criação/edição), sincroniza
@@ -238,6 +269,14 @@ export function KanbanView({
     if (!over) return;
     const taskId = String(active.id);
     const newStatus = String(over.id);
+    if (newStatus === CANCEL_DROP_ZONE_ID && cancelledHref) {
+      const task = taskList.find((candidate) => candidate.id === taskId);
+      if (task) {
+        setCancelError("");
+        setTaskToCancel(task);
+      }
+      return;
+    }
     if (!columns.find((c) => c.id === newStatus)) return;
 
     const task = taskList.find((t) => t.id === taskId);
@@ -253,8 +292,37 @@ export function KanbanView({
 
   const groups = groupByStatus();
 
+  function confirmCancellation() {
+    if (!taskToCancel) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelError("Explique por que a tarefa está sendo cancelada.");
+      return;
+    }
+    startCancellation(async () => {
+      const result = await cancelTaskAction(taskToCancel.id, reason);
+      if (result.error) {
+        setCancelError(result.error);
+        return;
+      }
+      setTaskList((current) => current.filter((task) => task.id !== taskToCancel.id));
+      setTaskToCancel(null);
+      setCancelReason("");
+      setCancelError("");
+    });
+  }
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      {headerTitle && (
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-base font-bold text-neutral-900">{headerTitle}</h2>
+            {cancelledHref && <CancelDropTarget href={cancelledHref} />}
+          </div>
+          {toolbarActions}
+        </div>
+      )}
       <div className="flex items-start gap-3 overflow-x-auto pb-2">
         {columns.map((col) => (
           <KanbanColumn key={col.id} column={col} tasks={groups[col.id]} />
@@ -263,6 +331,37 @@ export function KanbanView({
       <DragOverlay>
         {activeTask ? <KanbanCard task={activeTask} isDragging overlay /> : null}
       </DragOverlay>
+      <Dialog open={Boolean(taskToCancel)} onOpenChange={(open) => !open && setTaskToCancel(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Por que essa tarefa está sendo cancelada?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            {taskToCancel && <p className="text-sm font-medium text-neutral-700">{taskToCancel.title}</p>}
+            <textarea
+              value={cancelReason}
+              onChange={(event) => {
+                setCancelReason(event.target.value);
+                if (cancelError) setCancelError("");
+              }}
+              rows={4}
+              maxLength={2000}
+              autoFocus
+              disabled={isCancelling}
+              placeholder="Escreva o motivo do cancelamento..."
+              className="w-full resize-none rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-200"
+            />
+            {cancelError && <p className="text-sm text-red-600">{cancelError}</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setTaskToCancel(null)} disabled={isCancelling}>Voltar</Button>
+              <Button onClick={confirmCancellation} disabled={isCancelling || !cancelReason.trim()} className="bg-orange-600 hover:bg-orange-700">
+                {isCancelling && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Cancelar tarefa
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DndContext>
   );
 }
