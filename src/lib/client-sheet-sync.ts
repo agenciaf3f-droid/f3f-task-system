@@ -164,6 +164,17 @@ export function extractClientName(groupName: string, plan: string): string {
   return clean(name) || clean(groupName);
 }
 
+export function inferPlanFromGroupName(groupName: string): string {
+  const cleanedGroup = clean(groupName).replace(/\(\s*fechado\s*\)/gi, "");
+  const match = cleanedGroup.match(/\s+-\s+([^-]+)\s*$/);
+  if (!match) return "";
+
+  const candidate = clean(match[1]);
+  return /^(?:\d+\s+FASES?|FUNIL|LOW[- ]?TICKET|PREMIUM)$/i.test(candidate)
+    ? candidate
+    : "";
+}
+
 export function parseCsv(csv: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -230,7 +241,7 @@ export function parseClientSheet(csv: string): {
     const rawStatus = normalize(valueAt(sourceRow, "status"));
     if (!groupName || (rawStatus !== "ativo" && rawStatus !== "inativo")) return;
 
-    const plan = valueAt(sourceRow, "plano");
+    const plan = valueAt(sourceRow, "plano") || inferPlanFromGroupName(groupName);
     const whatsappGroupId = valueAt(sourceRow, "id grupo (uazapi)");
     const managerName = valueAt(sourceRow, "gestor responsavel");
     const status = rawStatus === "ativo" ? "active" : "inactive";

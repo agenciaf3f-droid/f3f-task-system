@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   extractClientName,
+  inferPlanFromGroupName,
   isSafeClientNameVariant,
   parseClientSheet,
   parseCsv,
@@ -30,6 +31,8 @@ assert.equal(
   extractClientName("F3F - Rayanne Magna Mesquita Da Silva - 1 FASE", ""),
   "Rayanne Magna Mesquita Da Silva",
 );
+assert.equal(inferPlanFromGroupName("F3F - Rayanne Magna Mesquita Da Silva - 1 FASE"), "1 FASE");
+assert.equal(inferPlanFromGroupName("F3F - Cliente sem sufixo reconhecido - Vídeos"), "");
 assert.equal(
   resolveManager([{ id: "1", name: "Amorim" }], "Rafhael", "Outro cliente")?.id,
   "1",
