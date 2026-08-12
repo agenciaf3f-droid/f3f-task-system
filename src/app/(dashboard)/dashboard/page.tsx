@@ -2,10 +2,8 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, TaskStatus } from "@prisma/client";
-import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Circle, Flame, LayoutList, Kanban, Plus } from "lucide-react";
+import { Clock, AlertTriangle, TrendingUp, CheckCircle2, Flame, LayoutList, Kanban, Plus } from "lucide-react";
 import { LinkButton } from "@/components/ui/link-button";
-import { format, isBefore } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
 import { DashboardTaskRow } from "./dashboard-task-row";
 import { MemberFilter } from "./member-filter";
@@ -30,6 +28,7 @@ const DASHBOARD_COLUMNS = [
   { id: "review",      label: "Revisão",             color: "text-amber-600",   bg: "bg-amber-50"    },
   { id: "blocked",     label: "Ajustes",             color: "text-rose-600",    bg: "bg-rose-50"     },
   { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
+  { id: "cancelled",   label: "Tarefas Canceladas",  color: "text-orange-600",  bg: "bg-orange-50"   },
 ];
 
 async function getDashboardData(memberId: string | null, companyId: string) {
@@ -45,7 +44,7 @@ async function getDashboardData(memberId: string | null, companyId: string) {
     ? { OR: [{ assigneeId: memberId }, { assignees: { some: { userId: memberId } } }] }
     : {};
 
-  const [activeMine, doneMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
+  const [activeMine, doneMine, cancelledMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
     // Pendentes minhas: todas menos done/cancelled.
     prisma.task.findMany({
       where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
@@ -57,6 +56,13 @@ async function getDashboardData(memberId: string | null, companyId: string) {
     prisma.task.findMany({
       where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "done", completedAt: { gte: sevenDaysAgo } },
       orderBy: [{ completedAt: "desc" }],
+      take: 50,
+      select: boardTaskSelect,
+    }),
+    // Board: canceladas mais recentes, disponíveis para consulta ou reativação por drag.
+    prisma.task.findMany({
+      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "cancelled" },
+      orderBy: [{ updatedAt: "desc" }],
       take: 50,
       select: boardTaskSelect,
     }),
@@ -75,7 +81,7 @@ async function getDashboardData(memberId: string | null, companyId: string) {
     }),
   ]);
 
-  const myTasks = [...activeMine, ...doneMine];
+  const myTasks = [...activeMine, ...doneMine, ...cancelledMine];
 
   return { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount };
 }
@@ -118,7 +124,7 @@ export default async function DashboardPage({
   const { myTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
     await getDashboardData(viewingUserId, user.companyId);
 
-  const pendingTasks = myTasks.filter((t) => t.status !== "done");
+  const pendingTasks = myTasks.filter((t) => t.status !== "done" && t.status !== "cancelled");
 
   const stats = [
     {
