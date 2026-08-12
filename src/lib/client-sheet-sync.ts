@@ -154,6 +154,11 @@ export function extractClientName(groupName: string, plan: string): string {
       new RegExp(`\\s*-\\s*${escapeRegExp(cleanedPlan)}\\s*$`, "i"),
       "",
     );
+  } else {
+    // Algumas linhas existentes recebem o ID UAZAPI antes do preenchimento do plano.
+    // O nome do grupo continua no padrão "F3F - Cliente - PLANO"; remove somente
+    // o último segmento para encontrar o cadastro atual e preservar seu plano.
+    name = name.replace(/\s+-\s+[^-]+$/, "");
   }
 
   return clean(name) || clean(groupName);
@@ -235,10 +240,6 @@ export function parseClientSheet(csv: string): {
       issues.push(`Linha ${rowNumber}: ID UAZAPI ausente ou inválido.`);
       return;
     }
-    if (status === "active" && !plan) {
-      issues.push(`Linha ${rowNumber}: plano ausente.`);
-      return;
-    }
     if (status === "active" && !managerName) {
       issues.push(`Linha ${rowNumber}: gestor ausente.`);
       return;
@@ -286,9 +287,6 @@ export function resolveManager(
   const byFirstName = uniqueManagerMap(users, (user) => normalize(user.name).split(" ")[0]);
   const normalizedName = normalize(sheetName);
   const firstName = normalizedName.split(" ")[0];
-  if (normalize(clientName ?? "") === "jucilaine perin" && normalizedName === "videos") {
-    return byName.get("denzel") ?? byFirstName.get("denzel") ?? null;
-  }
   if (["rafinha", "rafhael", "raphael"].includes(firstName)) {
     const correctedManager = normalize(clientName ?? "") === "arthur" ? "denzel" : "amorim";
     return byName.get(correctedManager) ?? byFirstName.get(correctedManager) ?? null;
@@ -367,7 +365,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
       const client = matches[0];
       const manager = resolveManager(company.users, row.managerName, row.clientName);
       if (client.name !== row.clientName) rowIssues.push("nome diverge do sistema");
-      if (client.meetingPlan !== row.plan) rowIssues.push("plano diverge do sistema");
+      if (row.plan && client.meetingPlan !== row.plan) rowIssues.push("plano diverge do sistema");
       if (client.whatsappGroupName !== row.groupName) rowIssues.push("nome do grupo diverge do sistema");
       if (!manager || client.managerId !== manager.id) rowIssues.push("gestor diverge do sistema");
       const managerAvailability = manager
@@ -630,11 +628,14 @@ export async function syncClientsFromPublishedSheet({
 
     const nameKey = normalize(row.clientName);
     const groupMatches = clientsByGroup.get(row.whatsappGroupId) ?? [];
-    const nameMatches = sourceNameCounts.get(nameKey) === 1
+    const exactNameMatches = sourceNameCounts.get(nameKey) === 1
       ? clientsByName.get(nameKey) ?? []
       : [];
+    const variantNameMatches = exactNameMatches.length === 0
+      ? company.clients.filter((client) => isSafeClientNameVariant(client.name, row.clientName))
+      : [];
     const candidates = [...new Map(
-      [...groupMatches, ...nameMatches].map((client) => [client.id, client]),
+      [...groupMatches, ...exactNameMatches, ...variantNameMatches].map((client) => [client.id, client]),
     ).values()].sort((a, b) => {
       const score = (client: typeof a) =>
         (client.deletedAt ? 0 : 16)
@@ -701,22 +702,32 @@ export async function syncClientsFromPublishedSheet({
     }
 
     const manager = resolveManager(company.users, row.managerName, row.clientName);
-    const managerId = manager?.id ?? existing?.managerId ?? null;
-    if (!managerId) {
+    if (!manager) {
+      if (
+        existing
+        && normalize(row.clientName) === "jucilaine perin"
+        && normalize(row.managerName) === "videos"
+        && existing.managerId !== null
+        && !dryRun
+      ) {
+        await prisma.client.update({ where: { id: existing.id }, data: { managerId: null } });
+      }
       result.skipped += 1;
       result.issues.push(`Linha ${row.rowNumber}: gestor "${row.managerName}" não encontrado.`);
       continue;
     }
-    if (!manager && existing?.managerId) {
-      result.issues.push(
-        `Linha ${row.rowNumber}: gestor "${row.managerName}" inválido; gestor atual de ${row.clientName} foi preservado.`,
-      );
+
+    const meetingPlan = row.plan || existing?.meetingPlan || "";
+    if (!meetingPlan) {
+      result.skipped += 1;
+      result.issues.push(`Linha ${row.rowNumber}: plano ausente e cliente sem plano anterior.`);
+      continue;
     }
 
     const data = {
       name: row.clientName,
-      managerId,
-      meetingPlan: row.plan,
+      managerId: manager.id,
+      meetingPlan,
       whatsappGroupId: row.whatsappGroupId,
       whatsappGroupName: row.groupName,
       deletedAt: null,

@@ -27,6 +27,10 @@ assert.equal(
   "Cliente Antigo",
 );
 assert.equal(
+  extractClientName("F3F - Rayanne Magna Mesquita Da Silva - 1 FASE", ""),
+  "Rayanne Magna Mesquita Da Silva",
+);
+assert.equal(
   resolveManager([{ id: "1", name: "Amorim" }], "Rafhael", "Outro cliente")?.id,
   "1",
 );
@@ -34,10 +38,7 @@ assert.equal(
   resolveManager([{ id: "2", name: "Denzel" }], "Rafinha", "Arthur")?.id,
   "2",
 );
-assert.equal(
-  resolveManager([{ id: "2", name: "Denzel" }], "Vídeos", "Jucilaine Perin")?.id,
-  "2",
-);
+assert.equal(resolveManager([{ id: "2", name: "Denzel" }], "Vídeos", "Jucilaine Perin"), null);
 assert.equal(isSafeClientNameVariant("Karine Xavier", "Karine Xavier de Oliveira"), true);
 assert.equal(isSafeClientNameVariant("Frederico Silva de Farias", "Frederico Silva de Faria"), true);
 assert.equal(isSafeClientNameVariant("Adriana Cristina de Costa Leite", "Adriana Cristina da Costa Leite"), true);
