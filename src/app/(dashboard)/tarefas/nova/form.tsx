@@ -12,7 +12,7 @@ import { ClientPicker } from "@/components/tasks/client-picker";
 import { TaskTemplatePicker, type TaskTemplateOption } from "@/components/tasks/task-template-picker";
 
 interface Sector { id: string; name: string }
-interface User { id: string; name: string }
+interface User { id: string; name: string; sectorId: string | null }
 interface Client { id: string; name: string }
 interface Project { id: string; name: string; client: { name: string } }
 
@@ -44,6 +44,7 @@ export function NewTaskForm({
   defaultClientId,
   draftKey,
   templates,
+  canChooseSector,
 }: {
   sectors: Sector[];
   users: User[];
@@ -57,6 +58,7 @@ export function NewTaskForm({
   /** Isola o rascunho por usuário e contexto (avulsa, cliente ou projeto). */
   draftKey: string;
   templates: TaskTemplateOption[];
+  canChooseSector: boolean;
 }) {
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean; createdTaskId?: string; redirectTo?: string },
@@ -73,6 +75,10 @@ export function NewTaskForm({
   const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | null>(null);
   const [preserveForNext, setPreserveForNext] = useState(true);
   const [templateId, setTemplateId] = useState("");
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId ?? "");
+  const [sectorId, setSectorId] = useState(
+    users.find((item) => item.id === defaultAssigneeId)?.sectorId ?? "",
+  );
   const draftStorageKey = `f3f-task-draft:${draftKey}:v1`;
 
   function collectDraft(overrides?: Partial<TaskDraft>): TaskDraft | null {
@@ -111,10 +117,12 @@ export function NewTaskForm({
       const draft = JSON.parse(raw) as TaskDraft;
       setFormValue(form, "title", draft.title ?? "");
       setFormValue(form, "description", draft.description ?? "");
-      setFormValue(form, "sectorId", draft.sectorId ?? "");
-      setFormValue(form, "assigneeId", defaultAssigneeId ?? draft.assigneeId ?? "");
+      const restoredAssigneeId = defaultAssigneeId ?? draft.assigneeId ?? "";
+      const automaticSectorId = users.find((item) => item.id === restoredAssigneeId)?.sectorId ?? "";
       setFormValue(form, "dueDate", draft.dueDate ?? "");
       const animationFrameId = window.requestAnimationFrame(() => {
+        setAssigneeId(restoredAssigneeId);
+        setSectorId(canChooseSector ? (draft.sectorId ?? automaticSectorId) : automaticSectorId);
         setClientId(defaultClientId ?? draft.clientId ?? "");
         setRecurrenceRule(draft.recurrenceRule ?? null);
         setTemplateId(draft.templateId ?? "");
@@ -123,7 +131,7 @@ export function NewTaskForm({
     } catch {
       localStorage.removeItem(draftStorageKey);
     }
-  }, [defaultAssigneeId, defaultClientId, draftStorageKey]);
+  }, [canChooseSector, defaultAssigneeId, defaultClientId, draftStorageKey, users]);
 
   useEffect(() => () => {
     if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
@@ -147,14 +155,21 @@ export function NewTaskForm({
       if (preserveForNext && previous) {
         const nextDraft = { ...previous, title: "" };
         setFormValue(form, "description", nextDraft.description);
-        setFormValue(form, "sectorId", nextDraft.sectorId);
-        setFormValue(form, "assigneeId", nextDraft.assigneeId);
+        setAssigneeId(nextDraft.assigneeId);
+        setSectorId(
+          canChooseSector
+            ? nextDraft.sectorId
+            : (users.find((item) => item.id === nextDraft.assigneeId)?.sectorId ?? ""),
+        );
         setFormValue(form, "dueDate", nextDraft.dueDate);
         setClientId(nextDraft.clientId);
         setRecurrenceRule(nextDraft.recurrenceRule);
         setTemplateId(nextDraft.templateId);
         storeDraft(nextDraft);
       } else {
+        const nextAssigneeId = defaultAssigneeId ?? "";
+        setAssigneeId(nextAssigneeId);
+        setSectorId(users.find((item) => item.id === nextAssigneeId)?.sectorId ?? "");
         setClientId(defaultClientId ?? "");
         setRecurrenceRule(null);
         setTemplateId("");
@@ -169,7 +184,7 @@ export function NewTaskForm({
       const t = setTimeout(() => setJustCreated(false), 2500);
       return () => clearTimeout(t);
     }
-  }, [state.createdTaskId, state.redirectTo, keepOpenAfterCreate, preserveForNext, defaultClientId, draftStorageKey, router, storeDraft]);
+  }, [state.createdTaskId, state.redirectTo, keepOpenAfterCreate, preserveForNext, defaultAssigneeId, defaultClientId, draftStorageKey, router, storeDraft, canChooseSector, users]);
 
   function handleClose() {
     // router.back() fecha o modal interceptado e também volta na página standalone
@@ -264,7 +279,9 @@ export function NewTaskForm({
           <select
             id="sectorId"
             name="sectorId"
-            disabled={isPending}
+            value={sectorId}
+            onChange={(event) => setSectorId(event.target.value)}
+            disabled={isPending || !canChooseSector}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">Sem setor</option>
@@ -272,6 +289,7 @@ export function NewTaskForm({
               <option key={sector.id} value={sector.id}>{sector.name}</option>
             ))}
           </select>
+          {!canChooseSector && <input type="hidden" name="sectorId" value={sectorId} />}
         </div>
 
         {/* Description */}
@@ -293,7 +311,13 @@ export function NewTaskForm({
           <select
             id="assigneeId"
             name="assigneeId"
-            defaultValue={defaultAssigneeId ?? ""}
+            value={assigneeId}
+            onChange={(event) => {
+              const nextAssigneeId = event.target.value;
+              const nextSectorId = users.find((item) => item.id === nextAssigneeId)?.sectorId ?? "";
+              setAssigneeId(nextAssigneeId);
+              setSectorId(nextSectorId);
+            }}
             required
             disabled={isPending}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

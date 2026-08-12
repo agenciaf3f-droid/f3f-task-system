@@ -136,8 +136,19 @@ export async function createTaskAction(
   const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   if (!validAssigneeId) return { error: "Responsável inválido." };
-  const validSectorId = await resolveCompanySector(sectorId, user.companyId);
-  if (sectorId && !validSectorId) return { error: "Setor inválido." };
+  const assigneeMembership = await prisma.sectorMember.findFirst({
+    where: {
+      userId: validAssigneeId,
+      sector: { companyId: user.companyId, deletedAt: null },
+    },
+    orderBy: { sector: { name: "asc" } },
+    select: { sectorId: true },
+  });
+  const requestedSectorId = user.role === "admin"
+    ? sectorId
+    : (assigneeMembership?.sectorId ?? "");
+  const validSectorId = await resolveCompanySector(requestedSectorId, user.companyId);
+  if (requestedSectorId && !validSectorId) return { error: "Setor inválido." };
   const parsedDueDate = parseDateInput(dueDate);
   if (!parsedDueDate) return { error: "Prazo inválido." };
   const project = projectId

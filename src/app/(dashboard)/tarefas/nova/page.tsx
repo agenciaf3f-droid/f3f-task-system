@@ -19,7 +19,15 @@ export default async function NovaTaskPage({
     prisma.user.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        sectorMemberships: {
+          orderBy: { sector: { name: "asc" } },
+          take: 1,
+          select: { sectorId: true },
+        },
+      },
     }),
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null },
@@ -56,7 +64,11 @@ export default async function NovaTaskPage({
   return (
     <NewTaskForm
       sectors={sectors}
-      users={users}
+      users={users.map((item) => ({
+        id: item.id,
+        name: item.name,
+        sectorId: item.sectorMemberships[0]?.sectorId ?? null,
+      }))}
       clients={clients}
       project={project ?? null}
       templates={templates.map((template) => ({
@@ -74,6 +86,7 @@ export default async function NovaTaskPage({
       // ela não apareceria no board/KPIs da home, que filtram por assignee.
       defaultAssigneeId={params.self === "1" ? user.userId : undefined}
       defaultClientId={params.clientId}
+      canChooseSector={user.role === "admin"}
     />
   );
 }
