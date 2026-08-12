@@ -698,15 +698,21 @@ export async function syncClientsFromPublishedSheet({
     }
 
     const manager = resolveManager(company.users, row.managerName, row.clientName);
-    if (!manager) {
+    const managerId = manager?.id ?? existing?.managerId ?? null;
+    if (!managerId) {
       result.skipped += 1;
       result.issues.push(`Linha ${row.rowNumber}: gestor "${row.managerName}" não encontrado.`);
       continue;
     }
+    if (!manager && existing?.managerId) {
+      result.issues.push(
+        `Linha ${row.rowNumber}: gestor "${row.managerName}" inválido; gestor atual de ${row.clientName} foi preservado.`,
+      );
+    }
 
     const data = {
       name: row.clientName,
-      managerId: manager.id,
+      managerId,
       meetingPlan: row.plan,
       whatsappGroupId: row.whatsappGroupId,
       whatsappGroupName: row.groupName,
