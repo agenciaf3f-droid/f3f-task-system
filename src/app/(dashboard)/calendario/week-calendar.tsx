@@ -102,6 +102,7 @@ type DayCellProps = {
   onDeleteClick: (m: Meeting) => void;
   onOpenDay: (dateStr: string) => void;
   onHoverOverflow: (dateStr: string | null) => void;
+  calendarView: "week" | "month";
 };
 
 const DayCell = memo(function DayCell({
@@ -121,8 +122,9 @@ const DayCell = memo(function DayCell({
   onDeleteClick,
   onOpenDay,
   onHoverOverflow,
+  calendarView,
 }: DayCellProps) {
-  const VISIBLE_CAP = 6;
+  const VISIBLE_CAP = calendarView === "week" ? 10 : 5;
   const visible = dayMeetings.slice(0, VISIBLE_CAP);
   const overflow = dayMeetings.length - visible.length;
 
@@ -168,12 +170,17 @@ const DayCell = memo(function DayCell({
           return (
             <div
               key={m.id}
-              className={`group/m relative flex h-[30px] items-center gap-1.5 rounded-md border-l-[3px] px-2 text-xs leading-none transition-colors ${eventStyle}`}
+              className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${eventStyle}`}
               title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
             >
               {m.isRecurring && <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" />}
-              <span className="shrink-0 font-semibold tabular-nums">{m.startTime}</span>
-              <span className="truncate font-medium">{displayName}</span>
+              <span className="shrink-0 self-start pt-1 font-semibold tabular-nums">{m.startTime}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold leading-4">{displayName}</span>
+                {m.clientName ? (
+                  <span className="block truncate text-[11px] leading-4 opacity-65">{m.hostName}</span>
+                ) : null}
+              </span>
               {canManage ? (
                 <span className="ml-auto flex items-center opacity-0 transition-opacity group-hover/m:opacity-100 focus-within:opacity-100">
                   <button
@@ -274,10 +281,14 @@ function DayMeetingsDialog({
                       <Clock className="h-3.5 w-3.5 text-slate-400" />
                       {meeting.startTime}–{meeting.endTime}
                     </span>
-                    <span className="truncate text-sm font-semibold">{displayName}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{displayName}</span>
+                      {meeting.clientName ? (
+                        <span className="block truncate text-xs opacity-65">{meeting.hostName}</span>
+                      ) : null}
+                    </span>
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
                   </div>
-                  <span className="shrink-0 text-xs opacity-65">{meeting.hostName}</span>
                   {canManage ? (
                     <div className="flex shrink-0 items-center gap-1">
                       <button
@@ -324,8 +335,10 @@ export function WeekCalendar({
   users,
   clients,
   canManageAll,
+  canFilterByUser,
   defaultDate,
   focusDate,
+  initialCalendarView,
 }: {
   gridStart: string;
   monthRefIso: string;
@@ -338,8 +351,10 @@ export function WeekCalendar({
   users: Option[];
   clients: Option[];
   canManageAll: boolean;
+  canFilterByUser: boolean;
   defaultDate: string;
   focusDate?: string;
+  initialCalendarView: "week" | "month";
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -351,18 +366,23 @@ export function WeekCalendar({
   const [savingSlug, startSaveSlug] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
+  const [calendarView, setCalendarView] = useState<"week" | "month">(initialCalendarView);
+  const [weekAnchorDate, setWeekAnchorDate] = useState(focusDate ?? defaultDate);
+  const [selectedHostId, setSelectedHostId] = useState("all");
   const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
   // "Minhas" exibe somente reuniões dos clientes do gestor responsável.
   // Reuniões gerais/compartilhadas continuam disponíveis em "Todas".
-  const visibleMeetings = useMemo(
-    () =>
-      viewMode === "mine"
-        ? meetings.filter((m) => m.hostId === userId)
-        : meetings,
-    [meetings, viewMode, userId]
-  );
+  const visibleMeetings = useMemo(() => {
+    const scopedMeetings = viewMode === "mine"
+      ? meetings.filter((meeting) => meeting.hostId === userId)
+      : meetings;
+
+    return canFilterByUser && selectedHostId !== "all"
+      ? scopedMeetings.filter((meeting) => meeting.hostId === selectedHostId)
+      : scopedMeetings;
+  }, [canFilterByUser, meetings, selectedHostId, userId, viewMode]);
 
   const saveSlug = useCallback(() => {
     setSlugError(null);
@@ -381,12 +401,25 @@ export function WeekCalendar({
   const monthName = MONTHS[monthRef.getUTCMonth()];
   const year = monthRef.getUTCFullYear();
   const todayStr = todayInBrazil();
+  const weekStart = useMemo(() => {
+    const anchor = new Date(`${weekAnchorDate}T00:00:00Z`);
+    const start = new Date(anchor);
+    start.setUTCDate(anchor.getUTCDate() - anchor.getUTCDay());
+    return start;
+  }, [weekAnchorDate]);
 
   const days = Array.from({ length: 42 }, (_, i) => {
     const d = new Date(gridStart);
     d.setUTCDate(gridStart.getUTCDate() + i);
     return d;
   });
+  const displayedDays = calendarView === "month"
+    ? days
+    : Array.from({ length: 7 }, (_, index) => {
+        const day = new Date(weekStart);
+        day.setUTCDate(weekStart.getUTCDate() + index);
+        return day;
+      });
 
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, Meeting[]>();
@@ -425,6 +458,16 @@ export function WeekCalendar({
       router.push(`/calendario?month=${toMonthStr(next)}`);
     },
     [monthRefIso, router]
+  );
+
+  const navigateWeek = useCallback(
+    (delta: number) => {
+      const next = new Date(weekStart);
+      next.setUTCDate(weekStart.getUTCDate() + (delta * 7));
+      const date = toDateStr(next);
+      router.push(`/calendario?view=week&date=${date}&month=${toMonthStr(next)}`);
+    },
+    [router, weekStart],
   );
 
   const copyLink = useCallback(() => {
@@ -490,21 +533,21 @@ export function WeekCalendar({
           </h1>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => navigateMonth(-1)}
+              onClick={() => calendarView === "month" ? navigateMonth(-1) : navigateWeek(-1)}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-              aria-label="Mês anterior"
+              aria-label={calendarView === "month" ? "Mês anterior" : "Semana anterior"}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => navigateMonth(1)}
+              onClick={() => calendarView === "month" ? navigateMonth(1) : navigateWeek(1)}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-              aria-label="Próximo mês"
+              aria-label={calendarView === "month" ? "Próximo mês" : "Próxima semana"}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => router.push("/calendario")}
+              onClick={() => router.push(calendarView === "week" ? `/calendario?view=week&date=${todayStr}` : "/calendario")}
               className="ml-2 px-4 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full hover:bg-slate-50 transition-colors"
             >
               Hoje
@@ -512,6 +555,32 @@ export function WeekCalendar({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-full bg-slate-100 p-0.5" aria-label="Visualização do calendário">
+            <button
+              type="button"
+              onClick={() => {
+                const displayedMonth = toMonthStr(monthRef);
+                const anchor = focusDate
+                  ?? (defaultDate.startsWith(displayedMonth) ? defaultDate : `${displayedMonth}-01`);
+                setWeekAnchorDate(anchor);
+                setCalendarView("week");
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                calendarView === "week" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Semana
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalendarView("month")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                calendarView === "month" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Mês
+            </button>
+          </div>
           {/* Toggle Minhas / Todas */}
           <div className="flex items-center bg-slate-100 rounded-full p-0.5">
             <button
@@ -531,6 +600,22 @@ export function WeekCalendar({
               Todas
             </button>
           </div>
+          {canFilterByUser ? (
+            <select
+              value={selectedHostId}
+              onChange={(event) => {
+                setSelectedHostId(event.target.value);
+                if (event.target.value !== "all") setViewMode("all");
+              }}
+              aria-label="Filtrar agenda por pessoa"
+              className="h-8 rounded-full border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">Todas as pessoas</option>
+              {users.map((person) => (
+                <option key={person.id} value={person.id}>{person.name}</option>
+              ))}
+            </select>
+          ) : null}
           <NewMeetingDialog
             users={users}
             clients={clients}
@@ -564,15 +649,15 @@ export function WeekCalendar({
         </div>
 
         {/* Days */}
-        <div className="grid min-w-[1260px] grid-cols-7 auto-rows-[270px]">
-          {days.map((day, idx) => {
+        <div className={`grid min-w-[1260px] grid-cols-7 ${calendarView === "month" ? "auto-rows-[270px]" : "auto-rows-[560px]"}`}>
+          {displayedDays.map((day, idx) => {
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
-            const isCurrentMonth = day.getUTCMonth() === monthRef.getUTCMonth();
+            const isCurrentMonth = calendarView === "week" || day.getUTCMonth() === monthRef.getUTCMonth();
             const dayMeetings = meetingsByDate.get(dateStr) ?? [];
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
-            const isLastRow = idx >= 35;
+            const isLastRow = calendarView === "week" || idx >= 35;
             const isLastCol = (idx % 7) === 6;
 
             return (
@@ -594,6 +679,7 @@ export function WeekCalendar({
                 onDeleteClick={handleDeleteClick}
                 onOpenDay={setOpenDayDate}
                 onHoverOverflow={setHoveredOverflowDate}
+                calendarView={calendarView}
               />
             );
           })}
