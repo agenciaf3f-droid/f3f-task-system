@@ -151,12 +151,13 @@ export function EditTaskForm({
 
         {/* Row: Due date */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="dueDate">Prazo</Label>
+          <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
           <Input
             id="dueDate"
             name="dueDate"
             type="date"
             defaultValue={dueDateValue}
+            required
             disabled={isPending}
           />
         </div>

@@ -250,14 +250,18 @@ export function TaskInlineDueDate({ taskId, dueDate, isOverdue, isDueToday }: Ta
 
   function commit(val: string) {
     setEditing(false);
+    if (!val) return;
     if (val === currentVal) return;
-    startTransition(() => updateTaskDueDateAction(taskId, val || null));
+    startTransition(async () => {
+      await updateTaskDueDateAction(taskId, val);
+    });
   }
 
   if (editing) {
     return (
       <input
         type="date"
+        required
         autoFocus
         defaultValue={currentVal}
         onChange={(e) => commit(e.target.value)}

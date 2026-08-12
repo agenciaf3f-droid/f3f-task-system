@@ -47,6 +47,11 @@ const optUuid = z.preprocess(
   z.string().uuid().or(z.literal("")),
 );
 
+const requiredDueDate = z.string().min(1, "Prazo obrigatório").refine(
+  (value) => Boolean(parseDateInput(value)),
+  "Prazo inválido",
+);
+
 const taskSchema = z.object({
   title: z.string().min(1, "Título obrigatório").max(500),
   description: optStr,
@@ -55,16 +60,13 @@ const taskSchema = z.object({
   clientId: optUuid,
   projectId: optUuid,
   priority: optStr,
-  dueDate: optStr,
+  dueDate: requiredDueDate,
   templateId: optUuid,
 });
 
 const createTaskSchema = taskSchema.extend({
   assigneeId: z.string().uuid("Responsável obrigatório"),
-  dueDate: optStr.refine(
-    (value) => !value || Boolean(parseDateInput(value)),
-    "Prazo inválido",
-  ),
+  dueDate: requiredDueDate,
 });
 
 // Garante que o responsável pertence à empresa do ator — evita assign/notificação
@@ -137,7 +139,7 @@ export async function createTaskAction(
   const validSectorId = await resolveCompanySector(sectorId, user.companyId);
   if (sectorId && !validSectorId) return { error: "Setor inválido." };
   const parsedDueDate = parseDateInput(dueDate);
-  if (dueDate && !parsedDueDate) return { error: "Prazo inválido." };
+  if (!parsedDueDate) return { error: "Prazo inválido." };
   const project = projectId
     ? await prisma.project.findFirst({
         where: { id: projectId, companyId: user.companyId, deletedAt: null },
@@ -596,18 +598,21 @@ export async function updateTaskTitleAction(
 
 export async function updateTaskDueDateAction(taskId: string, dueDate: string | null) {
   const user = await requireAuth();
+  const parsedDueDate = parseDateInput(dueDate);
+  if (!parsedDueDate) return { error: "Prazo obrigatório." };
   const task = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
     select: { projectId: true },
   });
-  if (!task) return;
+  if (!task) return { error: "Tarefa não encontrada." };
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
-    data: { dueDate: parseDateInput(dueDate) },
+    data: { dueDate: parsedDueDate },
   });
 
   revalidatePath(`/tarefas/${taskId}`);
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
 }
 
 export async function addSubtaskAction(

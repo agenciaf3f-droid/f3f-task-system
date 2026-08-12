@@ -21,10 +21,13 @@ export function TaskDueDateEditor({
   const [isPending, startTransition] = useTransition();
 
   function save(nextValue: string) {
-    setValue(nextValue);
     setEditing(false);
+    if (!nextValue) return;
+    setValue(nextValue);
     if (nextValue === value) return;
-    startTransition(() => updateTaskDueDateAction(taskId, nextValue || null));
+    startTransition(async () => {
+      await updateTaskDueDateAction(taskId, nextValue);
+    });
   }
 
   if (editing) {
@@ -33,6 +36,7 @@ export function TaskDueDateEditor({
         <Calendar className="w-4 h-4 text-neutral-400 shrink-0" />
         <input
           type="date"
+          required
           autoFocus
           defaultValue={value}
           onChange={(event) => save(event.target.value)}

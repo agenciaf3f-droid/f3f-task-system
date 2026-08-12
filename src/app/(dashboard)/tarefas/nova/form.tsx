@@ -307,8 +307,8 @@ export function NewTaskForm({
 
         {/* Row: Due date */}
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="dueDate">Prazo (opcional)</Label>
-          <Input id="dueDate" name="dueDate" type="date" disabled={isPending} />
+          <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+          <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
         </div>
 
         <div className="flex flex-col gap-1.5">
