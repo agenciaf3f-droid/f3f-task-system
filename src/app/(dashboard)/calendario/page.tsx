@@ -119,8 +119,6 @@ export default async function CalendarioPage({
         endTime: a.endTime,
       }))}
       bookingUrl={`${appUrl}/agendar/${slugOrToken}`}
-      currentSlug={currentUser?.calendarSlug ?? ""}
-      appUrl={appUrl}
       userId={user.userId}
       users={users}
       clients={clients}

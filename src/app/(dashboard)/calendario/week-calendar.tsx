@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
 import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
-import { cancelMeetingAction, deleteMeetingForeverAction, updateCalendarSlugAction, type CancelScope } from "./actions";
+import { cancelMeetingAction, deleteMeetingForeverAction, type CancelScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import {
   Dialog,
@@ -329,8 +329,6 @@ export function WeekCalendar({
   meetings,
   availability,
   bookingUrl,
-  currentSlug,
-  appUrl,
   userId,
   users,
   clients,
@@ -345,8 +343,6 @@ export function WeekCalendar({
   meetings: Meeting[];
   availability: Availability[];
   bookingUrl: string;
-  currentSlug: string;
-  appUrl: string;
   userId: string;
   users: Option[];
   clients: Option[];
@@ -360,10 +356,6 @@ export function WeekCalendar({
   const [copied, setCopied] = useState(false);
   const [cancelling, startCancel] = useTransition();
   const [deleting, startDelete] = useTransition();
-  const [editingSlug, setEditingSlug] = useState(false);
-  const [slugDraft, setSlugDraft] = useState(currentSlug);
-  const [slugError, setSlugError] = useState<string | null>(null);
-  const [savingSlug, startSaveSlug] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
   const [calendarView, setCalendarView] = useState<"week" | "month">(initialCalendarView);
@@ -383,18 +375,6 @@ export function WeekCalendar({
       ? scopedMeetings.filter((meeting) => meeting.hostId === selectedHostId)
       : scopedMeetings;
   }, [canFilterByUser, meetings, selectedHostId, userId, viewMode]);
-
-  const saveSlug = useCallback(() => {
-    setSlugError(null);
-    startSaveSlug(async () => {
-      const res = await updateCalendarSlugAction(slugDraft);
-      if (res.error) setSlugError(res.error);
-      else {
-        setEditingSlug(false);
-        router.refresh();
-      }
-    });
-  }, [slugDraft, router]);
 
   const gridStart = new Date(gridStartISO);
   const monthRef = new Date(monthRefIso);
@@ -700,62 +680,6 @@ export function WeekCalendar({
         onCancelClick={handleCancelClick}
         onDeleteClick={handleDeleteClick}
       />
-
-      {/* Booking link */}
-      <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 flex-wrap">
-        <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-slate-500">Link de agendamento</p>
-          {editingSlug ? (
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs font-mono text-slate-500 shrink-0">{appUrl}/agendar/</span>
-              <input
-                type="text"
-                value={slugDraft}
-                onChange={(e) => setSlugDraft(e.target.value)}
-                placeholder="seu-nome"
-                autoFocus
-                className="text-xs font-mono px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
-                disabled={savingSlug}
-              />
-              <button
-                onClick={saveSlug}
-                disabled={savingSlug}
-                className="text-xs text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded disabled:opacity-50"
-              >
-                Salvar
-              </button>
-              <button
-                onClick={() => { setEditingSlug(false); setSlugDraft(currentSlug); setSlugError(null); }}
-                disabled={savingSlug}
-                className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1"
-              >
-                Cancelar
-              </button>
-              {slugError && <span className="text-xs text-red-600 w-full">{slugError}</span>}
-            </div>
-          ) : (
-            <p className="text-xs font-mono text-slate-700 truncate">{bookingUrl}</p>
-          )}
-        </div>
-        {!editingSlug && (
-          <>
-            <button
-              onClick={() => setEditingSlug(true)}
-              className="shrink-0 text-xs text-slate-500 hover:text-slate-700 font-medium transition-colors flex items-center gap-1"
-            >
-              <Pencil className="w-3 h-3" />
-              Editar
-            </button>
-            <button
-              onClick={copyLink}
-              className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
-            >
-              {copied ? "Copiado!" : "Copiar"}
-            </button>
-          </>
-        )}
-      </div>
 
       {/* Cancel recurring modal */}
       {cancelTarget && (
