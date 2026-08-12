@@ -4,6 +4,7 @@ import { WeekCalendar } from "./week-calendar";
 import { getOrCreateCalendarToken } from "./actions";
 import { currentYearMonthInBrazil, todayInBrazil } from "@/lib/meeting-recurrence";
 import { isElevated } from "@/lib/task-visibility";
+import { buildClientManagerIndex, findManagerByClientName } from "@/lib/client-manager-match";
 
 export const metadata = { title: "Calendário" };
 
@@ -72,9 +73,12 @@ export default async function CalendarioPage({
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, managerId: true },
     }),
   ]);
+
+  const clientManagerIndex = buildClientManagerIndex(clients);
+  const userNames = new Map(users.map((item) => [item.id, item.name]));
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const slugOrToken = currentUser?.calendarSlug || calendarToken;
@@ -83,18 +87,23 @@ export default async function CalendarioPage({
     <WeekCalendar
       gridStart={gridStart.toISOString()}
       monthRefIso={firstOfMonth.toISOString()}
-      meetings={meetings.map((m) => ({
-        id: m.id,
-        date: m.date,
-        startTime: m.startTime,
-        endTime: m.endTime,
-        status: m.status,
-        hostId: m.user.id,
-        hostName: m.user.name,
-        isShared: m.user.calendarSlug === "admin",
-        clientName: m.clientName,
-        isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
-      }))}
+      meetings={meetings.map((m) => {
+        const clientManagerId = findManagerByClientName(m.clientName, clientManagerIndex);
+        const hostId = clientManagerId ?? m.user.id;
+
+        return {
+          id: m.id,
+          date: m.date,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          status: m.status,
+          hostId,
+          hostName: userNames.get(hostId) ?? m.user.name,
+          isShared: clientManagerId === null && m.user.calendarSlug === "admin",
+          clientName: m.clientName,
+          isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
+        };
+      })}
       availability={availability.map((a) => ({
         dayOfWeek: a.dayOfWeek,
         startTime: a.startTime,

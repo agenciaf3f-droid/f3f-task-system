@@ -354,12 +354,12 @@ export function WeekCalendar({
   const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
-  // "Minhas" mantém também reuniões shared (Daily 10h, Reunião de Gestores)
-  // que valem pra todo mundo
+  // "Minhas" exibe somente reuniões dos clientes do gestor responsável.
+  // Reuniões gerais/compartilhadas continuam disponíveis em "Todas".
   const visibleMeetings = useMemo(
     () =>
       viewMode === "mine"
-        ? meetings.filter((m) => m.hostId === userId || m.isShared)
+        ? meetings.filter((m) => m.hostId === userId)
         : meetings,
     [meetings, viewMode, userId]
   );

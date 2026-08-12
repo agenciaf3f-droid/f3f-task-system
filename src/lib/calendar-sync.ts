@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { listAllCalendarIds, listCalendarEvents, type RawCalendarEvent } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
+import { buildClientManagerIndex, findManagerByClientName } from "@/lib/client-manager-match";
 
 /**
  * Sincroniza eventos do Google Calendar → Meeting (Prisma interno).
@@ -29,96 +30,6 @@ const DEFAULT_USER_SLUG = process.env.SYNC_DEFAULT_USER_SLUG ?? "admin";
 // Eventos recorrentes que se estendem pro futuro já são expandidos pelo Google
 // (singleEvents: true) e cabem na janela.
 const SYNC_WINDOW_FUTURE_MONTHS = 12;
-
-/**
- * Normaliza nome pra match fuzzy: lowercase, sem acentos, espaços colapsados.
- */
-function normalizeName(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-}
-
-/**
- * Tokeniza um nome em palavras significativas (lowercase, sem acentos, len ≥ 3).
- * Filtra palavras genéricas comuns em títulos de evento.
- */
-const STOPWORDS = new Set([
-  "reuniao", "daily", "apresentacao", "call", "meeting", "checkin", "check-in",
-  "com", "para", "de", "da", "do", "dos", "das", "a", "o", "e",
-]);
-
-function tokenize(s: string): string[] {
-  return normalizeName(s)
-    .split(/\s+/)
-    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
-}
-
-/**
- * Score de match entre tokens do evento e tokens do cliente.
- * Cada token do evento pontua 1 se acha algum token do cliente que:
- *   - bate exato, OU
- *   - um é prefixo do outro (cobre apelidos "Rafa" ↔ "Rafael", "Mari" ↔ "Mariana")
- * Retorna { matched, total } pra calcular fração.
- */
-function matchScore(eventTokens: string[], clientTokens: string[]): number {
-  if (eventTokens.length === 0) return 0;
-  let matched = 0;
-  for (const et of eventTokens) {
-    const hit = clientTokens.some(
-      (ct) => et === ct || et.startsWith(ct) || ct.startsWith(et),
-    );
-    if (hit) matched++;
-  }
-  return matched;
-}
-
-/**
- * Acha o gestor dono do cliente cujo nome melhor bate com o título do evento.
- *
- * Estratégia: tokenização + scoring. Vence o cliente com mais tokens batidos,
- * desde que score >= 1 e seja vencedor único (sem empate entre gestores
- * diferentes). Apelidos ("Rafa Azevedo" → "Rafael Eduardo Silva Azevedo")
- * casam via prefix.
- */
-function findManagerByClientName(
-  clientName: string | null,
-  clients: { tokens: string[]; managerId: string; norm: string }[],
-): string | null {
-  if (!clientName) return null;
-  const norm = normalizeName(clientName);
-  if (!norm) return null;
-
-  // Match exato curto-circuita
-  for (const c of clients) {
-    if (c.norm === norm) return c.managerId;
-  }
-
-  const eventTokens = tokenize(clientName);
-  if (eventTokens.length === 0) return null;
-
-  let bestScore = 0;
-  let bestManagers = new Set<string>();
-  for (const c of clients) {
-    const score = matchScore(eventTokens, c.tokens);
-    if (score === 0) continue;
-    if (score > bestScore) {
-      bestScore = score;
-      bestManagers = new Set([c.managerId]);
-    } else if (score === bestScore) {
-      bestManagers.add(c.managerId);
-    }
-  }
-
-  // Vencedor único e pelo menos 1 token batido
-  if (bestScore >= 1 && bestManagers.size === 1) {
-    return Array.from(bestManagers)[0];
-  }
-  return null;
-}
 
 /**
  * Coleta todos os calendar IDs configurados via env.
@@ -171,13 +82,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     where: { deletedAt: null, managerId: { not: null } },
     select: { name: true, managerId: true },
   });
-  const clientList = clientsWithManager
-    .filter((c): c is { name: string; managerId: string } => c.managerId !== null)
-    .map((c) => ({
-      managerId: c.managerId,
-      norm: normalizeName(c.name),
-      tokens: tokenize(c.name),
-    }));
+  const clientList = buildClientManagerIndex(clientsWithManager);
 
   // 2. Fetch eventos do Google — desde o 1º dia do mês corrente (Brazil)
   const monthStr = todayInBrazil().slice(0, 7); // "YYYY-MM"
