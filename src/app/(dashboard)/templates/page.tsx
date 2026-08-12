@@ -146,20 +146,22 @@ export default async function TemplatesPage() {
                 </div>
 
                 {/* Footer actions */}
-                <div className="flex items-center gap-2 pt-1 mt-auto border-t border-neutral-100">
+                <div className="flex flex-col gap-2 pt-3 mt-auto border-t border-neutral-100">
                   {(!template.isPersonal || template.createdById === user.userId) && (
-                    <ActivateTemplateDialog
-                      templateId={template.id}
-                      templateName={template.name}
-                      taskCount={template._count.templateTasks}
-                      users={users}
-                    />
+                    <div className="w-full min-w-0">
+                      <ActivateTemplateDialog
+                        templateId={template.id}
+                        templateName={template.name}
+                        taskCount={template._count.templateTasks}
+                        users={users}
+                      />
+                    </div>
                   )}
                   {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
-                  <div className="flex items-center gap-2">
-                    <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
-                    <DeleteTemplateButton templateId={template.id} templateName={template.name} />
-                  </div>
+                    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 min-w-0">
+                      <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
+                      <DeleteTemplateButton templateId={template.id} templateName={template.name} />
+                    </div>
                   )}
                 </div>
               </div>
@@ -185,7 +187,7 @@ export default async function TemplatesPage() {
                       </p>
                     </div>
                     {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                         <LinkButton
                           href={`/templates/${template.id}/editar`}
                           variant="outline"
