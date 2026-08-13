@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { listAllCalendarIds, listCalendarEvents, type RawCalendarEvent } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import { buildClientManagerIndex, findManagerByClientName } from "@/lib/client-manager-match";
+import { Prisma } from "@prisma/client";
 
 /**
  * Sincroniza eventos do Google Calendar → Meeting (Prisma interno).
@@ -191,7 +192,12 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         });
         result.created++;
       } catch (err) {
-        // Unique constraint foi removido; erro aqui é inesperado — loga e segue
+        // Outra execução (ou o mesmo evento vindo de uma agenda compartilhada)
+        // pode ter ocupado o horário entre a leitura e a criação.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          result.skipped++;
+          continue;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         result.errors.push(`Erro ao criar Meeting pra evento ${ev.id} (${ev.date} ${ev.startTime}): ${msg}`);
         result.skipped++;

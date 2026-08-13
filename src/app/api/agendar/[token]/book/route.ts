@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting } from "@/lib/google-calendar";
 import { getClientSession } from "@/lib/client-session";
@@ -141,20 +142,28 @@ export async function POST(
   if (parentConflict) {
     return NextResponse.json({ ok: false, error: "Primeiro horário já reservado." }, { status: 409 });
   }
-  const parent = await prisma.meeting.create({
-    data: {
-      userId: user.id,
-      date: dates[0],
-      startTime,
-      endTime,
-      status: "confirmed",
-      recurrenceRule: rule as object,
-      clientName: session.clientName,
-      clientGroupId: session.clientGroupId,
-      clientPlan: session.clientPlan,
-    },
-    select: { id: true },
-  });
+  let parent: { id: string };
+  try {
+    parent = await prisma.meeting.create({
+      data: {
+        userId: user.id,
+        date: dates[0],
+        startTime,
+        endTime,
+        status: "confirmed",
+        recurrenceRule: rule as object,
+        clientName: session.clientName,
+        clientGroupId: session.clientGroupId,
+        clientPlan: session.clientPlan,
+      },
+      select: { id: true },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ ok: false, error: "Horário já reservado." }, { status: 409 });
+    }
+    throw error;
+  }
   const parentId = parent.id;
 
   const childDates = dates.slice(1);
@@ -167,7 +176,8 @@ export async function POST(
   const skippedCount = childDates.length - survivorDates.length;
 
   const createdChildren = survivorDates.length
-    ? await prisma.meeting.createManyAndReturn({
+      ? await prisma.meeting.createManyAndReturn({
+        skipDuplicates: true,
         data: survivorDates.map((d) => ({
           userId: user.id,
           date: d,
