@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { NewTaskForm } from "@/app/(dashboard)/tarefas/nova/form";
 import { ModalClient } from "../[id]/modal-client";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 export default async function NovaTaskModalPage({
   searchParams,
@@ -46,7 +47,7 @@ export default async function NovaTaskModalPage({
         companyId: user.companyId,
         isActive: true,
         deletedAt: null,
-        OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
+        AND: [templateVisibilityFilter(user)],
       },
       orderBy: [{ isPersonal: "asc" }, { name: "asc" }],
       select: {

@@ -12,6 +12,7 @@ import { KanbanView } from "./kanban-view";
 import { CalendarView } from "./calendar-view";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { LayoutList, Kanban, CalendarDays } from "lucide-react";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 type SortBy = "dueDate" | "assignee" | "default";
 type ViewMode = "list" | "kanban" | "calendar";
@@ -54,7 +55,7 @@ export default async function ProjetoDetailPage({
       },
     }),
     prisma.template.findMany({
-      where: { companyId: user.companyId, isActive: true, deletedAt: null },
+      where: { companyId: user.companyId, isActive: true, deletedAt: null, AND: [templateVisibilityFilter(user)] },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, _count: { select: { templateTasks: true } } },
     }),

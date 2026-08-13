@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activity";
 import { pickColor } from "@/lib/color";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { Prisma, type ProjectStatus } from "@prisma/client";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 // ─── Client ───────────────────────────────────────────────────
 
@@ -325,7 +326,7 @@ export async function createProjectAction(
 
   if (templateId && templateId !== "__none__") {
     const template = await prisma.template.findFirst({
-      where: { id: templateId, companyId: user.companyId, isActive: true },
+      where: { id: templateId, companyId: user.companyId, isActive: true, AND: [templateVisibilityFilter(user)] },
       include: {
         templateTasks: {
           orderBy: { position: "asc" },
@@ -471,7 +472,7 @@ export async function applyTemplatesToProjectAction(
   if (!project) return { error: "Projeto não encontrado." };
 
   const templates = await prisma.template.findMany({
-    where: { id: { in: templateIds }, companyId: user.companyId, isActive: true },
+    where: { id: { in: templateIds }, companyId: user.companyId, isActive: true, AND: [templateVisibilityFilter(user)] },
     include: {
       templateTasks: {
         orderBy: { position: "asc" },

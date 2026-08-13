@@ -11,6 +11,7 @@ import { createNotification, notifyTaskAssigned } from "@/lib/notifications";
 import type { TaskStatus, TaskPriority } from "@prisma/client";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 // datetime-local já vem com hora; date-only ("yyyy-MM-dd") seria parseado como UTC midnight
 // e mostraria o dia anterior em fusos negativos. Forçamos meio-dia local nesse caso.
@@ -171,7 +172,7 @@ export async function createTaskAction(
           companyId: user.companyId,
           isActive: true,
           deletedAt: null,
-          OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
+          AND: [templateVisibilityFilter(user)],
         },
         include: {
           templateTasks: {

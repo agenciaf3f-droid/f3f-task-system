@@ -13,7 +13,7 @@ import { TemplateTasksEditor, type TaskRow } from "../template-tasks-editor";
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
 
-export function NewTemplateForm({ sectors, users, personal = false }: { sectors: Sector[]; users: User[]; personal?: boolean }) {
+export function NewTemplateForm({ sectors, users, personal = false, canAssignSectors = false }: { sectors: Sector[]; users: User[]; personal?: boolean; canAssignSectors?: boolean }) {
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
     createTemplateAction,
     {},
@@ -50,7 +50,23 @@ export function NewTemplateForm({ sectors, users, personal = false }: { sectors:
           </div>
 
           {personal ? (
-            <p className="text-sm text-neutral-500">Somente você poderá reutilizar este template. Administradores terão acesso apenas para visualização.</p>
+            canAssignSectors ? (
+              <div className="flex flex-col gap-2">
+                <Label>Disponibilizar para os setores</Label>
+                <p className="text-xs text-neutral-500">As pessoas dos setores selecionados poderão usar este template personalizado.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-neutral-200 p-3">
+                  {sectors.map((sector) => (
+                    <label key={sector.id} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                      <input type="checkbox" name="targetSectorIds" value={sector.id} disabled={isPending} />
+                      {sector.name}
+                    </label>
+                  ))}
+                  {sectors.length === 0 && <p className="text-sm text-neutral-500">Nenhum setor ativo cadastrado.</p>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-neutral-500">Somente você poderá reutilizar este template.</p>
+            )
           ) : (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="description">Descrição</Label>

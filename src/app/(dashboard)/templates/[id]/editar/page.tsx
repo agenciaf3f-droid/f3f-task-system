@@ -15,6 +15,7 @@ export default async function EditarTemplatePage({
     prisma.template.findFirst({
       where: { id, companyId: user.companyId, deletedAt: null },
       include: {
+        targetSectors: { select: { sectorId: true } },
         templateTasks: {
           orderBy: { position: "asc" },
           include: { checklistItems: { orderBy: { position: "asc" } } },
@@ -35,7 +36,7 @@ export default async function EditarTemplatePage({
 
   if (!template) notFound();
   const canEdit = template.isPersonal
-    ? template.createdById === user.userId
+    ? template.createdById === user.userId || user.role === "admin"
     : user.role === "admin" || user.role === "manager";
   if (!canEdit) notFound();
 
@@ -57,11 +58,13 @@ export default async function EditarTemplatePage({
         description: template.description ?? "",
         category: template.category ?? "",
         sectorId: template.sectorId ?? "",
+        targetSectorIds: template.targetSectors.map((target) => target.sectorId),
       }}
       initialTasks={initialTasks}
       sectors={sectors}
       users={users}
       personal={template.isPersonal}
+      canAssignSectors={template.isPersonal && user.role === "admin"}
     />
   );
 }

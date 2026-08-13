@@ -162,6 +162,7 @@ model Sector {
   members   SectorMember[]
   tasks     Task[]
   templates Template[]
+  templateTargets TemplateSector[]
 
   @@index([companyId])
   @@map("sectors")
@@ -421,12 +422,25 @@ model Template {
   sector        Sector?        @relation(fields: [sectorId], references: [id], onDelete: SetNull)
   createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
   templateTasks TemplateTask[]
+  targetSectors TemplateSector[]
   tasks         Task[]
 
   @@index([companyId])
   @@index([sectorId])
   @@index([companyId, isPersonal, createdById])
   @@map("templates")
+}
+
+model TemplateSector {
+  templateId String @map("template_id") @db.Uuid
+  sectorId   String @map("sector_id") @db.Uuid
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sector   Sector   @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+
+  @@id([templateId, sectorId])
+  @@index([sectorId])
+  @@map("template_sectors")
 }
 
 model TemplateTask {

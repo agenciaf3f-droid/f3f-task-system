@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { NewTaskForm } from "./form";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 export default async function NovaTaskPage({
   searchParams,
@@ -45,7 +46,7 @@ export default async function NovaTaskPage({
         companyId: user.companyId,
         isActive: true,
         deletedAt: null,
-        OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
+        AND: [templateVisibilityFilter(user)],
       },
       orderBy: [{ isPersonal: "asc" }, { name: "asc" }],
       select: {

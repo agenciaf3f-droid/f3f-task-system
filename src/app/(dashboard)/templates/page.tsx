@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { ToggleTemplateButton } from "./toggle-template-button";
 import { DeleteTemplateButton } from "./delete-template-button";
 import { ActivateTemplateDialog } from "./activate-template-dialog";
+import { templateVisibilityFilter } from "@/lib/template-access";
 
 export default async function TemplatesPage() {
   const user = await requireAuth();
@@ -16,11 +17,12 @@ export default async function TemplatesPage() {
     where: {
       companyId: user.companyId,
       deletedAt: null,
-      ...(canViewAllPersonal ? {} : { OR: [{ isPersonal: false }, { createdById: user.userId }] }),
+      ...templateVisibilityFilter(user),
     },
     orderBy: [{ isActive: "desc" }, { position: "asc" }, { name: "asc" }],
     include: {
       sector: { select: { name: true, color: true } },
+      targetSectors: { include: { sector: { select: { name: true, color: true } } } },
       createdBy: { select: { name: true } },
       _count: { select: { templateTasks: true } },
     },
@@ -123,6 +125,12 @@ export default async function TemplatesPage() {
                       {template.sector.name}
                     </span>
                   )}
+                  {template.isPersonal && template.targetSectors.map(({ sector }) => (
+                    <span key={sector.name} className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sector.color ?? "#d1d5db" }} />
+                      {sector.name}
+                    </span>
+                  ))}
                   {template.category && (
                     <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full font-medium">
                       {template.category}

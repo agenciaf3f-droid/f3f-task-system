@@ -20,14 +20,16 @@ interface EditTemplateFormProps {
     description: string;
     category: string;
     sectorId: string;
+    targetSectorIds: string[];
   };
   initialTasks: TaskRow[];
   sectors: Sector[];
   users: User[];
   personal?: boolean;
+  canAssignSectors?: boolean;
 }
 
-export function EditTemplateForm({ templateId, initialData, initialTasks, sectors, users, personal = false }: EditTemplateFormProps) {
+export function EditTemplateForm({ templateId, initialData, initialTasks, sectors, users, personal = false, canAssignSectors = false }: EditTemplateFormProps) {
   const updateAction = updateTemplateAction.bind(null, templateId);
   const [state, action, isPending] = useActionState<{ error?: string }, FormData>(
     updateAction,
@@ -82,6 +84,27 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
               disabled={isPending}
             />
           </div>
+
+          {personal && canAssignSectors && (
+            <div className="flex flex-col gap-2">
+              <Label>Disponibilizar para os setores</Label>
+              <p className="text-xs text-neutral-500">As pessoas dos setores selecionados poderão usar este template personalizado.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-neutral-200 p-3">
+                {sectors.map((sector) => (
+                  <label key={sector.id} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="targetSectorIds"
+                      value={sector.id}
+                      defaultChecked={initialData.targetSectorIds.includes(sector.id)}
+                      disabled={isPending}
+                    />
+                    {sector.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {!personal && <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">

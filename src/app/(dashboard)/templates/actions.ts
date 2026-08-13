@@ -14,6 +14,18 @@ const templateSchema = z.object({
   sectorId: z.string().uuid().optional().or(z.literal("")),
 });
 
+const targetSectorIdsSchema = z.array(z.string().uuid()).max(50);
+
+async function validateTargetSectors(companyId: string, ids: string[]) {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return [];
+  const sectors = await prisma.sector.findMany({
+    where: { id: { in: uniqueIds }, companyId, deletedAt: null },
+    select: { id: true },
+  });
+  return sectors.length === uniqueIds.length ? uniqueIds : null;
+}
+
 export async function createTemplateAction(
   _prev: { error?: string },
   formData: FormData,
@@ -32,6 +44,13 @@ export async function createTemplateAction(
   });
 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+
+  const targetSectorIdsParsed = targetSectorIdsSchema.safeParse(formData.getAll("targetSectorIds"));
+  if (!targetSectorIdsParsed.success) return { error: "Setores inválidos." };
+  const targetSectorIds = isPersonal && user.role === "admin"
+    ? await validateTargetSectors(user.companyId, targetSectorIdsParsed.data)
+    : [];
+  if (targetSectorIds === null) return { error: "Um ou mais setores não pertencem à empresa." };
 
   // Parse template tasks from formData
   const taskTitles = formData.getAll("taskTitle[]") as string[];
@@ -55,6 +74,9 @@ export async function createTemplateAction(
       category: isPersonal ? null : parsed.data.category || null,
       sectorId: isPersonal ? null : parsed.data.sectorId || null,
       isPersonal,
+      targetSectors: targetSectorIds.length
+        ? { create: targetSectorIds.map((sectorId) => ({ sectorId })) }
+        : undefined,
     },
   });
 
@@ -123,12 +145,19 @@ export async function updateTemplateAction(
     where: { id: templateId, companyId: user.companyId, deletedAt: null },
   });
   if (!existing) return { error: "Template não encontrado." };
-  if (existing.isPersonal && existing.createdById !== user.userId) {
+  if (existing.isPersonal && existing.createdById !== user.userId && user.role !== "admin") {
     return { error: "Somente o criador pode editar este template personalizado." };
   }
   if (!existing.isPersonal && user.role !== "admin" && user.role !== "manager") {
     return { error: "Você não tem permissão para editar este template." };
   }
+
+  const targetSectorIdsParsed = targetSectorIdsSchema.safeParse(formData.getAll("targetSectorIds"));
+  if (!targetSectorIdsParsed.success) return { error: "Setores inválidos." };
+  const targetSectorIds = existing.isPersonal && user.role === "admin"
+    ? await validateTargetSectors(user.companyId, targetSectorIdsParsed.data)
+    : [];
+  if (targetSectorIds === null) return { error: "Um ou mais setores não pertencem à empresa." };
 
   await prisma.template.update({
     where: { id: templateId },
@@ -137,6 +166,9 @@ export async function updateTemplateAction(
       description: parsed.data.description || null,
       category: existing.isPersonal ? null : parsed.data.category || null,
       sectorId: existing.isPersonal ? null : parsed.data.sectorId || null,
+      targetSectors: existing.isPersonal && user.role === "admin"
+        ? { deleteMany: {}, create: targetSectorIds.map((sectorId) => ({ sectorId })) }
+        : undefined,
     },
   });
 
@@ -191,7 +223,14 @@ export async function activateTemplateAction(
       companyId: user.companyId,
       isActive: true,
       deletedAt: null,
-      OR: [{ isPersonal: false }, { isPersonal: true, createdById: user.userId }],
+      OR: [
+        { isPersonal: false },
+        { isPersonal: true, createdById: user.userId },
+        ...(user.role === "admin" ? [{ isPersonal: true }] : [{
+          isPersonal: true,
+          targetSectors: { some: { sector: { members: { some: { userId: user.userId } } } } },
+        }]),
+      ],
     },
     include: {
       templateTasks: {
@@ -245,7 +284,7 @@ export async function toggleTemplateActiveAction(templateId: string) {
     where: { id: templateId, companyId: user.companyId },
   });
   if (!template) return;
-  if (template.isPersonal && template.createdById !== user.userId) return;
+  if (template.isPersonal && template.createdById !== user.userId && user.role !== "admin") return;
   if (!template.isPersonal && user.role !== "admin" && user.role !== "manager") return;
   await prisma.template.update({
     where: { id: templateId },
@@ -260,7 +299,7 @@ export async function deleteTemplateAction(templateId: string) {
     where: { id: templateId, companyId: user.companyId, deletedAt: null },
   });
   if (!template) return { error: "Template não encontrado." };
-  if (template.isPersonal && template.createdById !== user.userId) {
+  if (template.isPersonal && template.createdById !== user.userId && user.role !== "admin") {
     return { error: "Somente o criador pode excluir este template personalizado." };
   }
   if (!template.isPersonal && user.role !== "admin" && user.role !== "manager") {
