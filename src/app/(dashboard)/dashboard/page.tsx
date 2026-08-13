@@ -112,7 +112,9 @@ export default async function DashboardPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });
-    if (sp?.member === "all" || (user.role === "admin" && !sp?.member)) {
+    // Mesmo para admins, a home sempre abre em "Eu mesmo". O modo "Todos"
+    // só é ativado por uma escolha explícita no filtro.
+    if (sp?.member === "all") {
       viewingAll = true;
     } else if (sp?.member && sp.member !== user.userId) {
       const target = members.find((m) => m.id === sp.member);
