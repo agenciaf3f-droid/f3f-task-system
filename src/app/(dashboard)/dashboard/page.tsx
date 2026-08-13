@@ -112,7 +112,7 @@ export default async function DashboardPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });
-    // Mesmo para admins, a home sempre abre em "Eu mesmo". O modo "Todos"
+    // Mesmo para admins, a home sempre abre nas tarefas da própria conta. O modo "Todos"
     // só é ativado por uma escolha explícita no filtro.
     if (sp?.member === "all") {
       viewingAll = true;
@@ -226,7 +226,7 @@ export default async function DashboardPage({
             </div>
             <div className="flex items-center gap-2">
               {canFilterByMember && (
-                <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                <MemberFilter members={members} selfName={user.name} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
               )}
               <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
                 <Link
@@ -286,7 +286,7 @@ export default async function DashboardPage({
               toolbarActions={
                 <div className="flex items-center gap-2">
                   {canFilterByMember && (
-                    <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                    <MemberFilter members={members} selfName={user.name} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
                   )}
                   <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
                     <Link

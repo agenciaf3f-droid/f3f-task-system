@@ -4,13 +4,14 @@ import { Users } from "lucide-react";
 
 interface MemberFilterProps {
   members: { id: string; name: string }[];
-  selected: string; // "" = eu mesmo · "all" = todos · senão = id do membro
+  selfName: string;
+  selected: string; // "" = própria conta · "all" = todos · senão = id do membro
   view: string;
 }
 
 // Exceção de visibilidade: cargos elevados podem trocar de "minhas tarefas"
 // pra ver/filtrar as tarefas de qualquer membro da empresa (server valida).
-export function MemberFilter({ members, selected, view }: MemberFilterProps) {
+export function MemberFilter({ members, selfName, selected, view }: MemberFilterProps) {
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value;
     const params = new URLSearchParams(window.location.search);
@@ -33,7 +34,7 @@ export function MemberFilter({ members, selected, view }: MemberFilterProps) {
         aria-label="Ver tarefas de"
         className="text-xs text-neutral-700 bg-transparent outline-none cursor-pointer max-w-[140px]"
       >
-        <option value="">Eu mesmo</option>
+        <option value="">{selfName}</option>
         <option value="all">Todos</option>
         {members.map((m) => (
           <option key={m.id} value={m.id}>{m.name}</option>
