@@ -337,6 +337,7 @@ export function WeekCalendar({
   defaultDate,
   focusDate,
   initialCalendarView,
+  internalHostId,
 }: {
   gridStart: string;
   monthRefIso: string;
@@ -351,6 +352,7 @@ export function WeekCalendar({
   defaultDate: string;
   focusDate?: string;
   initialCalendarView: "week" | "month";
+  internalHostId?: string;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -604,6 +606,7 @@ export function WeekCalendar({
             currentUserId={userId}
             canManageAll={canManageAll}
             defaultDate={defaultDate}
+            internalHostId={internalHostId}
           />
           <AvailabilityDialog availability={availability} />
           <button

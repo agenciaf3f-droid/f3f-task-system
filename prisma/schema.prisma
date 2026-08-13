@@ -134,6 +134,7 @@ model User {
   googleCalendarId        String?                @unique @map("google_calendar_id") @db.VarChar(255)
   calendarAvailability    CalendarAvailability[]
   meetings                Meeting[]
+  meetingAudience         MeetingAudience[]
   managedBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkManager")
   createdBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkCreator")
 
@@ -618,12 +619,25 @@ model Meeting {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   recurrenceParent   Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
   recurrenceChildren Meeting[] @relation("MeetingRecurrence")
+  visibleTo          MeetingAudience[]
 
   @@index([userId, date])
   @@index([recurrenceParentId])
   @@index([googleEventId])
   @@index([date, status])
   @@map("meetings")
+}
+
+model MeetingAudience {
+  meetingId String @map("meeting_id") @db.Uuid
+  userId    String @map("user_id") @db.Uuid
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, userId])
+  @@index([userId])
+  @@map("meeting_audience")
 }
 
 model BookingMagicLink {

@@ -65,6 +65,7 @@ const manualMeetingSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
   startTime: timeSchema,
   endTime: timeSchema,
+  audienceUserIds: z.array(z.string().uuid()).max(100),
 });
 
 export async function createManualMeetingAction(
@@ -78,6 +79,7 @@ export async function createManualMeetingAction(
     date: formData.get("date"),
     startTime: formData.get("startTime"),
     endTime: formData.get("endTime"),
+    audienceUserIds: formData.getAll("audienceUserIds"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
@@ -93,7 +95,7 @@ export async function createManualMeetingAction(
   const [host, client] = await Promise.all([
     prisma.user.findFirst({
       where: { id: hostId, companyId: user.companyId, isActive: true, deletedAt: null },
-      select: { id: true, name: true, googleCalendarId: true },
+      select: { id: true, name: true, calendarSlug: true, googleCalendarId: true },
     }),
     clientId
       ? prisma.client.findFirst({
@@ -104,6 +106,14 @@ export async function createManualMeetingAction(
   ]);
   if (!host) return { error: "Responsável não encontrado." };
   if (clientId && !client) return { error: "Cliente não encontrado." };
+  const isInternalHost = host.calendarSlug === "admin" || host.name.trim().toLowerCase() === "admin f3f";
+  const audienceUserIds = isInternalHost ? [...new Set(parsed.data.audienceUserIds)] : [];
+  if (audienceUserIds.length > 0) {
+    const audienceCount = await prisma.user.count({
+      where: { id: { in: audienceUserIds }, companyId: user.companyId, isActive: true, deletedAt: null },
+    });
+    if (audienceCount !== audienceUserIds.length) return { error: "Uma ou mais pessoas selecionadas são inválidas." };
+  }
   const displayName = client ? `${title} · ${client.name}` : title;
 
   const conflict = await prisma.meeting.findFirst({
@@ -128,6 +138,9 @@ export async function createManualMeetingAction(
       clientName: displayName,
       clientGroupId: client?.whatsappGroupId ?? null,
       clientPlan: client?.meetingPlan ?? null,
+      visibleTo: audienceUserIds.length
+        ? { create: audienceUserIds.map((userId) => ({ userId })) }
+        : undefined,
     },
     select: { id: true },
   });
@@ -154,7 +167,7 @@ export async function createManualMeetingAction(
     action: "meeting.created",
     resourceType: "meeting",
     resourceId: meeting.id,
-    newValue: { title, clientId: clientId || null, hostId: host.id, date, startTime, endTime },
+    newValue: { title, clientId: clientId || null, hostId: host.id, date, startTime, endTime, audienceUserIds },
   });
   revalidatePath("/calendario");
   return { success: true };

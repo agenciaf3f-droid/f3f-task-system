@@ -21,17 +21,21 @@ export function NewMeetingDialog({
   currentUserId,
   canManageAll,
   defaultDate,
+  internalHostId,
 }: {
   users: Option[];
   clients: Option[];
   currentUserId: string;
   canManageAll: boolean;
   defaultDate: string;
+  internalHostId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [hostId, setHostId] = useState(currentUserId);
+  const isInternalMeeting = hostId === internalHostId;
 
   function submit(formData: FormData) {
     setError(null);
@@ -80,7 +84,8 @@ export function NewMeetingDialog({
               Responsável
               <select
                 name="hostId"
-                defaultValue={currentUserId}
+                value={hostId}
+                onChange={(event) => setHostId(event.target.value)}
                 disabled={!canManageAll}
                 className="h-10 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
               >
@@ -101,6 +106,21 @@ export function NewMeetingDialog({
               </select>
             </label>
           </div>
+
+          {isInternalMeeting && canManageAll ? (
+            <fieldset className="grid gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <legend className="px-1 text-sm font-semibold text-sky-900">Visibilidade da reunião interna</legend>
+              <p className="text-xs text-sky-800">Sem ninguém marcado, a reunião do Admin F3F aparecerá para toda a equipe. Marque pessoas apenas quando quiser restringir a visualização.</p>
+              <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+                {users.filter((person) => person.id !== internalHostId).map((person) => (
+                  <label key={person.id} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm text-slate-700">
+                    <input type="checkbox" name="audienceUserIds" value={person.id} />
+                    {person.name}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
 
           <label className="grid gap-1.5 text-sm font-medium text-slate-700">
             Data

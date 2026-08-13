@@ -49,6 +49,14 @@ export default async function CalendarioPage({
         user: { companyId: user.companyId },
         date: { gte: toDateStr(gridStart), lte: toDateStr(gridEnd) },
         status: "confirmed",
+        ...(canManageAll ? {} : {
+          OR: [
+            { userId: user.userId },
+            { user: { calendarSlug: { not: "admin" } } },
+            { user: { calendarSlug: "admin" }, visibleTo: { none: {} } },
+            { visibleTo: { some: { userId: user.userId } } },
+          ],
+        }),
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
       include: { user: { select: { id: true, name: true, calendarSlug: true } } },
@@ -68,7 +76,7 @@ export default async function CalendarioPage({
         ...(canManageAll ? {} : { id: user.userId }),
       },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, calendarSlug: true },
     }),
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null },
@@ -124,6 +132,7 @@ export default async function CalendarioPage({
       clients={clients}
       canManageAll={canManageAll}
       canFilterByUser={user.role === "admin"}
+      internalHostId={users.find((item) => item.calendarSlug === "admin")?.id}
       defaultDate={todayInBrazil()}
       focusDate={sp?.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined}
       initialCalendarView={sp?.view === "week" ? "week" : "month"}
