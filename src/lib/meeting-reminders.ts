@@ -48,14 +48,10 @@ function weekdayName(date: string): string {
   return WEEKDAYS_PT[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
 }
 
-/**
- * Horário do lembrete de véspera. Configurável porque não veio na
- * especificação — 18:00 dá ao gestor a noite e a manhã seguinte para
- * remanejar o horário caso o cliente recuse.
- */
+/** Horário do lembrete de véspera, no dia anterior à reunião. */
 function dayBeforeClock(): string {
   const raw = process.env.MEETING_REMINDER_DAY_BEFORE_HOUR?.trim();
-  return raw && /^\d{2}:\d{2}$/.test(raw) ? raw : "18:00";
+  return raw && /^\d{2}:\d{2}$/.test(raw) ? raw : "06:00";
 }
 
 /**

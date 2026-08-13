@@ -78,48 +78,75 @@ function testButtonExtraction({ extractButtonResponse }: RemindersModule) {
   declineWithQuote.message.buttonsResponseMessage.selectedButtonId = `f3f-nao:${meetingId}`;
   assert.deepEqual(extractButtonResponse(declineWithQuote), { meetingId, response: "declined" });
 
-  // Formato real da instância, capturado em /message/find: o id do botão
-  // tocado vem em `buttonOrListid`, enquanto a mensagem original citada carrega
-  // as DUAS opções dentro de `buttonParamsJSON` (string com JSON embutido).
-  const uazapiReply = {
-    event: "messages",
-    message: {
-      buttonOrListid: `f3f-nao:${meetingId}`,
-      chatid: "120363290811576538@g.us",
-      fromMe: false,
-      messageType: "NativeFlowMessage",
-      text: "Não vou conseguir!",
-      content: {
-        InteractiveMessage: {
-          NativeFlowMessage: {
-            buttons: [
-              {
-                name: "quick_reply",
-                buttonParamsJSON: `{"id": "f3f-sim:${meetingId}", "display_text": "Sim, tudo certo!"}`,
+  // Estrutura REAL de uma resposta de botão, capturada em /message/find contra
+  // a instância. Não é invenção: a UAZAPI não documenta esse evento.
+  //
+  // O ponto crítico está em contextInfo.quotedMessage — a citação da mensagem
+  // original carrega as DUAS opções dentro de buttonParamsJSON. Ou seja, o
+  // payload de uma CONFIRMAÇÃO contém a string "f3f-nao:". Ler o JSON inteiro
+  // atrás do primeiro id cancelaria a reunião que o cliente acabou de aceitar.
+  const realReply = (tapped: "sim" | "nao") => ({
+    buttonOrListid: `f3f-${tapped}:${meetingId}`,
+    chatid: "120363290811576538@g.us",
+    fromMe: false,
+    messageType: "ButtonsResponseMessage",
+    quoted: "3EB0D1F34298B7A228F0CD",
+    content: {
+      Response: { SelectedDisplayText: tapped === "sim" ? "Sim, tudo certo!" : "Não vou conseguir!" },
+      selectedButtonID: `f3f-${tapped}:${meetingId}`,
+      type: 1,
+      contextInfo: {
+        stanzaID: "3EB0D1F34298B7A228F0CD",
+        quotedMessage: {
+          interactiveMessage: {
+            InteractiveMessage: {
+              NativeFlowMessage: {
+                buttons: [
+                  {
+                    name: "quick_reply",
+                    buttonParamsJSON: `{"id": "f3f-sim:${meetingId}", "display_text": "Sim, tudo certo!", "disabled": false}`,
+                  },
+                  {
+                    name: "quick_reply",
+                    buttonParamsJSON: `{"id": "f3f-nao:${meetingId}", "display_text": "Não vou conseguir!", "disabled": false}`,
+                  },
+                ],
               },
-              {
-                name: "quick_reply",
-                buttonParamsJSON: `{"id": "f3f-nao:${meetingId}", "display_text": "Não vou conseguir!"}`,
-              },
-            ],
+            },
+            header: { Media: null, title: "🤖 Opa Arthur!" },
+            body: { text: "\nEstou passando para confirmar…" },
+            footer: { Media: null, text: "" },
           },
         },
       },
     },
+  });
+
+  const confirmReply = realReply("sim");
+  // A prova de que o teste vale: a opção oposta ESTÁ no payload.
+  assert.ok(JSON.stringify(confirmReply).includes(`f3f-nao:${meetingId}`));
+  assert.deepEqual(extractButtonResponse(confirmReply), { meetingId, response: "confirmed" });
+
+  const declineReply = realReply("nao");
+  assert.ok(JSON.stringify(declineReply).includes(`f3f-sim:${meetingId}`));
+  assert.deepEqual(extractButtonResponse(declineReply), { meetingId, response: "declined" });
+
+  // Envelopado como o webhook entrega (evento + mensagem aninhada).
+  assert.deepEqual(
+    extractButtonResponse({ event: "messages", message: confirmReply }),
+    { meetingId, response: "confirmed" },
+  );
+
+  // Eco da mensagem que NÓS enviamos: buttonOrListid vem vazio e os dois ids
+  // aparecem no corpo. Não pode ser lido como resposta do cliente.
+  const echoOfSentMessage = {
+    buttonOrListid: "",
+    fromMe: true,
+    messageType: "NativeFlowMessage",
+    sendPayload: {
+      choices: [`Sim, tudo certo!|f3f-sim:${meetingId}`, `Não vou conseguir!|f3f-nao:${meetingId}`],
+    },
   };
-  assert.deepEqual(extractButtonResponse(uazapiReply), { meetingId, response: "declined" });
-
-  // Mesmo payload, escolha oposta: tem de seguir a escolha, não a ordem dos
-  // botões citados.
-  const uazapiConfirm = structuredClone(uazapiReply);
-  uazapiConfirm.message.buttonOrListid = `f3f-sim:${meetingId}`;
-  assert.deepEqual(extractButtonResponse(uazapiConfirm), { meetingId, response: "confirmed" });
-
-  // Mensagem que NÓS enviamos volta com buttonOrListid vazio — não pode ser
-  // lida como resposta do cliente.
-  const echoOfSentMessage = structuredClone(uazapiReply);
-  echoOfSentMessage.message.buttonOrListid = "";
-  echoOfSentMessage.message.fromMe = true;
   assert.equal(extractButtonResponse(echoOfSentMessage), null);
 
   // Sem chave "selected", um payload que cita as duas opções é ambíguo:

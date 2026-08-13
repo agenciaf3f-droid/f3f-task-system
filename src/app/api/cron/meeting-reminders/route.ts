@@ -12,8 +12,10 @@ async function handle(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  // Interruptor de emergência: desliga os disparos sem precisar de deploy.
-  if (process.env.MEETING_REMINDERS_ENABLED === "false") {
+  // Opt-in explícito, não opt-out: variável ausente, vazia ou escrita errada
+  // deixa os disparos DESLIGADOS. O estado seguro precisa ser o padrão — o erro
+  // aqui custaria mensagem indevida em grupo de cliente real.
+  if (process.env.MEETING_REMINDERS_ENABLED?.trim() !== "true") {
     return NextResponse.json({ ok: true, disabled: true });
   }
 

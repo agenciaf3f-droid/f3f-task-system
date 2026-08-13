@@ -130,7 +130,7 @@ Quatro avisos por reunião, no grupo do cliente (`Meeting.clientGroupId`):
 
 | Lembrete | Quando | Envio |
 |---|---|---|
-| `day_before` | véspera às `MEETING_REMINDER_DAY_BEFORE_HOUR` (default 18:00) | `/send/menu` com 2 botões |
+| `day_before` | véspera às `MEETING_REMINDER_DAY_BEFORE_HOUR` (default 06:00) | `/send/menu` com 2 botões |
 | `morning` | dia da reunião às 06:00 | `/send/text` |
 | `hour_before` | 1h antes | `/send/text` |
 | `minutes_before` | 5 min antes | `/send/text` |
@@ -141,8 +141,8 @@ Quatro avisos por reunião, no grupo do cliente (`Meeting.clientGroupId`):
 - **Botões:** ids `f3f-sim:<meetingId>` / `f3f-nao:<meetingId>` voltam em `/api/webhooks/uazapi` (autenticado por `UAZAPI_WEBHOOK_TOKEN` na query).
   - "Sim" → `Meeting.clientResponse = "confirmed"`, aparece com ✓ no `/calendario`.
   - "Não" → cancela de verdade: `status = "cancelled"` + apaga evento do Google Calendar + libera o horário.
-- **Formato do payload de clique NÃO está na spec da UAZAPI.** `extractButtonResponse()` lê só chaves `selected*`, porque a resposta vem com a mensagem original citada — e a citação carrega os DOIS ids. Em caso de ambiguidade a função recusa e loga a *forma* do payload (sem valores, que contêm dado de cliente).
-- **Kill switch:** `MEETING_REMINDERS_ENABLED=false` para sem deploy.
+- **Formato do payload de clique NÃO está na spec da UAZAPI** — foi capturado via `/message/find`. O id tocado vem em `buttonOrListid` e `content.selectedButtonID`; `messageType` é `ButtonsResponseMessage`. **`contextInfo.quotedMessage` repete os DOIS ids** em `buttonParamsJSON`, então o payload de uma confirmação contém a string `f3f-nao:`. Por isso `extractButtonResponse()` só lê chaves que afirmam a escolha — varrer o JSON inteiro cancelaria reunião confirmada. Em caso de ambiguidade recusa e loga a *forma* do payload (sem valores, que contêm dado de cliente).
+- **Liga/desliga:** `MEETING_REMINDERS_ENABLED` precisa ser exatamente `true` para disparar. Ausente, vazia ou qualquer outro valor = desligado, sem precisar de deploy. É opt-in porque errar para o lado ligado custa mensagem indevida em grupo de cliente.
 - **Configurar webhook na instância:** `npm run uazapi:webhook -- --apply`.
 
 ---
