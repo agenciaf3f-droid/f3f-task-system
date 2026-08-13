@@ -1,0 +1,49 @@
+name: Lembretes de reunião
+
+# A cada 5 minutos (menor intervalo aceito pelo GitHub Actions). O agendamento
+# do GitHub atrasa com frequência, por isso cada lembrete tem uma janela de
+# tolerância no código — ver targetFor() em src/lib/meeting-reminders.ts.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/meeting-reminders.yml"
+      - "src/app/api/cron/meeting-reminders/route.ts"
+      - "src/lib/meeting-reminders.ts"
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# Execuções não se sobrepõem; se uma demorar, a próxima espera em vez de
+# concorrer pela mesma reunião.
+concurrency:
+  group: meeting-reminders
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gerar identidade assinada do GitHub
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('f3f-task-meeting-reminders')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Disparar lembretes vencidos
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 \
+            --header "Authorization: Bearer ${OIDC_TOKEN}" \
+            "https://task.agenciaf3f.com.br/api/cron/meeting-reminders"

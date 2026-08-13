@@ -124,6 +124,29 @@ Protocolo obrigatório de testes do WhatsApp:
 
 ---
 
+## Lembretes de reunião no WhatsApp
+
+Quatro avisos por reunião, no grupo do cliente (`Meeting.clientGroupId`):
+
+| Lembrete | Quando | Envio |
+|---|---|---|
+| `day_before` | véspera às `MEETING_REMINDER_DAY_BEFORE_HOUR` (default 18:00) | `/send/menu` com 2 botões |
+| `morning` | dia da reunião às 06:00 | `/send/text` |
+| `hour_before` | 1h antes | `/send/text` |
+| `minutes_before` | 5 min antes | `/send/text` |
+
+- **Disparo:** GitHub Actions a cada 5 min (`meeting-reminders.yml`, OIDC audience `f3f-task-meeting-reminders`) → `/api/cron/meeting-reminders`. Não usa Vercel Cron: o plano Hobby só aceita 1x/dia.
+- **Atraso do agendador:** o GitHub atrasa com frequência, então cada lembrete tem janela de tolerância (`targetFor()`). Fora da janela o aviso é descartado — nunca chega depois da reunião.
+- **Idempotência:** unique `[meetingId, kind]` em `MeetingReminder`. A linha é criada ANTES do envio, então falha de rede não vira mensagem duplicada. Retenta só se o status ficou `failed`, no máximo 3x.
+- **Botões:** ids `f3f-sim:<meetingId>` / `f3f-nao:<meetingId>` voltam em `/api/webhooks/uazapi` (autenticado por `UAZAPI_WEBHOOK_TOKEN` na query).
+  - "Sim" → `Meeting.clientResponse = "confirmed"`, aparece com ✓ no `/calendario`.
+  - "Não" → cancela de verdade: `status = "cancelled"` + apaga evento do Google Calendar + libera o horário.
+- **Formato do payload de clique NÃO está na spec da UAZAPI.** `extractButtonResponse()` lê só chaves `selected*`, porque a resposta vem com a mensagem original citada — e a citação carrega os DOIS ids. Em caso de ambiguidade a função recusa e loga a *forma* do payload (sem valores, que contêm dado de cliente).
+- **Kill switch:** `MEETING_REMINDERS_ENABLED=false` para sem deploy.
+- **Configurar webhook na instância:** `npm run uazapi:webhook -- --apply`.
+
+---
+
 ## Sincronização automática de clientes
 
 - **Fonte:** CSV público da planilha de grupos F3F.

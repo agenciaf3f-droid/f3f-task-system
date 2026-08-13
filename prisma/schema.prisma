@@ -630,16 +630,46 @@ model Meeting {
   recurrenceRule     Json?   @map("recurrence_rule")
   recurrenceParentId String? @map("recurrence_parent_id") @db.Uuid
 
+  // Confirmação do cliente pelo botão do lembrete de véspera
+  clientResponse    String?   @map("client_response") @db.VarChar(20) // "confirmed" | "declined"
+  clientRespondedAt DateTime? @map("client_responded_at")
+
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   recurrenceParent   Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
   recurrenceChildren Meeting[] @relation("MeetingRecurrence")
   visibleTo          MeetingAudience[]
+  reminders          MeetingReminder[]
 
   @@index([userId, date])
   @@index([recurrenceParentId])
   @@index([googleEventId])
   @@index([date, status])
   @@map("meetings")
+}
+
+/// Registro de lembrete de reunião já disparado no WhatsApp.
+///
+/// A unique [meetingId, kind] é o que garante que o cliente nunca receba a
+/// mesma mensagem duas vezes: o cron roda a cada 5 min e pode ver a mesma
+/// reunião "vencida" em várias execuções. A linha é criada ANTES do envio
+/// (claim), então uma falha de rede não vira mensagem duplicada — vira uma
+/// linha com status "failed" que fica registrada para auditoria.
+model MeetingReminder {
+  id          String   @id @default(uuid()) @db.Uuid
+  meetingId   String   @map("meeting_id") @db.Uuid
+  kind        String   @db.VarChar(20) // day_before | morning | hour_before | minutes_before
+  status      String   @default("pending") @db.VarChar(20) // pending | sent | failed
+  attempts    Int      @default(0)
+  destination String?  @db.VarChar(255)
+  detail      String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, kind])
+  @@index([createdAt])
+  @@map("meeting_reminders")
 }
 
 model MeetingAudience {

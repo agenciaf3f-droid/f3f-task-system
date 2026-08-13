@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarX, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
 import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
@@ -25,6 +25,9 @@ type Meeting = {
   hostName: string;
   isShared: boolean;
   clientName: string | null;
+  /** Resposta do cliente ao lembrete de véspera. "declined" cancela a reunião,
+   *  então na prática só "confirmed" e null chegam ao calendário. */
+  clientResponse: string | null;
   isRecurring: boolean;
 };
 
@@ -171,8 +174,14 @@ const DayCell = memo(function DayCell({
             <div
               key={m.id}
               className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${eventStyle}`}
-              title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}`}
+              title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}${m.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
             >
+              {m.clientResponse === "confirmed" && (
+                <CheckCheck
+                  className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                  aria-label="Cliente confirmou presença"
+                />
+              )}
               {m.isRecurring && <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" />}
               <span className="shrink-0 self-start pt-1 font-semibold tabular-nums">{m.startTime}</span>
               <span className="min-w-0 flex-1">
@@ -287,6 +296,12 @@ function DayMeetingsDialog({
                         <span className="block truncate text-xs opacity-65">{meeting.hostName}</span>
                       ) : null}
                     </span>
+                    {meeting.clientResponse === "confirmed" ? (
+                      <CheckCheck
+                        className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                        aria-label="Cliente confirmou presença"
+                      />
+                    ) : null}
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
                   </div>
                   {canManage ? (

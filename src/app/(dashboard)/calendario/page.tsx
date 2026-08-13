@@ -118,6 +118,7 @@ export default async function CalendarioPage({
           hostName: userNames.get(hostId) ?? m.user.name,
           isShared: clientManagerId === null && m.user.calendarSlug === "admin",
           clientName: m.clientName,
+          clientResponse: m.clientResponse,
           isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
         };
       })}

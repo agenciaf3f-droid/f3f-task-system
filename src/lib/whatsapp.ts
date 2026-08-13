@@ -94,6 +94,63 @@ export async function verifyWhatsAppGroupDestination(groupId: string): Promise<b
   return groups.some((candidate) => candidate.id === groupId);
 }
 
+/**
+ * Aplica as travas de destino antes de qualquer envio.
+ *
+ * Em `UAZAPI_MODE=test` o destino do chamador é ignorado e substituído pelo
+ * grupo autorizado de homologação — é o que impede um teste de vazar para o
+ * grupo de um cliente real.
+ */
+function resolveDestination(
+  groupId: string,
+  mode: UazapiMode,
+): { ok: true; destination: string } | { ok: false; reason: "not_configured" | "rejected" } {
+  let destination = groupId.trim();
+
+  if (mode === "test") {
+    const configuredTestGroup = process.env.UAZAPI_TEST_GROUP_ID?.trim();
+    if (configuredTestGroup !== AUTHORIZED_TEST_GROUP_ID) {
+      return { ok: false, reason: "not_configured" };
+    }
+    destination = AUTHORIZED_TEST_GROUP_ID;
+  }
+
+  if (!GROUP_ID_PATTERN.test(destination)) {
+    return { ok: false, reason: "rejected" };
+  }
+
+  return { ok: true, destination };
+}
+
+async function postToUazapi(
+  path: "/send/text" | "/send/menu",
+  payload: Record<string, unknown>,
+  config: { serverUrl: string; token: string; mode: UazapiMode },
+  destination: string,
+): Promise<WhatsAppDeliveryResult> {
+  try {
+    const response = await fetch(`${config.serverUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        token: config.token,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!response.ok) {
+      console.error(`[uazapi] ${path} failed with status ${response.status}`);
+      return { delivered: false, reason: "rejected", status: response.status };
+    }
+
+    return { delivered: true, destination, mode: config.mode };
+  } catch (error) {
+    console.error(`[uazapi] ${path} request failed:`, error);
+    return { delivered: false, reason: "request_failed" };
+  }
+}
+
 export async function sendWhatsAppText({
   groupId,
   message,
@@ -106,44 +163,70 @@ export async function sendWhatsAppText({
   const config = getConfiguration();
   if (!config) return { delivered: false, reason: "not_configured" };
 
-  let destination = groupId.trim();
-  if (config.mode === "test") {
-    const configuredTestGroup = process.env.UAZAPI_TEST_GROUP_ID?.trim();
-    if (configuredTestGroup !== AUTHORIZED_TEST_GROUP_ID) {
-      return { delivered: false, reason: "not_configured" };
-    }
-    destination = AUTHORIZED_TEST_GROUP_ID;
-  }
+  const resolved = resolveDestination(groupId, config.mode);
+  if (!resolved.ok) return { delivered: false, reason: resolved.reason };
 
-  if (!GROUP_ID_PATTERN.test(destination)) {
+  return postToUazapi(
+    "/send/text",
+    {
+      number: resolved.destination,
+      text: message,
+      linkPreview: false,
+      track_id: trackId,
+      async: false,
+    },
+    config,
+    resolved.destination,
+  );
+}
+
+/**
+ * Envia botões de resposta rápida via `/send/menu` (type: button).
+ *
+ * Cada item de `buttons` vira uma opção no formato `"rótulo|id"` que a UAZAPI
+ * espera. O `id` é o que volta no webhook quando o cliente toca — é por ele
+ * que a resposta é amarrada de volta à reunião.
+ */
+export async function sendWhatsAppButtons({
+  groupId,
+  message,
+  footerText,
+  buttons,
+  trackId,
+}: {
+  groupId: string;
+  message: string;
+  footerText?: string;
+  buttons: Array<{ label: string; id: string }>;
+  trackId: string;
+}): Promise<WhatsAppDeliveryResult> {
+  const config = getConfiguration();
+  if (!config) return { delivered: false, reason: "not_configured" };
+
+  if (buttons.length === 0) return { delivered: false, reason: "rejected" };
+
+  // `|` separa rótulo de id no protocolo da UAZAPI; se aparecer no texto o
+  // botão é interpretado errado (viraria um id truncado).
+  if (buttons.some((button) => button.label.includes("|") || button.id.includes("|"))) {
+    console.error("[uazapi] botão com '|' no rótulo ou id — envio bloqueado");
     return { delivered: false, reason: "rejected" };
   }
 
-  try {
-    const response = await fetch(`${config.serverUrl}/send/text`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        token: config.token,
-      },
-      body: JSON.stringify({
-        number: destination,
-        text: message,
-        linkPreview: false,
-        track_id: trackId,
-        async: false,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
+  const resolved = resolveDestination(groupId, config.mode);
+  if (!resolved.ok) return { delivered: false, reason: resolved.reason };
 
-    if (!response.ok) {
-      console.error(`[uazapi] send/text failed with status ${response.status}`);
-      return { delivered: false, reason: "rejected", status: response.status };
-    }
-
-    return { delivered: true, destination, mode: config.mode };
-  } catch (error) {
-    console.error("[uazapi] send/text request failed:", error);
-    return { delivered: false, reason: "request_failed" };
-  }
+  return postToUazapi(
+    "/send/menu",
+    {
+      number: resolved.destination,
+      type: "button",
+      text: message,
+      choices: buttons.map((button) => `${button.label}|${button.id}`),
+      ...(footerText ? { footerText } : {}),
+      track_id: trackId,
+      async: false,
+    },
+    config,
+    resolved.destination,
+  );
 }
