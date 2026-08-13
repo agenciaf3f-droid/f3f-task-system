@@ -23,6 +23,7 @@ export default async function TemplatesPage() {
     include: {
       sector: { select: { name: true, color: true } },
       targetSectors: { include: { sector: { select: { name: true, color: true } } } },
+      targetUsers: { include: { user: { select: { id: true, name: true } } } },
       createdBy: { select: { name: true } },
       _count: { select: { templateTasks: true } },
     },
@@ -97,7 +98,7 @@ export default async function TemplatesPage() {
                       </p>
                     )}
                   </div>
-                  {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
+                  {(template.isPersonal ? template.createdById === user.userId || canViewAllPersonal : canManageShared) && (
                     <LinkButton
                       href={`/templates/${template.id}/editar`}
                       variant="outline"
@@ -131,6 +132,12 @@ export default async function TemplatesPage() {
                       {sector.name}
                     </span>
                   ))}
+                  {template.isPersonal && template.targetUsers.map(({ user: targetUser }) => (
+                    <span key={targetUser.id} className="flex items-center gap-1">
+                      <UserRound className="w-3 h-3" />
+                      {targetUser.name}
+                    </span>
+                  ))}
                   {template.category && (
                     <span className="bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full font-medium">
                       {template.category}
@@ -155,17 +162,15 @@ export default async function TemplatesPage() {
 
                 {/* Footer actions */}
                 <div className="flex flex-col gap-2 pt-3 mt-auto border-t border-neutral-100">
-                  {(!template.isPersonal || template.createdById === user.userId) && (
-                    <div className="w-full min-w-0">
-                      <ActivateTemplateDialog
-                        templateId={template.id}
-                        templateName={template.name}
-                        taskCount={template._count.templateTasks}
-                        users={users}
-                      />
-                    </div>
-                  )}
-                  {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
+                  <div className="w-full min-w-0">
+                    <ActivateTemplateDialog
+                      templateId={template.id}
+                      templateName={template.name}
+                      taskCount={template._count.templateTasks}
+                      users={users}
+                    />
+                  </div>
+                  {(template.isPersonal ? template.createdById === user.userId || canViewAllPersonal : canManageShared) && (
                     <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 min-w-0">
                       <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
                       <DeleteTemplateButton templateId={template.id} templateName={template.name} />
@@ -194,7 +199,7 @@ export default async function TemplatesPage() {
                         {template._count.templateTasks} tarefa{template._count.templateTasks !== 1 ? "s" : ""}
                       </p>
                     </div>
-                    {(template.isPersonal ? template.createdById === user.userId : canManageShared) && (
+                    {(template.isPersonal ? template.createdById === user.userId || canViewAllPersonal : canManageShared) && (
                       <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                         <LinkButton
                           href={`/templates/${template.id}/editar`}

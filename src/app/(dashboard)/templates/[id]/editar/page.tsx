@@ -16,6 +16,7 @@ export default async function EditarTemplatePage({
       where: { id, companyId: user.companyId, deletedAt: null },
       include: {
         targetSectors: { select: { sectorId: true } },
+        targetUsers: { select: { userId: true } },
         templateTasks: {
           orderBy: { position: "asc" },
           include: { checklistItems: { orderBy: { position: "asc" } } },
@@ -59,6 +60,7 @@ export default async function EditarTemplatePage({
         category: template.category ?? "",
         sectorId: template.sectorId ?? "",
         targetSectorIds: template.targetSectors.map((target) => target.sectorId),
+        targetUserIds: template.targetUsers.map((target) => target.userId),
       }}
       initialTasks={initialTasks}
       sectors={sectors}

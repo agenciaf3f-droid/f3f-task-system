@@ -15,6 +15,7 @@ const templateSchema = z.object({
 });
 
 const targetSectorIdsSchema = z.array(z.string().uuid()).max(50);
+const targetUserIdsSchema = z.array(z.string().uuid()).max(200);
 
 async function validateTargetSectors(companyId: string, ids: string[]) {
   const uniqueIds = [...new Set(ids)];
@@ -24,6 +25,16 @@ async function validateTargetSectors(companyId: string, ids: string[]) {
     select: { id: true },
   });
   return sectors.length === uniqueIds.length ? uniqueIds : null;
+}
+
+async function validateTargetUsers(companyId: string, ids: string[]) {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: uniqueIds }, companyId, isActive: true, deletedAt: null },
+    select: { id: true },
+  });
+  return users.length === uniqueIds.length ? uniqueIds : null;
 }
 
 export async function createTemplateAction(
@@ -51,6 +62,12 @@ export async function createTemplateAction(
     ? await validateTargetSectors(user.companyId, targetSectorIdsParsed.data)
     : [];
   if (targetSectorIds === null) return { error: "Um ou mais setores não pertencem à empresa." };
+  const targetUserIdsParsed = targetUserIdsSchema.safeParse(formData.getAll("targetUserIds"));
+  if (!targetUserIdsParsed.success) return { error: "Pessoas inválidas." };
+  const targetUserIds = isPersonal && user.role === "admin"
+    ? await validateTargetUsers(user.companyId, targetUserIdsParsed.data)
+    : [];
+  if (targetUserIds === null) return { error: "Uma ou mais pessoas não pertencem à empresa." };
 
   // Parse template tasks from formData
   const taskTitles = formData.getAll("taskTitle[]") as string[];
@@ -76,6 +93,9 @@ export async function createTemplateAction(
       isPersonal,
       targetSectors: targetSectorIds.length
         ? { create: targetSectorIds.map((sectorId) => ({ sectorId })) }
+        : undefined,
+      targetUsers: targetUserIds.length
+        ? { create: targetUserIds.map((userId) => ({ userId })) }
         : undefined,
     },
   });
@@ -158,6 +178,12 @@ export async function updateTemplateAction(
     ? await validateTargetSectors(user.companyId, targetSectorIdsParsed.data)
     : [];
   if (targetSectorIds === null) return { error: "Um ou mais setores não pertencem à empresa." };
+  const targetUserIdsParsed = targetUserIdsSchema.safeParse(formData.getAll("targetUserIds"));
+  if (!targetUserIdsParsed.success) return { error: "Pessoas inválidas." };
+  const targetUserIds = existing.isPersonal && user.role === "admin"
+    ? await validateTargetUsers(user.companyId, targetUserIdsParsed.data)
+    : [];
+  if (targetUserIds === null) return { error: "Uma ou mais pessoas não pertencem à empresa." };
 
   await prisma.template.update({
     where: { id: templateId },
@@ -168,6 +194,9 @@ export async function updateTemplateAction(
       sectorId: existing.isPersonal ? null : parsed.data.sectorId || null,
       targetSectors: existing.isPersonal && user.role === "admin"
         ? { deleteMany: {}, create: targetSectorIds.map((sectorId) => ({ sectorId })) }
+        : undefined,
+      targetUsers: existing.isPersonal && user.role === "admin"
+        ? { deleteMany: {}, create: targetUserIds.map((userId) => ({ userId })) }
         : undefined,
     },
   });
@@ -229,6 +258,9 @@ export async function activateTemplateAction(
         ...(user.role === "admin" ? [{ isPersonal: true }] : [{
           isPersonal: true,
           targetSectors: { some: { sector: { members: { some: { userId: user.userId } } } } },
+        }, {
+          isPersonal: true,
+          targetUsers: { some: { userId: user.userId } },
         }]),
       ],
     },

@@ -21,6 +21,7 @@ interface EditTemplateFormProps {
     category: string;
     sectorId: string;
     targetSectorIds: string[];
+    targetUserIds: string[];
   };
   initialTasks: TaskRow[];
   sectors: Sector[];
@@ -86,9 +87,10 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
           </div>
 
           {personal && canAssignSectors && (
-            <div className="flex flex-col gap-2">
-              <Label>Disponibilizar para os setores</Label>
-              <p className="text-xs text-neutral-500">As pessoas dos setores selecionados poderão usar este template personalizado.</p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+              <Label>Disponibilizar para setores inteiros</Label>
+              <p className="text-xs text-neutral-500">Todos os membros dos setores marcados poderão usar o template.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-lg border border-neutral-200 p-3">
                 {sectors.map((sector) => (
                   <label key={sector.id} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
@@ -102,6 +104,25 @@ export function EditTemplateForm({ templateId, initialData, initialTasks, sector
                     {sector.name}
                   </label>
                 ))}
+              </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Disponibilizar para pessoas específicas</Label>
+                <p className="text-xs text-neutral-500">Você pode combinar esta lista com os setores acima.</p>
+                <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-lg border border-neutral-200 p-3 sm:grid-cols-2">
+                  {users.map((user) => (
+                    <label key={user.id} className="flex items-center gap-2 text-sm text-neutral-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="targetUserIds"
+                        value={user.id}
+                        defaultChecked={initialData.targetUserIds.includes(user.id)}
+                        disabled={isPending}
+                      />
+                      {user.name}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           )}

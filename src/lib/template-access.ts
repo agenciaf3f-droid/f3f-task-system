@@ -10,6 +10,7 @@ export function templateVisibilityFilter(user: TemplateAccessUser): Prisma.Templ
     OR: [
       { isPersonal: false },
       { isPersonal: true, createdById: user.userId },
+      { isPersonal: true, targetUsers: { some: { userId: user.userId } } },
       {
         isPersonal: true,
         targetSectors: { some: { sector: { members: { some: { userId: user.userId } } } } },
