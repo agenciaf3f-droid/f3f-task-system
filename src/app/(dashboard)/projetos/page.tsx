@@ -41,6 +41,7 @@ export default async function ProjetosPage({
           name: true,
           color: true,
           meetingPlan: true,
+          sourceGroupId: true,
           whatsappGroupId: true,
           whatsappGroupName: true,
           managerId: true,
@@ -112,6 +113,7 @@ export default async function ProjetosPage({
     const archived = projectsWithStats.filter((p) => p.status === "archived");
     const bookingIssues = [
       !client.meetingPlan ? "plano não preenchido" : null,
+      !client.sourceGroupId ? "ID do grupo não preenchido" : null,
       !client.whatsappGroupId ? "grupo UAZAPI não preenchido" : null,
       !client.managerId || !client.manager ? "gestor não definido" : null,
       client.manager && (!client.manager.isActive || client.manager.deletedAt) ? "gestor inativo" : null,

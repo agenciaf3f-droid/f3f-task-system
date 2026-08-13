@@ -17,6 +17,7 @@ export type SheetClient = {
   clientName: string;
   managerName: string;
   status: "active" | "inactive";
+  sourceGroupId: string;
   whatsappGroupId: string;
   plan: string;
   rowNumber: number;
@@ -225,7 +226,7 @@ export function parseClientSheet(csv: string): {
   const parsed = parseCsv(csv);
   const header = parsed[0] ?? [];
   const indexes = new Map(header.map((value, index) => [normalize(value), index]));
-  const required = ["grupo", "gestor responsavel", "status", "id grupo (uazapi)", "plano"];
+  const required = ["grupo", "gestor responsavel", "status", "id do grupo", "id grupo (uazapi)", "plano"];
   const missing = required.filter((key) => !indexes.has(key));
   if (missing.length > 0) {
     throw new Error(`Colunas ausentes na planilha: ${missing.join(", ")}`);
@@ -242,18 +243,18 @@ export function parseClientSheet(csv: string): {
     if (!groupName || (rawStatus !== "ativo" && rawStatus !== "inativo")) return;
 
     const plan = valueAt(sourceRow, "plano") || inferPlanFromGroupName(groupName);
+    const sourceGroupId = valueAt(sourceRow, "id do grupo");
     const whatsappGroupId = valueAt(sourceRow, "id grupo (uazapi)");
     const managerName = valueAt(sourceRow, "gestor responsavel");
     const status = rawStatus === "ativo" ? "active" : "inactive";
     const clientName = extractClientName(groupName, plan);
 
-    if (!GROUP_ID_PATTERN.test(whatsappGroupId)) {
-      issues.push(`Linha ${rowNumber}: ID UAZAPI ausente ou inválido.`);
+    if (!plan) {
+      issues.push(`Linha ${rowNumber}: plano ausente.`);
       return;
     }
-    if (status === "active" && !managerName) {
-      issues.push(`Linha ${rowNumber}: gestor ausente.`);
-      return;
+    if (whatsappGroupId && !GROUP_ID_PATTERN.test(whatsappGroupId)) {
+      issues.push(`Linha ${rowNumber}: ID UAZAPI inválido; cliente cadastrado sem habilitar reuniões.`);
     }
     if (groupName.length > 255 || clientName.length > 255 || plan.length > 100) {
       issues.push(`Linha ${rowNumber}: nome ou plano excede o limite permitido.`);
@@ -265,6 +266,7 @@ export function parseClientSheet(csv: string): {
       clientName,
       managerName,
       status,
+      sourceGroupId,
       whatsappGroupId,
       plan,
       rowNumber,
@@ -580,6 +582,7 @@ export async function syncClientsFromPublishedSheet({
           description: true,
           managerId: true,
           meetingPlan: true,
+          sourceGroupId: true,
           whatsappGroupId: true,
           whatsappGroupName: true,
           createdAt: true,
@@ -591,11 +594,18 @@ export async function syncClientsFromPublishedSheet({
   if (!company) throw new Error(`Empresa ${COMPANY_SLUG} não encontrada.`);
 
   const clientsByGroup = new Map<string, typeof company.clients>();
+  const clientsBySourceGroup = new Map<string, typeof company.clients>();
   const clientsByName = new Map<string, typeof company.clients>();
   for (const client of company.clients) {
     if (client.whatsappGroupId) {
       clientsByGroup.set(client.whatsappGroupId, [
         ...(clientsByGroup.get(client.whatsappGroupId) ?? []),
+        client,
+      ]);
+    }
+    if (client.sourceGroupId) {
+      clientsBySourceGroup.set(client.sourceGroupId, [
+        ...(clientsBySourceGroup.get(client.sourceGroupId) ?? []),
         client,
       ]);
     }
@@ -608,10 +618,9 @@ export async function syncClientsFromPublishedSheet({
   for (const row of parsed.rows) {
     const nameKey = normalize(row.clientName);
     sourceNameCounts.set(nameKey, (sourceNameCounts.get(nameKey) ?? 0) + 1);
-    sourceGroupCounts.set(
-      row.whatsappGroupId,
-      (sourceGroupCounts.get(row.whatsappGroupId) ?? 0) + 1,
-    );
+    if (row.whatsappGroupId) {
+      sourceGroupCounts.set(row.whatsappGroupId, (sourceGroupCounts.get(row.whatsappGroupId) ?? 0) + 1);
+    }
   }
 
   const result: ClientSheetSyncResult = {
@@ -628,7 +637,7 @@ export async function syncClientsFromPublishedSheet({
   const reportedDuplicateSourceGroups = new Set<string>();
 
   for (const row of parsed.rows) {
-    if ((sourceGroupCounts.get(row.whatsappGroupId) ?? 0) > 1) {
+    if (row.whatsappGroupId && (sourceGroupCounts.get(row.whatsappGroupId) ?? 0) > 1) {
       result.skipped += 1;
       if (!reportedDuplicateSourceGroups.has(row.whatsappGroupId)) {
         reportedDuplicateSourceGroups.add(row.whatsappGroupId);
@@ -638,16 +647,18 @@ export async function syncClientsFromPublishedSheet({
     }
 
     const nameKey = normalize(row.clientName);
-    const groupMatches = clientsByGroup.get(row.whatsappGroupId) ?? [];
+    const groupMatches = row.whatsappGroupId ? clientsByGroup.get(row.whatsappGroupId) ?? [] : [];
+    const sourceGroupMatches = row.sourceGroupId ? clientsBySourceGroup.get(row.sourceGroupId) ?? [] : [];
     const nameMatches = sourceNameCounts.get(nameKey) === 1
       ? clientsByName.get(nameKey) ?? []
       : [];
     const candidates = [...new Map(
-      [...groupMatches, ...nameMatches].map((client) => [client.id, client]),
+      [...groupMatches, ...sourceGroupMatches, ...nameMatches].map((client) => [client.id, client]),
     ).values()].sort((a, b) => {
       const score = (client: typeof a) =>
         (client.deletedAt ? 0 : 16)
-        + (client.whatsappGroupId === row.whatsappGroupId ? 8 : 0)
+        + (row.whatsappGroupId && client.whatsappGroupId === row.whatsappGroupId ? 8 : 0)
+        + (row.sourceGroupId && client.sourceGroupId === row.sourceGroupId ? 8 : 0)
         + (client.managerId ? 4 : 0)
         + (client.meetingPlan ? 2 : 0)
         + (client.whatsappGroupName ? 1 : 0);
@@ -690,7 +701,8 @@ export async function syncClientsFromPublishedSheet({
       }
 
       result.deduplicated += duplicates.length;
-      clientsByGroup.set(row.whatsappGroupId, [existing]);
+      if (row.whatsappGroupId) clientsByGroup.set(row.whatsappGroupId, [existing]);
+      if (row.sourceGroupId) clientsBySourceGroup.set(row.sourceGroupId, [existing]);
       clientsByName.set(nameKey, [existing]);
     }
 
@@ -710,19 +722,8 @@ export async function syncClientsFromPublishedSheet({
     }
 
     const manager = resolveManager(company.users, row.managerName, row.clientName);
-    if (!manager) {
-      if (
-        existing
-        && normalize(row.clientName) === "jucilaine perin"
-        && normalize(row.managerName) === "videos"
-        && existing.managerId !== null
-        && !dryRun
-      ) {
-        await prisma.client.update({ where: { id: existing.id }, data: { managerId: null } });
-      }
-      result.skipped += 1;
-      result.issues.push(`Linha ${row.rowNumber}: gestor "${row.managerName}" não encontrado.`);
-      continue;
+    if (!manager && row.managerName) {
+      result.issues.push(`Linha ${row.rowNumber}: gestor "${row.managerName}" não encontrado; cliente cadastrado sem gestor.`);
     }
 
     if (!row.plan && !existing) {
@@ -733,28 +734,22 @@ export async function syncClientsFromPublishedSheet({
 
     const data = {
       name: row.clientName,
-      managerId: manager.id,
+      managerId: manager?.id ?? existing?.managerId ?? null,
       meetingPlan: row.plan || existing?.meetingPlan || null,
-      whatsappGroupId: row.whatsappGroupId,
+      sourceGroupId: row.sourceGroupId || null,
+      whatsappGroupId: GROUP_ID_PATTERN.test(row.whatsappGroupId) ? row.whatsappGroupId : null,
       whatsappGroupName: row.groupName,
       deletedAt: null,
     };
 
     if (!existing) {
       if (!dryRun) {
-        const created = await prisma.client.upsert({
-          where: {
-            companyId_whatsappGroupId: {
-              companyId: company.id,
-              whatsappGroupId: row.whatsappGroupId,
-            },
-          },
-          create: {
+        const created = await prisma.client.create({
+          data: {
             companyId: company.id,
             color: pickColor(row.clientName),
             ...data,
           },
-          update: data,
           select: {
             id: true,
             name: true,
@@ -765,13 +760,15 @@ export async function syncClientsFromPublishedSheet({
             description: true,
             managerId: true,
             meetingPlan: true,
+            sourceGroupId: true,
             whatsappGroupId: true,
             whatsappGroupName: true,
             createdAt: true,
             deletedAt: true,
           },
         });
-        clientsByGroup.set(row.whatsappGroupId, [created]);
+        if (row.whatsappGroupId) clientsByGroup.set(row.whatsappGroupId, [created]);
+        if (row.sourceGroupId) clientsBySourceGroup.set(row.sourceGroupId, [created]);
       }
       result.created += 1;
       continue;
@@ -780,6 +777,7 @@ export async function syncClientsFromPublishedSheet({
     const changed = existing.name !== data.name
       || existing.managerId !== data.managerId
       || existing.meetingPlan !== data.meetingPlan
+      || existing.sourceGroupId !== data.sourceGroupId
       || existing.whatsappGroupId !== data.whatsappGroupId
       || existing.whatsappGroupName !== data.whatsappGroupName
       || existing.deletedAt !== null;
@@ -790,7 +788,8 @@ export async function syncClientsFromPublishedSheet({
 
     if (!dryRun) {
       await prisma.client.update({ where: { id: existing.id }, data });
-      clientsByGroup.set(row.whatsappGroupId, [{ ...existing, ...data }]);
+      if (row.whatsappGroupId) clientsByGroup.set(row.whatsappGroupId, [{ ...existing, ...data }]);
+      if (row.sourceGroupId) clientsBySourceGroup.set(row.sourceGroupId, [{ ...existing, ...data }]);
     }
     result.updated += 1;
   }

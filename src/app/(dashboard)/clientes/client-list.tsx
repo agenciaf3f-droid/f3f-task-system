@@ -16,6 +16,7 @@ type ClientItem = {
   email: string | null;
   meetingPlan: string | null;
   whatsappGroupId: string | null;
+  sourceGroupId: string | null;
   whatsappGroupName: string | null;
   managerId: string | null;
   manager: { id: string; name: string } | null;

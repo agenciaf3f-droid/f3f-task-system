@@ -351,6 +351,7 @@ model Client {
   email             String?   @db.VarChar(255)
   phone             String?   @db.VarChar(50)
   meetingPlan       String?   @map("meeting_plan") @db.VarChar(100)
+  sourceGroupId      String?   @map("source_group_id") @db.VarChar(255)
   whatsappGroupId   String?   @map("whatsapp_group_id") @db.VarChar(255)
   whatsappGroupName String?   @map("whatsapp_group_name") @db.VarChar(255)
   avatarUrl         String?   @map("avatar_url")
@@ -368,6 +369,7 @@ model Client {
   @@index([companyId])
   @@index([managerId])
   @@unique([companyId, whatsappGroupId])
+  @@unique([companyId, sourceGroupId])
   @@map("clients")
 }
 

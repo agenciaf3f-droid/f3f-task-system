@@ -63,8 +63,14 @@ export function NewClientDialog({ managers }: { managers: Manager[] }) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="whatsappGroupId">ID do grupo</Label>
-            <Input id="whatsappGroupId" name="whatsappGroupId" placeholder="120363...@g.us" required disabled={isPending} />
+            <Label htmlFor="sourceGroupId">ID do grupo (opcional)</Label>
+            <Input id="sourceGroupId" name="sourceGroupId" placeholder="120363...-group" disabled={isPending} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="whatsappGroupId">ID UAZAPI (opcional)</Label>
+            <Input id="whatsappGroupId" name="whatsappGroupId" placeholder="120363...@g.us" disabled={isPending} />
+            <p className="text-xs text-neutral-400">Os dois IDs só são necessários para enviar reuniões.</p>
           </div>
 
           <div className="flex flex-col gap-1.5">

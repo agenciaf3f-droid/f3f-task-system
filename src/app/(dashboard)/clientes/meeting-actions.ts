@@ -94,6 +94,7 @@ export async function sendClientBookingLinkAction(
       name: true,
       email: true,
       meetingPlan: true,
+      sourceGroupId: true,
       whatsappGroupId: true,
       managerId: true,
       manager: {
@@ -133,14 +134,19 @@ export async function sendClientBookingLinkAction(
     return { error: "Defina o plano de reuniões deste cliente." };
   }
   if (!clientGroupId) {
-    return { error: "Este cliente não possui grupo do WhatsApp configurado." };
+    return { error: "Envio bloqueado: este cliente não possui ID UAZAPI configurado." };
+  }
+  if (!client.sourceGroupId?.trim()) {
+    return { error: "Envio bloqueado: este cliente não possui ID do grupo configurado." };
   }
 
   let sheetClient;
   try {
     const sheet = await fetchPublishedClientSheet();
     const groupMatches = sheet.rows.filter(
-      (row) => row.status === "active" && row.whatsappGroupId === clientGroupId,
+      (row) => row.status === "active"
+        && row.sourceGroupId === client.sourceGroupId
+        && row.whatsappGroupId === clientGroupId,
     );
     if (groupMatches.length !== 1) {
       return { error: "Envio bloqueado: o grupo deste cliente não possui uma linha ativa e única na planilha." };

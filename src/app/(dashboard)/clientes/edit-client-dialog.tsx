@@ -19,6 +19,7 @@ interface EditClientDialogProps {
     email: string | null;
     meetingPlan: string | null;
     whatsappGroupId: string | null;
+    sourceGroupId: string | null;
     whatsappGroupName: string | null;
     managerId: string | null;
   };
@@ -161,15 +162,26 @@ export function EditClientDialog({ client, managers }: EditClientDialogProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="whatsappGroupId">ID do grupo</Label>
+              <Label htmlFor="sourceGroupId">ID do grupo (opcional)</Label>
+              <Input
+                id="sourceGroupId"
+                name="sourceGroupId"
+                defaultValue={client.sourceGroupId ?? ""}
+                placeholder="120363...-group"
+                disabled={isPending}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="whatsappGroupId">ID UAZAPI (opcional)</Label>
               <Input
                 id="whatsappGroupId"
                 name="whatsappGroupId"
                 defaultValue={client.whatsappGroupId ?? ""}
                 placeholder="120363...@g.us"
-                required
                 disabled={isPending}
               />
+              <p className="text-xs text-neutral-400">Os dois IDs só são necessários para enviar reuniões.</p>
             </div>
 
             <div className="flex flex-col gap-1.5">

@@ -19,8 +19,10 @@ const clientSchema = z.object({
     z.string().email("E-mail inválido").or(z.literal("")),
   ),
   meetingPlan: z.string().trim().min(1, "Plano obrigatório").max(100),
+  sourceGroupId: z.string().trim().max(255).optional().or(z.literal("")),
   whatsappGroupId: z.string().trim()
-    .regex(/^\d+@g\.us$/, "ID do grupo inválido. Use o formato 120363...@g.us"),
+    .regex(/^\d+@g\.us$/, "ID UAZAPI inválido. Use o formato 120363...@g.us")
+    .optional().or(z.literal("")),
   whatsappGroupName: z.string().trim().min(1, "Nome do grupo obrigatório").max(255),
   description: z.string().optional().or(z.literal("")),
   managerId: z.string().uuid("Selecione um gestor responsável"),
@@ -60,6 +62,7 @@ export async function createClientAction(
     name: formData.get("name"),
     email: formData.get("email"),
     meetingPlan: formData.get("meetingPlan"),
+    sourceGroupId: formData.get("sourceGroupId"),
     whatsappGroupId: formData.get("whatsappGroupId"),
     whatsappGroupName: formData.get("whatsappGroupName"),
     description: formData.get("description"),
@@ -69,7 +72,9 @@ export async function createClientAction(
   if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
     return { error: "Gestor responsável inválido." };
   }
-  const duplicate = await findClientUsingGroup(user.companyId, parsed.data.whatsappGroupId);
+  const duplicate = parsed.data.whatsappGroupId
+    ? await findClientUsingGroup(user.companyId, parsed.data.whatsappGroupId)
+    : null;
   if (duplicate) {
     return {
       error: `Este grupo já está vinculado ao cliente "${duplicate.name}"${duplicate.deletedAt ? " (arquivado)" : ""}.`,
@@ -83,7 +88,8 @@ export async function createClientAction(
         name: parsed.data.name,
         email: parsed.data.email || null,
         meetingPlan: parsed.data.meetingPlan,
-        whatsappGroupId: parsed.data.whatsappGroupId,
+        sourceGroupId: parsed.data.sourceGroupId || null,
+        whatsappGroupId: parsed.data.whatsappGroupId || null,
         whatsappGroupName: parsed.data.whatsappGroupName,
         color: pickColor(parsed.data.name),
         description: parsed.data.description || null,
@@ -117,6 +123,7 @@ export async function updateClientAction(
     name: formData.get("name"),
     email: formData.get("email"),
     meetingPlan: formData.get("meetingPlan"),
+    sourceGroupId: formData.get("sourceGroupId"),
     whatsappGroupId: formData.get("whatsappGroupId"),
     whatsappGroupName: formData.get("whatsappGroupName"),
     description: formData.get("description"),
@@ -126,11 +133,9 @@ export async function updateClientAction(
   if (!await isValidClientManager(user.companyId, parsed.data.managerId)) {
     return { error: "Gestor responsável inválido." };
   }
-  const duplicate = await findClientUsingGroup(
-    user.companyId,
-    parsed.data.whatsappGroupId,
-    clientId,
-  );
+  const duplicate = parsed.data.whatsappGroupId
+    ? await findClientUsingGroup(user.companyId, parsed.data.whatsappGroupId, clientId)
+    : null;
   if (duplicate) {
     return {
       error: `Este grupo já está vinculado ao cliente "${duplicate.name}"${duplicate.deletedAt ? " (arquivado)" : ""}.`,
@@ -144,7 +149,8 @@ export async function updateClientAction(
         name: parsed.data.name,
         email: parsed.data.email || null,
         meetingPlan: parsed.data.meetingPlan,
-        whatsappGroupId: parsed.data.whatsappGroupId,
+        sourceGroupId: parsed.data.sourceGroupId || null,
+        whatsappGroupId: parsed.data.whatsappGroupId || null,
         whatsappGroupName: parsed.data.whatsappGroupName,
         description: parsed.data.description || null,
         managerId: parsed.data.managerId,
