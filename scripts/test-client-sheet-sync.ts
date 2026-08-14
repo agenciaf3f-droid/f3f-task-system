@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  canonicalizeClientName,
   extractClientName,
   inferPlanFromGroupName,
   isSafeClientNameVariant,
@@ -38,6 +39,11 @@ assert.equal(
 );
 assert.equal(inferPlanFromGroupName("F3F - Rayanne Magna Mesquita Da Silva - 1 FASE"), "1 FASE");
 assert.equal(inferPlanFromGroupName("F3F - Cliente sem sufixo reconhecido - Vídeos"), "");
+assert.equal(canonicalizeClientName("Sinergia (Rubens e Rogério)"), "Sinergia");
+assert.equal(
+  extractClientName("F3F - Sinergia (Rubens e Rogério) - Premium", "Premium"),
+  "Sinergia",
+);
 assert.equal(
   resolveManager([{ id: "1", name: "Amorim" }], "Rafhael", "Outro cliente")?.id,
   "1",
@@ -51,5 +57,6 @@ assert.equal(isSafeClientNameVariant("Karine Xavier", "Karine Xavier de Oliveira
 assert.equal(isSafeClientNameVariant("Frederico Silva de Farias", "Frederico Silva de Faria"), true);
 assert.equal(isSafeClientNameVariant("Adriana Cristina de Costa Leite", "Adriana Cristina da Costa Leite"), true);
 assert.equal(isSafeClientNameVariant("Douglas José da Silva", "Douglas Vieira"), false);
+assert.equal(isSafeClientNameVariant("Sinergia", "Sinergia (Rubens e Rogério)"), true);
 
 console.log("Client sheet sync checks passed");

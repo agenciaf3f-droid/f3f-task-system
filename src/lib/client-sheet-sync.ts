@@ -11,6 +11,9 @@ const MANAGER_ALIASES: Record<string, string> = {
   rafhael: "rafinha",
   raphael: "rafinha",
 };
+const CLIENT_NAME_ALIASES: Record<string, string> = {
+  "sinergia (rubens e rogerio)": "Sinergia",
+};
 
 export type SheetClient = {
   groupName: string;
@@ -93,6 +96,11 @@ function clean(value: string): string {
   return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
+export function canonicalizeClientName(value: string): string {
+  const cleaned = clean(value);
+  return CLIENT_NAME_ALIASES[normalize(cleaned)] ?? cleaned;
+}
+
 const NAME_STOP_WORDS = new Set(["a", "o", "e", "da", "das", "de", "do", "dos"]);
 
 function meaningfulNameTokens(value: string): string[] {
@@ -119,7 +127,7 @@ function editDistance(left: string, right: string): number {
 }
 
 export function isSafeClientNameVariant(left: string, right: string): boolean {
-  if (normalize(left) === normalize(right)) return true;
+  if (normalize(canonicalizeClientName(left)) === normalize(canonicalizeClientName(right))) return true;
   const leftTokens = meaningfulNameTokens(left);
   const rightTokens = meaningfulNameTokens(right);
   if (leftTokens.length === 0 || rightTokens.length === 0) return false;
@@ -162,7 +170,7 @@ export function extractClientName(groupName: string, plan: string): string {
     name = name.replace(/\s+-\s+[^-]+$/, "");
   }
 
-  return clean(name) || clean(groupName);
+  return canonicalizeClientName(clean(name) || clean(groupName));
 }
 
 export function inferPlanFromGroupName(groupName: string): string {
