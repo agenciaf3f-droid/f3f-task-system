@@ -206,7 +206,9 @@ export default async function DashboardPage({
 
       {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
       <div className="flex flex-col gap-4 min-w-0">
-        {(view !== "board" || showCancelled) && (
+        {/* O cabeçalho também precisa aparecer no board vazio. Sem isso, um admin
+            sem tarefas próprias não consegue acessar "Todos" nem outro membro. */}
+        {(view !== "board" || showCancelled || myTasks.length === 0) && (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-base font-bold text-neutral-900">

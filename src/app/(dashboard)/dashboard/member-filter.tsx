@@ -38,7 +38,7 @@ export function MemberFilter({ members, selfName, selected, view }: MemberFilter
           selected === "" ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
         }`}
       >
-        {selfName}
+        <span title={`Somente tarefas de ${selfName}`}>Eu</span>
       </button>
       <button
         type="button"
