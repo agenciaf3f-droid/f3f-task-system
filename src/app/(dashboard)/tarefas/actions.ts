@@ -543,13 +543,11 @@ export async function updateTaskAction(
 
   const old = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
-    select: { assigneeId: true, title: true, project: { select: { clientId: true } } },
+    select: { assigneeId: true, title: true, clientId: true },
   });
   if (!old) return { error: "Tarefa não encontrada." };
 
-  const validClientId = old.project
-    ? old.project.clientId
-    : await resolveCompanyClient(clientId, user.companyId);
+  const validClientId = await resolveCompanyClient(clientId, user.companyId);
 
   const recurrenceRule = parseRecurrenceRuleFromForm(formData.get("recurrenceRule"));
 
@@ -573,7 +571,7 @@ export async function updateTaskAction(
     action: "task.updated",
     resourceType: "task",
     resourceId: taskId,
-    newValue: { title, priority, assigneeId: validAssigneeId },
+    newValue: { title, priority, assigneeId: validAssigneeId, clientId: validClientId },
   });
 
   if (validAssigneeId && validAssigneeId !== old.assigneeId && validAssigneeId !== user.userId) {

@@ -26,6 +26,7 @@ interface Task {
   sectorId: string | null;
   clientId: string | null;
   projectId: string | null;
+  project: { clientId: string } | null;
   dueDate: Date | null;
   recurrenceRule: unknown;
 }
@@ -48,7 +49,7 @@ export function EditTaskForm({
     boundAction,
     {},
   );
-  const [clientId, setClientId] = useState(task.clientId ?? "");
+  const [clientId, setClientId] = useState(task.clientId ?? task.project?.clientId ?? "");
 
   const dueDateValue = task.dueDate
     ? format(new Date(task.dueDate), "yyyy-MM-dd")
@@ -86,19 +87,22 @@ export function EditTaskForm({
           />
         </div>
 
-        {!task.projectId && (
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="clientId">Cliente</Label>
-            <ClientPicker
-              id="clientId"
-              name="clientId"
-              clients={clients}
-              value={clientId}
-              onValueChange={setClientId}
-              disabled={isPending}
-            />
-          </div>
-        )}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="clientId">Cliente</Label>
+          <ClientPicker
+            id="clientId"
+            name="clientId"
+            clients={clients}
+            value={clientId}
+            onValueChange={setClientId}
+            disabled={isPending}
+          />
+          {task.projectId && (
+            <p className="text-xs text-neutral-500">
+              A tarefa continuará no projeto atual; este campo define o cliente atribuído a ela.
+            </p>
+          )}
+        </div>
 
         {/* Description */}
         <div className="flex flex-col gap-1.5">
