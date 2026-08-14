@@ -677,6 +677,45 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
   return {};
 }
 
+export async function updateTaskClientAction(
+  taskId: string,
+  clientId: string | null,
+): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  const parsedClientId = optUuid.safeParse(clientId ?? "");
+  if (!parsedClientId.success) return { error: "Cliente inválido." };
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: { clientId: true, projectId: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+
+  const validClientId = await resolveCompanyClient(parsedClientId.data, user.companyId);
+  if (parsedClientId.data && !validClientId) return { error: "Cliente não encontrado." };
+  if (task.clientId === validClientId) return {};
+
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { clientId: validClientId },
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "task.updated",
+    resourceType: "task",
+    resourceId: taskId,
+    newValue: { clientId: validClientId },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/tarefas");
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
+}
+
 export async function addSubtaskAction(
   parentTaskId: string,
   title: string,
