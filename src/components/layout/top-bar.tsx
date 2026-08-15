@@ -224,11 +224,21 @@ export function TopBar({ userName, unreadCount = 0, notifications = [], userAvat
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // SSE — notificações novas chegam sem reload (~4s). Reconecta em erro fatal (ex: 401 após
-  // cookie expirar) e refaz o snapshot a cada (re)conexão pra fechar gaps da janela de reconexão.
+  // Notificações por consulta periódica.
+  //
+  // Antes isto era um stream SSE: cada aba aberta segurava uma função da Vercel
+  // rodando sem parar (300s por conexão, reconectando sozinha). Uma pessoa com o
+  // sistema aberto 8h consumia 8 HORAS de execução por dia, e uma aba esquecida
+  // consumia 24h — o que estourava a cota do plano Hobby sozinho.
+  //
+  // Aqui cada verificação dura uns 100ms. Duas escolhas mantêm o custo baixo sem
+  // parecer lento:
+  //   - aba em segundo plano não consulta nada (aba esquecida custa zero);
+  //   - ao voltar para a aba, consulta na hora — que é justamente quando a
+  //     pessoa olha para o sininho.
   useEffect(() => {
-    let es: EventSource | null = null;
-    let retry: ReturnType<typeof setTimeout> | null = null;
+    const POLL_MS = 60_000;
+    let timer: ReturnType<typeof setInterval> | null = null;
     let stopped = false;
 
     const mergeItems = (incoming: NotificationItem[]) =>
@@ -241,45 +251,31 @@ export function TopBar({ userName, unreadCount = 0, notifications = [], userAvat
       });
 
     async function refetch() {
+      if (stopped || document.visibilityState === "hidden") return;
       try {
         const res = await fetch("/api/notifications/recent");
         if (!res.ok) return;
         const data = (await res.json()) as { items: NotificationItem[]; unread: number };
+        if (stopped) return;
         mergeItems(data.items);
         setUnread(data.unread);
       } catch {
-        // ignora
+        // erro transitório de rede — tenta no próximo ciclo
       }
     }
 
-    function connect() {
-      if (stopped) return;
-      es = new EventSource("/api/notifications/stream");
-      es.addEventListener("open", () => { refetch(); });
-      es.addEventListener("notifications", (e) => {
-        try {
-          const data = JSON.parse((e as MessageEvent).data) as { items: NotificationItem[]; unread: number };
-          mergeItems(data.items);
-          setUnread(data.unread);
-        } catch {
-          // payload inválido — ignora
-        }
-      });
-      es.onerror = () => {
-        // readyState CLOSED = erro fatal (ex: 401), EventSource NÃO reconecta sozinho → reconecta manual c/ backoff.
-        // readyState CONNECTING = transitório, EventSource reconecta sozinho → não intervir.
-        if (es && es.readyState === EventSource.CLOSED && !stopped) {
-          es.close();
-          retry = setTimeout(connect, 10000);
-        }
-      };
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") void refetch();
     }
 
-    connect();
+    void refetch();
+    timer = setInterval(() => void refetch(), POLL_MS);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       stopped = true;
-      if (retry) clearTimeout(retry);
-      es?.close();
+      if (timer) clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 

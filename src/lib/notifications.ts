@@ -43,15 +43,6 @@ export async function getRecentNotifications(userId: string, limit = 15) {
   });
 }
 
-// Notificações criadas depois de `since` (para o stream SSE).
-export async function getNotificationsSince(userId: string, since: Date) {
-  return prisma.notification.findMany({
-    where: { userId, createdAt: { gt: since } },
-    orderBy: { createdAt: "asc" },
-    select: notificationClientSelect,
-  });
-}
-
 // Gera notificações de "vence hoje" / "atrasada" pro responsável.
 // Dedup: 1 notificação por tarefa por tipo (task_due muda pra task_overdue no dia seguinte).
 // Roda no cron diário — granularidade diária é suficiente.
