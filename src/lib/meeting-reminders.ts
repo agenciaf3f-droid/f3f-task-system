@@ -410,15 +410,16 @@ function collectButtonIds(
 /**
  * Extrai a reunião e a resposta de um payload de webhook da UAZAPI.
  *
- * O formato do evento de clique não está documentado na especificação OpenAPI
- * da UAZAPI, daí a leitura defensiva. O cuidado central: a resposta de botão
- * costuma vir com a mensagem original citada junto, e essa citação carrega os
- * DOIS ids ("sim" e "não"). Uma varredura ingênua pelo texto inteiro leria o
- * id errado e cancelaria uma reunião que o cliente acabou de confirmar.
+ * O cuidado central: a resposta de botão vem com a mensagem original citada
+ * junto, e essa citação carrega os DOIS ids ("sim" e "não") — confirmado no
+ * payload real. Uma varredura pelo texto inteiro leria o id errado e
+ * cancelaria uma reunião que o cliente acabou de confirmar. Por isso só valem
+ * chaves que denotam a opção escolhida, e ambiguidade devolve null.
  *
- * Por isso só valem chaves que denotam a opção escolhida; e se mesmo assim
- * sobrar ambiguidade, a função devolve null para o webhook registrar o payload
- * cru em vez de agir por adivinhação.
+ * Custo importa aqui: este webhook é chamado a cada mensagem de QUALQUER grupo
+ * que a instância enxerga. A varredura é por chave, com profundidade limitada,
+ * e nunca serializa o payload — mensagens com mídia trazem base64, e serializar
+ * isso milhares de vezes por dia sairia caro à toa.
  */
 export function extractButtonResponse(
   payload: unknown,
@@ -435,14 +436,24 @@ export function extractButtonResponse(
     }
   }
 
-  // Nenhuma chave conhecida: aceita varredura ampla só quando o payload
-  // menciona exatamente uma das duas opções, o que descarta a citação.
-  const serialized = JSON.stringify(payload ?? null);
-  const declined = new RegExp(`${DECLINE_BUTTON_PREFIX}(${UUID_PATTERN})`, "gi").exec(serialized);
-  const confirmed = new RegExp(`${CONFIRM_BUTTON_PREFIX}(${UUID_PATTERN})`, "gi").exec(serialized);
-
-  if (declined && !confirmed) return { meetingId: declined[1], response: "declined" };
-  if (confirmed && !declined) return { meetingId: confirmed[1], response: "confirmed" };
-
   return null;
+}
+
+/**
+ * Indica que o evento parece uma resposta de botão que não conseguimos ler.
+ *
+ * Serve só para decidir se vale logar o formato — por isso olha campos rasos e
+ * conhecidos em vez de vasculhar o payload.
+ */
+export function looksLikeUnreadButtonReply(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const root = payload as Record<string, unknown>;
+  const message = (root.message ?? root) as Record<string, unknown>;
+  if (!message || typeof message !== "object") return false;
+
+  const type = message.messageType;
+  if (typeof type === "string" && type.toLowerCase().includes("response")) return true;
+
+  const tapped = message.buttonOrListid;
+  return typeof tapped === "string" && tapped.trim().length > 0;
 }

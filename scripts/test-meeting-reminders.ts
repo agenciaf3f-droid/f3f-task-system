@@ -46,6 +46,22 @@ function testMessages({ buildReminderMessage }: RemindersModule) {
   );
 }
 
+function testUnreadReplyDetection({ looksLikeUnreadButtonReply }: RemindersModule) {
+  // Só decide se vale logar. Mensagem comum de grupo — o caso de longe mais
+  // frequente — precisa sair barato, sem varrer o payload.
+  assert.equal(looksLikeUnreadButtonReply({ message: { messageType: "conversation" } }), false);
+  assert.equal(looksLikeUnreadButtonReply({ message: { buttonOrListid: "" } }), false);
+  assert.equal(looksLikeUnreadButtonReply(null), false);
+  assert.equal(looksLikeUnreadButtonReply("texto"), false);
+
+  assert.equal(
+    looksLikeUnreadButtonReply({ message: { messageType: "ButtonsResponseMessage" } }),
+    true,
+  );
+  assert.equal(looksLikeUnreadButtonReply({ messageType: "ListResponseMessage" }), true);
+  assert.equal(looksLikeUnreadButtonReply({ message: { buttonOrListid: "algo" } }), true);
+}
+
 function testButtonExtraction({ extractButtonResponse }: RemindersModule) {
   const meetingId = "3f2b9c14-8d5a-4e67-9b01-2c7d8e4f5a6b";
   const other = "9a1b2c3d-4e5f-4071-8293-a4b5c6d7e8f9";
@@ -158,11 +174,10 @@ function testButtonExtraction({ extractButtonResponse }: RemindersModule) {
     null,
   );
 
-  // Formato desconhecido, mas mencionando uma única opção: aceita.
-  assert.deepEqual(
-    extractButtonResponse({ payload: { texto: `f3f-nao:${meetingId}` } }),
-    { meetingId, response: "declined" },
-  );
+  // Id nosso solto num campo qualquer NÃO conta. Ler o payload inteiro exigiria
+  // serializá-lo a cada mensagem de cada grupo — custo que não se paga, já que o
+  // formato real é conhecido. Se a UAZAPI mudar, o webhook loga e a gente ajusta.
+  assert.equal(extractButtonResponse({ payload: { texto: `f3f-nao:${meetingId}` } }), null);
 
   // Ruído sem id nosso, e id de outra reunião não vira confirmação errada.
   assert.equal(extractButtonResponse({ message: { conversation: "oi" } }), null);
@@ -222,6 +237,7 @@ async function main() {
 
     testMessages(reminders);
     testButtonExtraction(reminders);
+    testUnreadReplyDetection(reminders);
     await testButtonSend(whatsapp);
 
     console.log("Meeting reminder checks passed");

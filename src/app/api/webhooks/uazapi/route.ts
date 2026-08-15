@@ -1,6 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { applyClientResponse, extractButtonResponse } from "@/lib/meeting-reminders";
+import {
+  applyClientResponse,
+  extractButtonResponse,
+  looksLikeUnreadButtonReply,
+} from "@/lib/meeting-reminders";
 
 /**
  * A UAZAPI não assina os webhooks, então a autenticação é um segredo
@@ -55,10 +59,10 @@ export async function POST(request: Request) {
 
   const parsed = extractButtonResponse(payload);
   if (!parsed) {
-    // Evento que não é resposta de botão (mensagem comum, status de conexão) ou
-    // formato ainda não mapeado. Nos dois casos: 200, para a UAZAPI não ficar
-    // reenviando. A forma vai para o log só quando há indício de ser nosso.
-    if (JSON.stringify(payload ?? null).includes("f3f-")) {
+    // Caminho de longe mais comum: mensagem qualquer de qualquer grupo. Sai
+    // daqui sem tocar no banco e sem serializar o payload — só um evento que
+    // aparenta ser clique de botão justifica o custo de descrever a forma.
+    if (looksLikeUnreadButtonReply(payload)) {
       console.warn(
         "[uazapi-webhook] resposta de botão não reconhecida:",
         JSON.stringify(describeShape(payload)),
