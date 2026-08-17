@@ -144,6 +144,8 @@ export type ScheduleSummary = {
   pending: number;
   skipped: number;
   failed: number;
+  /** Motivo -> quantidade. Sem isto, uma falha em massa vira adivinhação. */
+  reasons: Record<string, number>;
 };
 
 /**
@@ -219,6 +221,10 @@ export async function scheduleMeetingReminders(
     pending: 0,
     skipped: 0,
     failed: 0,
+    reasons: {},
+  };
+  const conta = (motivo: string) => {
+    summary.reasons[motivo] = (summary.reasons[motivo] ?? 0) + 1;
   };
 
   // Sem grupo ou sem nome não há mensagem possível. Registrar como skipped
@@ -233,6 +239,7 @@ export async function scheduleMeetingReminders(
       ),
     );
     summary.skipped = REMINDER_KINDS.length;
+    conta(!groupId ? "sem_grupo_whatsapp" : "sem_nome_do_cliente");
     return summary;
   }
 
@@ -251,6 +258,7 @@ export async function scheduleMeetingReminders(
     if (sendAt.getTime() <= Date.now()) {
       await upsertReminder(meeting.id, kind, sendAt, { status: "skipped", detail: "horario_passado" });
       summary.skipped += 1;
+      conta("horario_passado");
       continue;
     }
 
@@ -259,6 +267,7 @@ export async function scheduleMeetingReminders(
     if (sendAt.getTime() - Date.now() > SCHEDULE_HORIZON_DAYS * 24 * 60 * 60 * 1000) {
       await upsertReminder(meeting.id, kind, sendAt, { status: "pending", detail: "fora_do_horizonte" });
       summary.pending += 1;
+      conta("fora_do_horizonte");
       continue;
     }
 
@@ -291,8 +300,10 @@ export async function scheduleMeetingReminders(
       summary.scheduled += 1;
     } else {
       // Fica como failed para o reconciliador tentar de novo amanhã.
-      await upsertReminder(meeting.id, kind, sendAt, { status: "failed", detail: result.reason });
+      const motivo = result.status ? `${result.reason}_${result.status}` : result.reason;
+      await upsertReminder(meeting.id, kind, sendAt, { status: "failed", detail: motivo });
       summary.failed += 1;
+      conta(motivo);
     }
   }
 
@@ -394,6 +405,7 @@ export async function reconcileMeetingReminders(): Promise<{
   scheduled: number;
   failed: number;
   orphansCancelled: number;
+  reasons: Record<string, number>;
 }> {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -417,6 +429,7 @@ export async function reconcileMeetingReminders(): Promise<{
   let scheduled = 0;
   let failed = 0;
   let touched = 0;
+  const reasons: Record<string, number> = {};
 
   for (const meeting of meetings) {
     const result = await scheduleMeetingReminders(meeting);
@@ -424,6 +437,9 @@ export async function reconcileMeetingReminders(): Promise<{
     if (result.scheduled > 0 || result.failed > 0) touched += 1;
     scheduled += result.scheduled;
     failed += result.failed;
+    for (const [motivo, n] of Object.entries(result.reasons)) {
+      reasons[motivo] = (reasons[motivo] ?? 0) + n;
+    }
   }
 
   return {
@@ -431,6 +447,7 @@ export async function reconcileMeetingReminders(): Promise<{
     scheduled,
     failed,
     orphansCancelled: orphans.cancelled,
+    reasons,
   };
 }
 
