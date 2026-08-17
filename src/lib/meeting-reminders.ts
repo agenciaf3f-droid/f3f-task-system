@@ -1,9 +1,7 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { deleteCalendarMeeting } from "@/lib/google-calendar";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
-import { nowInBrazil } from "@/lib/meeting-recurrence";
-import { sendWhatsAppButtons, sendWhatsAppText } from "@/lib/whatsapp";
+import { cancelWhatsAppSchedule, scheduleWhatsAppMessage } from "@/lib/whatsapp";
 
 export const REMINDER_KINDS = ["day_before", "morning", "hour_before", "minutes_before"] as const;
 export type ReminderKind = (typeof REMINDER_KINDS)[number];
@@ -12,8 +10,7 @@ export type ReminderKind = (typeof REMINDER_KINDS)[number];
 export const CONFIRM_BUTTON_PREFIX = "f3f-sim:";
 export const DECLINE_BUTTON_PREFIX = "f3f-nao:";
 
-/** Depois de 3 falhas de envio o lembrete é abandonado — não vira spam. */
-const MAX_ATTEMPTS = 3;
+const TIMEZONE = process.env.GOOGLE_CALENDAR_TIMEZONE || "America/Sao_Paulo";
 
 const WEEKDAYS_PT = [
   "domingo",
@@ -25,22 +22,55 @@ const WEEKDAYS_PT = [
   "sábado",
 ];
 
-// ─────────────────────────── tempo (wall-clock BR) ───────────────────────────
-// Reunião é gravada como date "YYYY-MM-DD" + startTime "HH:MM" no horário de
-// Brasília, e `nowInBrazil()` devolve o agora no mesmo formato. Comparando os
-// dois nesse espaço de string não existe conversão de fuso para errar — por
-// isso nada aqui usa `new Date()` cru.
+// ──────────────────────────── horários ────────────────────────────
+// A reunião é gravada como date "YYYY-MM-DD" + startTime "HH:MM" no horário de
+// Brasília. A UAZAPI precisa de um instante absoluto, então aqui — e só aqui —
+// acontece a conversão de horário de parede para timestamp.
 
-function toMinutes(date: string, time: string): number {
+/** Quanto a zona está deslocada de UTC no instante dado. */
+function zoneOffsetMs(instant: Date): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TIMEZONE,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  const asIfUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour) % 24,
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  return asIfUtc - instant.getTime();
+}
+
+/**
+ * Converte horário de parede de Brasília em instante absoluto.
+ *
+ * Não usa offset fixo de -3: se o Brasil voltar a ter horário de verão, a
+ * conta continua certa porque o deslocamento é perguntado ao Intl para
+ * aquela data específica.
+ */
+export function brazilWallClockToInstant(date: string, time: string): Date {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
-  return Math.floor(Date.UTC(year, month - 1, day) / 60_000) + hour * 60 + minute;
+  const guess = Date.UTC(year, month - 1, day, hour, minute);
+  return new Date(guess - zoneOffsetMs(new Date(guess)));
 }
 
 function shiftDate(date: string, deltaDays: number): string {
   const [year, month, day] = date.split("-").map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, day + deltaDays));
-  return shifted.toISOString().slice(0, 10);
+  return new Date(Date.UTC(year, month - 1, day + deltaDays)).toISOString().slice(0, 10);
 }
 
 function weekdayName(date: string): string {
@@ -54,37 +84,21 @@ function dayBeforeClock(): string {
   return raw && /^\d{2}:\d{2}$/.test(raw) ? raw : "06:00";
 }
 
-/**
- * Momento-alvo de cada lembrete e a tolerância de atraso aceita.
- *
- * A tolerância existe porque o disparo vem do GitHub Actions, cujo agendamento
- * atrasa com frequência. Passada a janela o lembrete é descartado em vez de
- * chegar fora de hora — um "faltam 5 minutos" entregue depois da reunião é
- * pior que lembrete nenhum.
- */
-function targetFor(
-  kind: ReminderKind,
+/** Instante de disparo de cada um dos quatro lembretes. */
+export function computeReminderTimes(
   meetingDate: string,
-  meetingStart: string,
-): { target: number; graceMinutes: number } {
-  const start = toMinutes(meetingDate, meetingStart);
-
-  switch (kind) {
-    case "day_before":
-      return { target: toMinutes(shiftDate(meetingDate, -1), dayBeforeClock()), graceMinutes: 120 };
-    case "morning":
-      return { target: toMinutes(meetingDate, "06:00"), graceMinutes: 120 };
-    case "hour_before":
-      return { target: start - 60, graceMinutes: 30 };
-    case "minutes_before":
-      // Janela de 7 min para um cron de 5 em 5: uma janela de exatos 5 minutos
-      // depende de o disparo cair sem atraso nenhum, e o GitHub não garante
-      // isso. O limite superior é o início da reunião — nunca depois.
-      return { target: start - 7, graceMinutes: 7 };
-  }
+  startTime: string,
+): Record<ReminderKind, Date> {
+  const start = brazilWallClockToInstant(meetingDate, startTime);
+  return {
+    day_before: brazilWallClockToInstant(shiftDate(meetingDate, -1), dayBeforeClock()),
+    morning: brazilWallClockToInstant(meetingDate, "06:00"),
+    hour_before: new Date(start.getTime() - 60 * 60 * 1000),
+    minutes_before: new Date(start.getTime() - 5 * 60 * 1000),
+  };
 }
 
-// ──────────────────────────────── mensagens ────────────────────────────────
+// ──────────────────────────── mensagens ────────────────────────────
 
 type MessageContext = { clientName: string; meetingDate: string; startTime: string };
 
@@ -122,169 +136,268 @@ export function buildReminderMessage(kind: ReminderKind, ctx: MessageContext): s
   }
 }
 
-// ──────────────────────────────── despacho ────────────────────────────────
+// ──────────────────────────── agendamento ────────────────────────────
 
-type ReminderCandidate = {
+export type ScheduleSummary = {
+  meetingId: string;
+  scheduled: number;
+  pending: number;
+  skipped: number;
+  failed: number;
+};
+
+/**
+ * Antecedência com que um lembrete é entregue à fila da UAZAPI.
+ *
+ * A linha no banco nasce junto com a reunião, mas a campanha lá fora só é
+ * criada quando o disparo se aproxima. Uma série mensal de 12 ocorrências
+ * geraria 48 campanhas de uma vez, meses à frente — muita coisa exposta a
+ * qualquer mudança de horário, e uma marcação lentíssima para o cliente.
+ *
+ * 7 dias dá folga: o reconciliador roda todo dia e o lembrete mais cedo é o de
+ * véspera, então mesmo perdendo alguns dias seguidos nada fica para trás.
+ */
+const SCHEDULE_HORIZON_DAYS = 7;
+
+const MEETING_FIELDS = {
+  id: true,
+  date: true,
+  startTime: true,
+  status: true,
+  clientName: true,
+  clientGroupId: true,
+} as const;
+
+type SchedulableMeeting = {
   id: string;
   date: string;
   startTime: string;
+  status: string;
   clientName: string | null;
   clientGroupId: string | null;
 };
 
-export type DispatchSummary = {
-  now: { date: string; time: string };
-  considered: number;
-  sent: number;
-  failed: number;
-  skipped: Array<{ meetingId: string; kind: ReminderKind; reason: string }>;
-};
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-}
-
 /**
- * Reserva o lembrete antes de enviar. A unique (meetingId, kind) faz duas
- * execuções simultâneas do cron competirem no banco — só uma ganha o direito
- * de mandar a mensagem.
+ * Registra os quatro lembretes de uma reunião.
  *
- * Retorna null quando outro processo já mandou (ou já esgotou as tentativas).
- */
-async function claim(meetingId: string, kind: ReminderKind): Promise<{ id: string } | null> {
-  try {
-    return await prisma.meetingReminder.create({
-      data: { meetingId, kind, status: "pending", attempts: 1 },
-      select: { id: true },
-    });
-  } catch (error) {
-    if (!isUniqueViolation(error)) throw error;
-  }
-
-  // Já existe linha: só reaproveita se a tentativa anterior falhou de verdade.
-  const existing = await prisma.meetingReminder.findUnique({
-    where: { meetingId_kind: { meetingId, kind } },
-    select: { id: true, status: true, attempts: true },
-  });
-  if (!existing || existing.status !== "failed" || existing.attempts >= MAX_ATTEMPTS) return null;
-
-  const retried = await prisma.meetingReminder.updateMany({
-    where: { id: existing.id, status: "failed" },
-    data: { status: "pending", attempts: { increment: 1 } },
-  });
-  return retried.count === 1 ? { id: existing.id } : null;
-}
-
-async function deliver(
-  kind: ReminderKind,
-  meeting: ReminderCandidate,
-  clientName: string,
-  groupId: string,
-) {
-  const message = buildReminderMessage(kind, {
-    clientName,
-    meetingDate: meeting.date,
-    startTime: meeting.startTime,
-  });
-  const trackId = `meeting-reminder:${kind}:${meeting.id}`;
-
-  if (kind !== "day_before") {
-    return sendWhatsAppText({ groupId, message, trackId });
-  }
-
-  return sendWhatsAppButtons({
-    groupId,
-    message,
-    trackId,
-    buttons: [
-      { label: "Sim, tudo certo!", id: `${CONFIRM_BUTTON_PREFIX}${meeting.id}` },
-      { label: "Não vou conseguir!", id: `${DECLINE_BUTTON_PREFIX}${meeting.id}` },
-    ],
-  });
-}
-
-/**
- * Varre as reuniões de hoje e amanhã e dispara os lembretes vencidos.
+ * A linha entra sempre, com o instante do disparo. A campanha na UAZAPI só é
+ * criada quando o horário está dentro do horizonte — o resto fica `pending`
+ * até o reconciliador alcançá-lo.
  *
- * Idempotente: pode ser chamada quantas vezes quiser na mesma janela que o
- * cliente recebe cada mensagem uma única vez.
+ * Idempotente: lembrete que já tem campanha viva é deixado em paz, então
+ * chamar de novo (inclusive pelo reconciliador) não duplica mensagem.
+ *
+ * Lembrete cujo horário já passou é marcado como `skipped` — reunião marcada
+ * em cima da hora não deve receber "confirma amanhã?" retroativo.
  */
-export async function dispatchMeetingReminders(): Promise<DispatchSummary> {
-  const now = nowInBrazil();
-  const nowMinutes = toMinutes(now.date, now.time);
+export async function scheduleMeetingReminders(
+  meetingOrId: string | SchedulableMeeting,
+): Promise<ScheduleSummary | null> {
+  const meeting = typeof meetingOrId === "string"
+    ? await prisma.meeting.findUnique({ where: { id: meetingOrId }, select: MEETING_FIELDS })
+    : meetingOrId;
 
-  // Véspera + dia da reunião: basta olhar de ontem a amanhã.
-  const meetings = await prisma.meeting.findMany({
-    where: {
-      status: "confirmed",
-      date: { gte: shiftDate(now.date, -1), lte: shiftDate(now.date, 1) },
-    },
-    select: { id: true, date: true, startTime: true, clientName: true, clientGroupId: true },
-  });
+  if (!meeting || meeting.status !== "confirmed") return null;
 
-  const summary: DispatchSummary = {
-    now,
-    considered: meetings.length,
-    sent: 0,
+  const groupId = meeting.clientGroupId?.trim();
+  const clientName = meeting.clientName?.trim();
+  const summary: ScheduleSummary = {
+    meetingId: meeting.id,
+    scheduled: 0,
+    pending: 0,
+    skipped: 0,
     failed: 0,
-    skipped: [],
   };
 
-  for (const meeting of meetings) {
-    for (const kind of REMINDER_KINDS) {
-      const { target, graceMinutes } = targetFor(kind, meeting.date, meeting.startTime);
+  // Sem grupo ou sem nome não há mensagem possível. Registrar como skipped
+  // deixa o rastro visível em vez de falhar silenciosamente.
+  if (!groupId || !clientName) {
+    await Promise.all(
+      REMINDER_KINDS.map((kind) =>
+        upsertReminder(meeting.id, kind, new Date(), {
+          status: "skipped",
+          detail: !groupId ? "sem_grupo_whatsapp" : "sem_nome_do_cliente",
+        }),
+      ),
+    );
+    summary.skipped = REMINDER_KINDS.length;
+    return summary;
+  }
 
-      // Ainda não venceu, ou venceu há tempo demais (cron atrasado / reunião
-      // marcada em cima da hora, quando o alvo já nasceu no passado).
-      if (nowMinutes < target || nowMinutes > target + graceMinutes) continue;
+  const times = computeReminderTimes(meeting.date, meeting.startTime);
+  const existing = await prisma.meetingReminder.findMany({
+    where: { meetingId: meeting.id },
+    select: { kind: true, status: true, folderId: true },
+  });
+  const byKind = new Map(existing.map((row) => [row.kind, row]));
 
-      // Nunca mandar depois que a reunião começou.
-      if (nowMinutes > toMinutes(meeting.date, meeting.startTime)) continue;
+  for (const kind of REMINDER_KINDS) {
+    const already = byKind.get(kind);
+    if (already?.status === "scheduled" && already.folderId) continue;
 
-      const groupId = meeting.clientGroupId?.trim();
-      const clientName = meeting.clientName?.trim();
-      if (!groupId || !clientName) {
-        summary.skipped.push({
-          meetingId: meeting.id,
-          kind,
-          reason: !groupId ? "sem_grupo_whatsapp" : "sem_nome_do_cliente",
-        });
-        continue;
-      }
+    const sendAt = times[kind];
+    if (sendAt.getTime() <= Date.now()) {
+      await upsertReminder(meeting.id, kind, sendAt, { status: "skipped", detail: "horario_passado" });
+      summary.skipped += 1;
+      continue;
+    }
 
-      const claimed = await claim(meeting.id, kind);
-      if (!claimed) continue;
+    // Longe demais: registra a intenção e deixa para o reconciliador. Evita
+    // encher a fila da UAZAPI com meses de antecedência.
+    if (sendAt.getTime() - Date.now() > SCHEDULE_HORIZON_DAYS * 24 * 60 * 60 * 1000) {
+      await upsertReminder(meeting.id, kind, sendAt, { status: "pending", detail: "fora_do_horizonte" });
+      summary.pending += 1;
+      continue;
+    }
 
-      try {
-        const result = await deliver(kind, meeting, clientName, groupId);
-        if (result.delivered) {
-          summary.sent += 1;
-          await prisma.meetingReminder.update({
-            where: { id: claimed.id },
-            data: { status: "sent", destination: result.destination, detail: result.mode },
-          });
-        } else {
-          summary.failed += 1;
-          await prisma.meetingReminder.update({
-            where: { id: claimed.id },
-            data: {
-              status: "failed",
-              detail: result.status ? `${result.reason}:${result.status}` : result.reason,
-            },
-          });
-        }
-      } catch (error) {
-        summary.failed += 1;
-        console.error("[meeting-reminders] envio falhou", { meetingId: meeting.id, kind, error });
-        await prisma.meetingReminder.update({
-          where: { id: claimed.id },
-          data: { status: "failed", detail: "exception" },
-        });
-      }
+    const message = buildReminderMessage(kind, {
+      clientName,
+      meetingDate: meeting.date,
+      startTime: meeting.startTime,
+    });
+
+    const result = await scheduleWhatsAppMessage({
+      groupId,
+      message,
+      sendAt,
+      info: `f3f-lembrete:${kind}:${meeting.id}`,
+      buttons: kind === "day_before"
+        ? [
+            { label: "Sim, tudo certo!", id: `${CONFIRM_BUTTON_PREFIX}${meeting.id}` },
+            { label: "Não vou conseguir!", id: `${DECLINE_BUTTON_PREFIX}${meeting.id}` },
+          ]
+        : undefined,
+    });
+
+    if (result.scheduled) {
+      await upsertReminder(meeting.id, kind, sendAt, {
+        status: "scheduled",
+        folderId: result.folderId,
+        destination: result.destination,
+        detail: result.mode,
+      });
+      summary.scheduled += 1;
+    } else {
+      // Fica como failed para o reconciliador tentar de novo amanhã.
+      await upsertReminder(meeting.id, kind, sendAt, { status: "failed", detail: result.reason });
+      summary.failed += 1;
     }
   }
 
   return summary;
+}
+
+async function upsertReminder(
+  meetingId: string,
+  kind: ReminderKind,
+  scheduledFor: Date,
+  data: { status: string; folderId?: string; destination?: string; detail?: string },
+) {
+  await prisma.meetingReminder.upsert({
+    where: { meetingId_kind: { meetingId, kind } },
+    create: { meetingId, kind, scheduledFor, ...data },
+    update: { scheduledFor, folderId: data.folderId ?? null, ...data },
+  });
+}
+
+/**
+ * Desmarca os lembretes de uma ou mais reuniões.
+ *
+ * Apaga dos DOIS lados. Remover só a linha do banco deixaria a mensagem viva na
+ * fila da UAZAPI, e o cliente receberia lembrete de reunião cancelada.
+ *
+ * Quando o cancelamento na UAZAPI falha, a linha é mantida como `failed` em vez
+ * de apagada — sem o `folder_id` ninguém mais conseguiria desmarcar aquela
+ * campanha. O reconciliador tenta de novo.
+ */
+export async function cancelMeetingReminders(meetingIds: string[]): Promise<{
+  cancelled: number;
+  failed: number;
+}> {
+  if (meetingIds.length === 0) return { cancelled: 0, failed: 0 };
+
+  const reminders = await prisma.meetingReminder.findMany({
+    where: { meetingId: { in: meetingIds } },
+    select: { id: true, folderId: true },
+  });
+  if (reminders.length === 0) return { cancelled: 0, failed: 0 };
+
+  const removable: string[] = [];
+  const stuck: string[] = [];
+
+  for (const reminder of reminders) {
+    if (!reminder.folderId) {
+      removable.push(reminder.id);
+      continue;
+    }
+    const ok = await cancelWhatsAppSchedule(reminder.folderId);
+    (ok ? removable : stuck).push(reminder.id);
+  }
+
+  if (removable.length > 0) {
+    await prisma.meetingReminder.deleteMany({ where: { id: { in: removable } } });
+  }
+  if (stuck.length > 0) {
+    await prisma.meetingReminder.updateMany({
+      where: { id: { in: stuck } },
+      data: { status: "failed", detail: "cancelamento_falhou" },
+    });
+  }
+
+  return { cancelled: removable.length, failed: stuck.length };
+}
+
+/**
+ * Conserta divergências entre o banco e a fila da UAZAPI.
+ *
+ * Roda uma vez por dia — não para descobrir se chegou a hora de enviar (disso a
+ * UAZAPI cuida), mas para pegar o agendamento que falhou por queda de rede na
+ * hora da marcação e o cancelamento que não chegou ao outro lado. É o que torna
+ * o sistema auto-corrigível sem ficar acordando de minuto em minuto.
+ */
+export async function reconcileMeetingReminders(): Promise<{
+  scheduledMeetings: number;
+  scheduled: number;
+  failed: number;
+  orphansCancelled: number;
+}> {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 1. Lembretes presos em reunião que não está mais confirmada.
+  const orphanMeetingIds = (
+    await prisma.meetingReminder.findMany({
+      where: { meeting: { status: { not: "confirmed" } } },
+      select: { meetingId: true },
+      distinct: ["meetingId"],
+    })
+  ).map((row) => row.meetingId);
+  const orphans = await cancelMeetingReminders(orphanMeetingIds);
+
+  // 2. Reuniões confirmadas de hoje em diante sem agendamento completo.
+  const meetings = await prisma.meeting.findMany({
+    where: { status: "confirmed", date: { gte: today } },
+    select: MEETING_FIELDS,
+    orderBy: { date: "asc" },
+  });
+
+  let scheduled = 0;
+  let failed = 0;
+  let touched = 0;
+
+  for (const meeting of meetings) {
+    const result = await scheduleMeetingReminders(meeting);
+    if (!result) continue;
+    if (result.scheduled > 0 || result.failed > 0) touched += 1;
+    scheduled += result.scheduled;
+    failed += result.failed;
+  }
+
+  return {
+    scheduledMeetings: touched,
+    scheduled,
+    failed,
+    orphansCancelled: orphans.cancelled,
+  };
 }
 
 // ─────────────────────── resposta do cliente (botão) ───────────────────────
@@ -297,9 +410,8 @@ export type ClientResponseOutcome =
  * Aplica o toque do cliente no botão do lembrete de véspera.
  *
  * "Não vou conseguir" cancela a reunião de verdade: marca como `cancelled`,
- * apaga o evento do Google Calendar e com isso libera o horário para outro
- * agendamento. Os lembretes seguintes param sozinhos, porque a varredura só
- * enxerga reunião com status `confirmed`.
+ * apaga o evento do Google Calendar, libera o horário e desmarca os lembretes
+ * seguintes — que já estão na fila da UAZAPI e sairiam mesmo assim.
  */
 export async function applyClientResponse(
   meetingId: string,
@@ -307,13 +419,7 @@ export async function applyClientResponse(
 ): Promise<ClientResponseOutcome> {
   const meeting = await prisma.meeting.findUnique({
     where: { id: meetingId },
-    select: {
-      id: true,
-      status: true,
-      googleEventId: true,
-      clientPlan: true,
-      clientResponse: true,
-    },
+    select: { id: true, status: true, googleEventId: true, clientPlan: true, clientResponse: true },
   });
   if (!meeting) return { ok: false, reason: "not_found" };
 
@@ -333,16 +439,14 @@ export async function applyClientResponse(
 
   await prisma.meeting.update({
     where: { id: meeting.id },
-    data: {
-      clientResponse: "declined",
-      clientRespondedAt: new Date(),
-      status: "cancelled",
-    },
+    data: { clientResponse: "declined", clientRespondedAt: new Date(), status: "cancelled" },
   });
 
+  await cancelMeetingReminders([meeting.id]);
+
   if (meeting.googleEventId) {
-    // O evento pode estar na agenda do plano, não na primária — sem resolver
-    // o calendarId o delete cai em 404 e o horário fica ocupado no Google.
+    // O evento pode estar na agenda do plano, não na primária — sem resolver o
+    // calendarId o delete cai em 404 e o horário fica ocupado no Google.
     const calendarId = await resolvePlanCalendarId(meeting.clientPlan);
     await deleteCalendarMeeting(meeting.googleEventId, calendarId);
   }
@@ -350,11 +454,12 @@ export async function applyClientResponse(
   return { ok: true, response, alreadyHandled: false };
 }
 
+// ─────────────────────── leitura do webhook ───────────────────────
+
 const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
 /**
- * Chaves que carregam o id do botão nas variações de payload conhecidas, em
- * dois níveis de confiança.
+ * Chaves que carregam o id do botão, em dois níveis de confiança.
  *
  * As do primeiro grupo afirmam a opção que o cliente tocou — quando alguma
  * aparece, ela decide sozinha. As genéricas também são usadas pela mensagem
@@ -362,8 +467,7 @@ const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
  * primeiro grupo existir no payload.
  *
  * `buttonOrListid` é o campo que a instância realmente usa: não consta da spec
- * da UAZAPI, foi observado no retorno de `/message/find`. Vem vazio na mensagem
- * enviada e preenchido na resposta do cliente.
+ * da UAZAPI, foi observado no retorno de `/message/find`.
  */
 const SELECTED_ID_KEYS =
   /^(buttonOrListid|selectedButtonId|selectedId|selectedRowId|selectedOptionId)$/i;
@@ -381,10 +485,6 @@ function parseButtonId(
   return null;
 }
 
-/**
- * Percorre o payload atrás de chaves que representam um id de botão nosso,
- * separando as afirmativas ("selected*") das genéricas.
- */
 function collectButtonIds(
   node: unknown,
   found: { selected: string[]; fallback: string[] },

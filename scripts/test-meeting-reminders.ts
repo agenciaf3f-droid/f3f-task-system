@@ -21,7 +21,7 @@ let lastBody: Record<string, unknown> | null = null;
 globalThis.fetch = (async (input, init) => {
   lastPath = new URL(String(input)).pathname;
   lastBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-  return new Response("{}", { status: 200 });
+  return Response.json({ folder_id: "folder-teste", status: "queued", count: 1 });
 }) as typeof fetch;
 
 function testMessages({ buildReminderMessage }: RemindersModule) {
@@ -187,46 +187,84 @@ function testButtonExtraction({ extractButtonResponse }: RemindersModule) {
   );
 }
 
-async function testButtonSend({ sendWhatsAppButtons }: WhatsAppModule) {
-  const meetingId = "3f2b9c14-8d5a-4e67-9b01-2c7d8e4f5a6b";
+async function testReminderTimes({ computeReminderTimes, brazilWallClockToInstant }: RemindersModule) {
+  // Horário de parede de Brasília -> instante absoluto. 14:00 em São Paulo
+  // (UTC-3) é 17:00 UTC. Errar isto mandaria todo lembrete 3 horas fora.
+  assert.equal(
+    brazilWallClockToInstant("2026-08-20", "14:00").toISOString(),
+    "2026-08-20T17:00:00.000Z",
+  );
+
+  const times = computeReminderTimes("2026-08-20", "14:00");
+  assert.equal(times.day_before.toISOString(), "2026-08-19T09:00:00.000Z"); // 06:00 BRT da véspera
+  assert.equal(times.morning.toISOString(), "2026-08-20T09:00:00.000Z");    // 06:00 BRT do dia
+  assert.equal(times.hour_before.toISOString(), "2026-08-20T16:00:00.000Z"); // 13:00 BRT
+  assert.equal(times.minutes_before.toISOString(), "2026-08-20T16:55:00.000Z"); // 13:55 BRT
+
+  // Véspera atravessando virada de mês.
+  assert.equal(
+    computeReminderTimes("2026-09-01", "09:00").day_before.toISOString(),
+    "2026-08-31T09:00:00.000Z",
+  );
+}
+
+async function testScheduleSafety({ scheduleWhatsAppMessage }: WhatsAppModule) {
+  const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   // Destino de cliente real é substituído pelo grupo de homologação.
-  const sent = await sendWhatsAppButtons({
+  const ok = await scheduleWhatsAppMessage({
     groupId: "120363000000000000@g.us",
     message: "Confirma?",
-    trackId: "test-buttons",
+    sendAt: future,
+    info: "teste",
     buttons: [
-      { label: "Sim, tudo certo!", id: `f3f-sim:${meetingId}` },
-      { label: "Não vou conseguir!", id: `f3f-nao:${meetingId}` },
+      { label: "Sim, tudo certo!", id: "f3f-sim:abc" },
+      { label: "Não vou conseguir!", id: "f3f-nao:abc" },
     ],
   });
-  assert.equal(sent.delivered, true);
-  assert.equal(lastPath, "/send/menu");
-  assert.equal(lastBody?.number, authorizedGroup);
+  assert.deepEqual(ok, {
+    scheduled: true,
+    folderId: "folder-teste",
+    destination: authorizedGroup,
+    mode: "test",
+  });
+  assert.equal(lastPath, "/sender/simple");
+  assert.deepEqual(lastBody?.numbers, [authorizedGroup]);
   assert.equal(lastBody?.type, "button");
+  assert.equal(lastBody?.scheduled_for, future.getTime());
   assert.deepEqual(lastBody?.choices, [
-    `Sim, tudo certo!|f3f-sim:${meetingId}`,
-    `Não vou conseguir!|f3f-nao:${meetingId}`,
+    "Sim, tudo certo!|f3f-sim:abc",
+    "Não vou conseguir!|f3f-nao:abc",
   ]);
 
-  // "|" no rótulo quebraria o parsing do id pela UAZAPI.
-  const rejected = await sendWhatsAppButtons({
+  // Sem botões vira mensagem de texto.
+  await scheduleWhatsAppMessage({
+    groupId: authorizedGroup, message: "oi", sendAt: future, info: "t",
+  });
+  assert.equal(lastBody?.type, "text");
+
+  // Agendar para trás faria a UAZAPI disparar na hora, fora de contexto.
+  const past = await scheduleWhatsAppMessage({
     groupId: authorizedGroup,
-    message: "x",
-    trackId: "t",
+    message: "atrasada",
+    sendAt: new Date(Date.now() - 60_000),
+    info: "t",
+  });
+  assert.deepEqual(past, { scheduled: false, reason: "in_the_past" });
+
+  // "|" no rótulo quebraria o parsing do id pela UAZAPI.
+  const pipe = await scheduleWhatsAppMessage({
+    groupId: authorizedGroup, message: "x", sendAt: future, info: "t",
     buttons: [{ label: "a|b", id: "f3f-sim:x" }],
   });
-  assert.deepEqual(rejected, { delivered: false, reason: "rejected" });
+  assert.deepEqual(pipe, { scheduled: false, reason: "rejected" });
 
-  // Sem o grupo autorizado configurado, nada sai em modo teste.
+  // Sem o grupo autorizado configurado, nada é agendado em modo teste.
   process.env.UAZAPI_TEST_GROUP_ID = "120363999999999999@g.us";
-  const blocked = await sendWhatsAppButtons({
-    groupId: authorizedGroup,
-    message: "Não deve enviar",
-    trackId: "t",
-    buttons: [{ label: "Sim", id: "f3f-sim:x" }],
+  const blocked = await scheduleWhatsAppMessage({
+    groupId: authorizedGroup, message: "não deve agendar", sendAt: future, info: "t",
   });
-  assert.deepEqual(blocked, { delivered: false, reason: "not_configured" });
+  assert.deepEqual(blocked, { scheduled: false, reason: "not_configured" });
   process.env.UAZAPI_TEST_GROUP_ID = authorizedGroup;
 }
 
@@ -238,7 +276,8 @@ async function main() {
     testMessages(reminders);
     testButtonExtraction(reminders);
     testUnreadReplyDetection(reminders);
-    await testButtonSend(whatsapp);
+    await testReminderTimes(reminders);
+    await testScheduleSafety(whatsapp);
 
     console.log("Meeting reminder checks passed");
   } finally {

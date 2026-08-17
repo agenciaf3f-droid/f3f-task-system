@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { listAllCalendarIds, listCalendarEvents, type RawCalendarEvent } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import { buildClientManagerIndex, findManagerByClientName } from "@/lib/client-manager-match";
+import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 import { Prisma } from "@prisma/client";
 
 /**
@@ -56,6 +57,12 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     calendarsRead = discovered ?? [];
   }
   const result: SyncResult = { created: 0, updated: 0, cancelled: 0, skipped: 0, errors: [], calendarsRead };
+
+  // Os lembretes já estão agendados na fila da UAZAPI, então mudança vinda do
+  // Google precisa refletir lá. Os ids são acumulados e tratados DEPOIS do
+  // laço — chamada HTTP dentro dele multiplicaria por evento lido.
+  const remindersToCancel = new Set<string>();
+  const remindersToSchedule = new Set<string>();
 
   // 1. User default (bucket "admin" — recebe eventos de agendas não-mapeadas;
   //    funcionam como "shared" — bloqueiam slots de todos os gestores)
@@ -137,6 +144,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
             where: { id: existing.id },
             data: { status: "cancelled" },
           });
+          remindersToCancel.add(existing.id);
           result.cancelled++;
         } else {
           result.skipped++;
@@ -169,6 +177,9 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
               status: "confirmed",
             },
           });
+          // Pode ter mudado o horário: reagenda do zero.
+          remindersToCancel.add(existing.id);
+          remindersToSchedule.add(existing.id);
           result.updated++;
         } else {
           result.skipped++;
@@ -178,7 +189,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
 
       // Criar novo Meeting
       try {
-        await prisma.meeting.create({
+        const created = await prisma.meeting.create({
           data: {
             userId: targetUserId,
             date: ev.date,
@@ -189,7 +200,9 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
             clientName: parsed.clientName,
             clientGroupId: parsed.clientGroupId,
           },
+          select: { id: true },
         });
+        remindersToSchedule.add(created.id);
         result.created++;
       } catch (err) {
         // Outra execução (ou o mesmo evento vindo de uma agenda compartilhada)
@@ -205,6 +218,23 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       result.errors.push(`Evento ${ev.id}: ${msg}`);
+    }
+  }
+
+  // Cancelar antes de agendar: uma reunião que mudou de horário aparece nas
+  // duas listas, e a ordem inversa apagaria o agendamento recém-criado.
+  if (remindersToCancel.size > 0) {
+    try {
+      await cancelMeetingReminders([...remindersToCancel]);
+    } catch (err) {
+      result.errors.push(`Lembretes não cancelados: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  for (const meetingId of remindersToSchedule) {
+    try {
+      await scheduleMeetingReminders(meetingId);
+    } catch (err) {
+      result.errors.push(`Lembretes não agendados para ${meetingId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

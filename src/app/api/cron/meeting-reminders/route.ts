@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/github-oidc";
-import { dispatchMeetingReminders } from "@/lib/meeting-reminders";
+import { reconcileMeetingReminders } from "@/lib/meeting-reminders";
 import { isUazapiConfigured, isUazapiTestMode } from "@/lib/whatsapp";
 
+/**
+ * Reconciliação diária dos lembretes de reunião.
+ *
+ * NÃO envia nada e não verifica se chegou a hora — disso a fila da própria
+ * UAZAPI cuida, que é o que mantém os lembretes saindo mesmo com a Vercel fora
+ * do ar. Aqui só se conserta divergência: agendamento que falhou por queda de
+ * rede na marcação, cancelamento que não chegou ao outro lado e reunião que
+ * entrou no horizonte de agendamento.
+ *
+ * Uma execução por dia.
+ */
 async function handle(request: Request): Promise<NextResponse> {
   const authorized = await isAuthorizedCronRequest(request, {
     audience: "f3f-task-meeting-reminders",
@@ -13,8 +24,8 @@ async function handle(request: Request): Promise<NextResponse> {
   }
 
   // Opt-in explícito, não opt-out: variável ausente, vazia ou escrita errada
-  // deixa os disparos DESLIGADOS. O estado seguro precisa ser o padrão — o erro
-  // aqui custaria mensagem indevida em grupo de cliente real.
+  // deixa os agendamentos DESLIGADOS. O estado seguro precisa ser o padrão — o
+  // erro aqui custaria mensagem indevida em grupo de cliente real.
   if (process.env.MEETING_REMINDERS_ENABLED?.trim() !== "true") {
     return NextResponse.json({ ok: true, disabled: true });
   }
@@ -24,18 +35,12 @@ async function handle(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const result = await dispatchMeetingReminders();
-    console.info("[meeting-reminders] executado", {
-      testMode: isUazapiTestMode(),
-      considered: result.considered,
-      sent: result.sent,
-      failed: result.failed,
-      skipped: result.skipped.length,
-    });
+    const result = await reconcileMeetingReminders();
+    console.info("[meeting-reminders] reconciliado", { testMode: isUazapiTestMode(), ...result });
     return NextResponse.json({ ok: true, testMode: isUazapiTestMode(), ...result });
   } catch (error) {
-    console.error("[meeting-reminders] falhou", error);
-    return NextResponse.json({ ok: false, error: "dispatch_failed" }, { status: 500 });
+    console.error("[meeting-reminders] reconciliação falhou", error);
+    return NextResponse.json({ ok: false, error: "reconcile_failed" }, { status: 500 });
   }
 }
 
@@ -47,5 +52,6 @@ export async function POST(request: Request) {
   return handle(request);
 }
 
-export const maxDuration = 60;
+// Varre as reuniões futuras; com a base atual roda bem abaixo disso.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";

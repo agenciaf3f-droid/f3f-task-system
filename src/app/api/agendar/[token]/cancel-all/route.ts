@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getClientSession } from "@/lib/client-session";
 import { deleteCalendarMeeting } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
+import { cancelMeetingReminders } from "@/lib/meeting-reminders";
 
 // Cancela TODAS as reuniões futuras do cliente com este host.
 // Usado quando o cliente quer remarcar a série inteira.
@@ -45,6 +46,10 @@ export async function POST(
     where: { id: { in: meetings.map((m) => m.id) } },
     data: { status: "cancelled" },
   });
+
+  // Retira da fila da UAZAPI antes de responder: mensagem agendada sairia mesmo
+  // com a reunião cancelada.
+  await cancelMeetingReminders(meetings.map((m) => m.id));
 
   await Promise.allSettled(
     meetings

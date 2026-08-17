@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting } from "@/lib/google-calendar";
+import { scheduleMeetingReminders } from "@/lib/meeting-reminders";
 import { getClientSession } from "@/lib/client-session";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import {
@@ -234,6 +235,18 @@ export async function POST(
   if (googleFailures > 0) {
     console.error(`[Booking] ${googleFailures} Google Calendar syncs falharam (DB OK).`);
   }
+
+  // Depois da resposta: o cliente não deve esperar as chamadas à UAZAPI. Se
+  // alguma falhar, a linha fica como failed e o reconciliador diário refaz.
+  after(async () => {
+    for (const meeting of createdMeetings) {
+      try {
+        await scheduleMeetingReminders(meeting.id);
+      } catch (error) {
+        console.error("[Booking] falha ao agendar lembretes", { meetingId: meeting.id, error });
+      }
+    }
+  });
 
   return NextResponse.json({
     ok: true,

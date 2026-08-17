@@ -3,15 +3,18 @@ ALTER TABLE "meetings"
   ADD COLUMN IF NOT EXISTS "client_response" VARCHAR(20),
   ADD COLUMN IF NOT EXISTS "client_responded_at" TIMESTAMP(3);
 
--- Lembretes já disparados. A unique (meeting_id, kind) é a trava de
--- idempotência: o cron roda a cada 5 min e enxerga a mesma reunião vencida
--- em várias execuções, mas só a primeira consegue inserir a linha.
+-- Lembretes agendados na fila da UAZAPI.
+--
+-- "folder_id" é a campanha do lado de lá; é por ele que o lembrete é cancelado
+-- quando a reunião cai. A unique (meeting_id, kind) impede agendar o mesmo
+-- lembrete duas vezes.
 CREATE TABLE IF NOT EXISTS "meeting_reminders" (
   "id" UUID NOT NULL,
   "meeting_id" UUID NOT NULL,
   "kind" VARCHAR(20) NOT NULL,
+  "scheduled_for" TIMESTAMP(3) NOT NULL,
+  "folder_id" VARCHAR(64),
   "status" VARCHAR(20) NOT NULL DEFAULT 'pending',
-  "attempts" INTEGER NOT NULL DEFAULT 0,
   "destination" VARCHAR(255),
   "detail" VARCHAR(255),
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -24,5 +27,6 @@ CREATE TABLE IF NOT EXISTS "meeting_reminders" (
 CREATE UNIQUE INDEX IF NOT EXISTS "meeting_reminders_meeting_id_kind_key"
   ON "meeting_reminders"("meeting_id", "kind");
 
-CREATE INDEX IF NOT EXISTS "meeting_reminders_created_at_idx"
-  ON "meeting_reminders"("created_at");
+-- Serve o reconciliador diário, que varre o que ficou pendente/agendado.
+CREATE INDEX IF NOT EXISTS "meeting_reminders_status_scheduled_for_idx"
+  ON "meeting_reminders"("status", "scheduled_for");

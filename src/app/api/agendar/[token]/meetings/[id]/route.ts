@@ -4,6 +4,7 @@ import { getClientSession } from "@/lib/client-session";
 import { createCalendarMeeting, deleteCalendarMeeting } from "@/lib/google-calendar";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
+import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 
 function addMinutes(time: string, minutes: number): string {
   let [h, m] = time.split(":").map(Number);
@@ -122,6 +123,11 @@ export async function PATCH(
     data: { googleEventId: newEventId },
   });
 
+  // A reunião mudou de horário, então os lembretes agendados apontam para o
+  // horário antigo. Desmarca e reagenda com as datas novas.
+  await cancelMeetingReminders([meeting.id]);
+  await scheduleMeetingReminders(meeting.id);
+
   return NextResponse.json({ ok: true });
 }
 
@@ -161,6 +167,9 @@ export async function DELETE(
     where: { id: meeting.id },
     data: { status: "cancelled" },
   });
+
+  await cancelMeetingReminders([meeting.id]);
+
   if (meeting.googleEventId) {
     await deleteCalendarMeeting(meeting.googleEventId);
   }

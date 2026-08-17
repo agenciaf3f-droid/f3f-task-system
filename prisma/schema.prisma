@@ -647,28 +647,33 @@ model Meeting {
   @@map("meetings")
 }
 
-/// Registro de lembrete de reunião já disparado no WhatsApp.
+/// Lembrete de reunião agendado no WhatsApp.
 ///
-/// A unique [meetingId, kind] é o que garante que o cliente nunca receba a
-/// mesma mensagem duas vezes: o cron roda a cada 5 min e pode ver a mesma
-/// reunião "vencida" em várias execuções. A linha é criada ANTES do envio
-/// (claim), então uma falha de rede não vira mensagem duplicada — vira uma
-/// linha com status "failed" que fica registrada para auditoria.
+/// Nada nosso acorda para enviar: no momento em que a reunião é marcada, a
+/// mensagem é entregue à fila da própria UAZAPI, com data e hora. `folderId` é
+/// a campanha lá do outro lado — é por ele que o lembrete é cancelado quando a
+/// reunião cai.
+///
+/// A linha aqui existe para saber o que foi agendado, o que apagar num
+/// cancelamento e o que reconciliar caso o agendamento tenha falhado.
+///
+/// A unique [meetingId, kind] impede agendar o mesmo lembrete duas vezes.
 model MeetingReminder {
-  id          String   @id @default(uuid()) @db.Uuid
-  meetingId   String   @map("meeting_id") @db.Uuid
-  kind        String   @db.VarChar(20) // day_before | morning | hour_before | minutes_before
-  status      String   @default("pending") @db.VarChar(20) // pending | sent | failed
-  attempts    Int      @default(0)
-  destination String?  @db.VarChar(255)
-  detail      String?  @db.VarChar(255)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  meetingId    String   @map("meeting_id") @db.Uuid
+  kind         String   @db.VarChar(20) // day_before | morning | hour_before | minutes_before
+  scheduledFor DateTime @map("scheduled_for") // instante do disparo
+  folderId     String?  @map("folder_id") @db.VarChar(64) // campanha na UAZAPI
+  status       String   @default("pending") @db.VarChar(20) // pending | scheduled | failed | skipped
+  destination  String?  @db.VarChar(255)
+  detail       String?  @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, kind])
-  @@index([createdAt])
+  @@index([status, scheduledFor])
   @@map("meeting_reminders")
 }
 

@@ -123,7 +123,7 @@ function resolveDestination(
 }
 
 async function postToUazapi(
-  path: "/send/text" | "/send/menu",
+  path: "/send/text",
   payload: Record<string, unknown>,
   config: { serverUrl: string; token: string; mode: UazapiMode },
   destination: string,
@@ -180,53 +180,120 @@ export async function sendWhatsAppText({
   );
 }
 
+export type WhatsAppScheduleResult =
+  | { scheduled: true; folderId: string; destination: string; mode: UazapiMode }
+  | {
+      scheduled: false;
+      reason: "not_configured" | "rejected" | "request_failed" | "in_the_past";
+      status?: number;
+    };
+
 /**
- * Envia botões de resposta rápida via `/send/menu` (type: button).
+ * Entrega uma mensagem à fila da própria UAZAPI, para disparo em `sendAt`.
  *
- * Cada item de `buttons` vira uma opção no formato `"rótulo|id"` que a UAZAPI
- * espera. O `id` é o que volta no webhook quando o cliente toca — é por ele
- * que a resposta é amarrada de volta à reunião.
+ * É o que tira a Vercel do caminho: ninguém precisa acordar na hora marcada,
+ * porque o gatilho fica com quem vai entregar a mensagem. O `folder_id`
+ * devolvido é o que permite cancelar depois.
  */
-export async function sendWhatsAppButtons({
+export async function scheduleWhatsAppMessage({
   groupId,
   message,
-  footerText,
+  sendAt,
   buttons,
-  trackId,
+  footerText,
+  info,
 }: {
   groupId: string;
   message: string;
+  sendAt: Date;
+  buttons?: Array<{ label: string; id: string }>;
   footerText?: string;
-  buttons: Array<{ label: string; id: string }>;
-  trackId: string;
-}): Promise<WhatsAppDeliveryResult> {
+  info: string;
+}): Promise<WhatsAppScheduleResult> {
   const config = getConfiguration();
-  if (!config) return { delivered: false, reason: "not_configured" };
+  if (!config) return { scheduled: false, reason: "not_configured" };
 
-  if (buttons.length === 0) return { delivered: false, reason: "rejected" };
+  // Agendar para trás faria a UAZAPI disparar na hora — pior que não enviar,
+  // porque chega fora de contexto ("faltam 5 minutos" depois da reunião).
+  const when = sendAt.getTime();
+  if (!Number.isFinite(when) || when <= Date.now()) {
+    return { scheduled: false, reason: "in_the_past" };
+  }
 
-  // `|` separa rótulo de id no protocolo da UAZAPI; se aparecer no texto o
-  // botão é interpretado errado (viraria um id truncado).
-  if (buttons.some((button) => button.label.includes("|") || button.id.includes("|"))) {
-    console.error("[uazapi] botão com '|' no rótulo ou id — envio bloqueado");
-    return { delivered: false, reason: "rejected" };
+  if (buttons?.some((button) => button.label.includes("|") || button.id.includes("|"))) {
+    console.error("[uazapi] botão com '|' no rótulo ou id — agendamento bloqueado");
+    return { scheduled: false, reason: "rejected" };
   }
 
   const resolved = resolveDestination(groupId, config.mode);
-  if (!resolved.ok) return { delivered: false, reason: resolved.reason };
+  if (!resolved.ok) return { scheduled: false, reason: resolved.reason };
 
-  return postToUazapi(
-    "/send/menu",
-    {
-      number: resolved.destination,
-      type: "button",
-      text: message,
-      choices: buttons.map((button) => `${button.label}|${button.id}`),
-      ...(footerText ? { footerText } : {}),
-      track_id: trackId,
-      async: false,
-    },
-    config,
-    resolved.destination,
-  );
+  try {
+    const response = await fetch(`${config.serverUrl}/sender/simple`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", token: config.token },
+      body: JSON.stringify({
+        numbers: [resolved.destination],
+        type: buttons?.length ? "button" : "text",
+        text: message,
+        ...(buttons?.length
+          ? { choices: buttons.map((b) => `${b.label}|${b.id}`), ...(footerText ? { footerText } : {}) }
+          : { linkPreview: false }),
+        info,
+        // Um destinatário só por campanha: o delay entre mensagens não se aplica.
+        delayMin: 1,
+        delayMax: 2,
+        scheduled_for: when,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!response.ok) {
+      console.error(`[uazapi] /sender/simple falhou com status ${response.status}`);
+      return { scheduled: false, reason: "rejected", status: response.status };
+    }
+
+    const payload = (await response.json()) as { folder_id?: unknown };
+    const folderId = typeof payload.folder_id === "string" ? payload.folder_id : null;
+    if (!folderId) {
+      // Sem o id não há como cancelar depois — tratar como falha é melhor que
+      // deixar uma mensagem órfã viva na fila.
+      console.error("[uazapi] /sender/simple não devolveu folder_id");
+      return { scheduled: false, reason: "rejected" };
+    }
+
+    return { scheduled: true, folderId, destination: resolved.destination, mode: config.mode };
+  } catch (error) {
+    console.error("[uazapi] /sender/simple falhou:", error);
+    return { scheduled: false, reason: "request_failed" };
+  }
 }
+
+/**
+ * Remove uma campanha agendada. Mensagens já enviadas não são afetadas.
+ *
+ * Devolve true também quando a campanha já não existe: o objetivo é "não vai
+ * disparar", e isso já está satisfeito.
+ */
+export async function cancelWhatsAppSchedule(folderId: string): Promise<boolean> {
+  const config = getConfiguration();
+  if (!config) return false;
+
+  try {
+    const response = await fetch(`${config.serverUrl}/sender/edit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", token: config.token },
+      body: JSON.stringify({ folder_id: folderId, action: "delete" }),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (response.ok || response.status === 404) return true;
+
+    console.error(`[uazapi] /sender/edit delete falhou com status ${response.status}`);
+    return false;
+  } catch (error) {
+    console.error("[uazapi] /sender/edit delete falhou:", error);
+    return false;
+  }
+}
+

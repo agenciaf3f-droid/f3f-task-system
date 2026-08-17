@@ -2,6 +2,7 @@
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +11,7 @@ import { isPastDate, nowInBrazil, todayInBrazil } from "@/lib/meeting-recurrence
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { isElevated } from "@/lib/task-visibility";
 import { logActivity } from "@/lib/activity";
+import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 
 export type AvailabilityInput = {
   dayOfWeek: number;
@@ -161,6 +163,14 @@ export async function createManualMeetingAction(
     await prisma.meeting.update({ where: { id: meeting.id }, data: { googleEventId } });
   }
 
+  after(async () => {
+    try {
+      await scheduleMeetingReminders(meeting.id);
+    } catch (error) {
+      console.error("[calendario] falha ao agendar lembretes", { meetingId: meeting.id, error });
+    }
+  });
+
   await logActivity({
     companyId: user.companyId,
     userId: user.userId,
@@ -245,6 +255,10 @@ export async function cancelMeetingAction(
     data: { status: "cancelled" },
   });
 
+  // Tira os lembretes da fila da UAZAPI. Sem isto o cliente receberia aviso de
+  // reunião cancelada — a mensagem já está agendada do lado de lá.
+  await cancelMeetingReminders(targets.map((t) => t.id));
+
   // Google deletes em paralelo (best-effort, fora da transação DB).
   await Promise.allSettled(
     targets
@@ -291,6 +305,10 @@ export async function deleteMeetingForeverAction(
     const deleted = await deleteCalendarMeeting(meeting.googleEventId, calendarId);
     if (!deleted) return { error: "Não foi possível remover o evento do Google Calendar." };
   }
+
+  // Antes do delete: a linha do lembrete sai por cascata e levaria o folder_id
+  // junto, deixando a campanha órfã e viva na UAZAPI.
+  await cancelMeetingReminders([meeting.id]);
 
   await prisma.$transaction(async (transaction) => {
     const [nextParent, ...remainingChildren] = meeting.recurrenceChildren;

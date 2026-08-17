@@ -128,22 +128,64 @@ Protocolo obrigatório de testes do WhatsApp:
 
 Quatro avisos por reunião, no grupo do cliente (`Meeting.clientGroupId`):
 
-| Lembrete | Quando | Envio |
-|---|---|---|
-| `day_before` | véspera às `MEETING_REMINDER_DAY_BEFORE_HOUR` (default 06:00) | `/send/menu` com 2 botões |
-| `morning` | dia da reunião às 06:00 | `/send/text` |
-| `hour_before` | 1h antes | `/send/text` |
-| `minutes_before` | 5 min antes | `/send/text` |
+| Lembrete | Quando |
+|---|---|
+| `day_before` | véspera às `MEETING_REMINDER_DAY_BEFORE_HOUR` (default 06:00) |
+| `morning` | dia da reunião às 06:00 |
+| `hour_before` | 1h antes |
+| `minutes_before` | 5 min antes |
 
-- **Disparo:** GitHub Actions a cada 5 min (`meeting-reminders.yml`, OIDC audience `f3f-task-meeting-reminders`) → `/api/cron/meeting-reminders`. Não usa Vercel Cron: o plano Hobby só aceita 1x/dia.
-- **Atraso do agendador:** o GitHub atrasa com frequência, então cada lembrete tem janela de tolerância (`targetFor()`). Fora da janela o aviso é descartado — nunca chega depois da reunião.
-- **Idempotência:** unique `[meetingId, kind]` em `MeetingReminder`. A linha é criada ANTES do envio, então falha de rede não vira mensagem duplicada. Retenta só se o status ficou `failed`, no máximo 3x.
-- **Botões:** ids `f3f-sim:<meetingId>` / `f3f-nao:<meetingId>` voltam em `/api/webhooks/uazapi` (autenticado por `UAZAPI_WEBHOOK_TOKEN` na query).
-  - "Sim" → `Meeting.clientResponse = "confirmed"`, aparece com ✓ no `/calendario`.
-  - "Não" → cancela de verdade: `status = "cancelled"` + apaga evento do Google Calendar + libera o horário.
-- **Formato do payload de clique NÃO está na spec da UAZAPI** — foi capturado via `/message/find`. O id tocado vem em `buttonOrListid` e `content.selectedButtonID`; `messageType` é `ButtonsResponseMessage`. **`contextInfo.quotedMessage` repete os DOIS ids** em `buttonParamsJSON`, então o payload de uma confirmação contém a string `f3f-nao:`. Por isso `extractButtonResponse()` só lê chaves que afirmam a escolha — varrer o JSON inteiro cancelaria reunião confirmada. Em caso de ambiguidade recusa e loga a *forma* do payload (sem valores, que contêm dado de cliente).
-- **Liga/desliga:** `MEETING_REMINDERS_ENABLED` precisa ser exatamente `true` para disparar. Ausente, vazia ou qualquer outro valor = desligado, sem precisar de deploy. É opt-in porque errar para o lado ligado custa mensagem indevida em grupo de cliente.
-- **Configurar webhook na instância:** `npm run uazapi:webhook -- --apply`.
+**Nada nosso acorda para enviar.** Ao marcar a reunião, a mensagem é entregue à
+fila da própria UAZAPI (`/sender/simple` com `scheduled_for`), que dispara na
+hora. Se a Vercel cair ou for pausada, os lembretes continuam saindo — foi o
+motivo da escolha, depois de a conta ser pausada por estouro de cota.
+
+- **`MeetingReminder`** guarda o que foi agendado: `scheduledFor` e o
+  `folderId` da campanha na UAZAPI. Unique `[meetingId, kind]` impede duplicar.
+- **Horizonte de 7 dias** (`SCHEDULE_HORIZON_DAYS`): a linha nasce junto com a
+  reunião, mas a campanha só é criada quando o disparo se aproxima. Série mensal
+  de 12 ocorrências geraria 48 campanhas de uma vez.
+- **Cancelar apaga dos DOIS lados.** Só remover a linha deixaria a mensagem viva
+  na fila e o cliente receberia aviso de reunião cancelada. Se o cancelamento na
+  UAZAPI falhar, a linha fica como `failed` — sem o `folderId` ninguém mais
+  desmarcaria aquela campanha.
+- **Pontos ligados:** criação em `book/route.ts`, `calendario/actions.ts` e
+  `calendar-sync.ts`; cancelamento nesses mesmos mais `cancel-all` e
+  `meetings/[id]` (DELETE cancela, PATCH reagenda). `deleteMeetingForever`
+  cancela ANTES do delete, senão a cascata leva o `folderId` junto.
+- **Reconciliador diário** (`/api/cron/meeting-reminders`, GitHub Actions
+  04:30 UTC, 1 invocação/dia): não verifica se chegou a hora — refaz
+  agendamento que falhou, desmarca órfão e alcança reunião que entrou no
+  horizonte.
+- **Fuso:** `brazilWallClockToInstant()` converte o horário de parede gravado em
+  instante absoluto perguntando o offset ao `Intl` para aquela data. Não usa -3
+  fixo.
+
+### Confirmação por botão
+
+`day_before` vai com dois botões; a resposta chega em `/api/webhooks/uazapi`
+(autenticado por `UAZAPI_WEBHOOK_TOKEN` na query).
+
+- "Sim" → `Meeting.clientResponse = "confirmed"`, ✓ no `/calendario`.
+- "Não" → cancela de verdade: `status = "cancelled"`, apaga o evento do Google,
+  libera o horário e desmarca os lembretes restantes.
+- **O formato do evento de clique NÃO está na spec da UAZAPI** — foi capturado
+  via `/message/find`. O id vem em `buttonOrListid` e `content.selectedButtonID`;
+  `messageType` é `ButtonsResponseMessage`. **`contextInfo.quotedMessage` repete
+  os DOIS ids**, então o payload de uma confirmação contém `f3f-nao:`. Por isso
+  `extractButtonResponse()` só lê chaves que afirmam a escolha — varrer o JSON
+  inteiro cancelaria reunião confirmada.
+- Esse webhook é chamado a **cada mensagem de qualquer grupo**: no caminho comum
+  ele não toca no banco nem serializa o payload.
+
+### Operação
+
+- **Liga/desliga:** `MEETING_REMINDERS_ENABLED` precisa ser exatamente `true`.
+  Ausente, vazia ou qualquer outro valor = desligado, sem deploy. É opt-in
+  porque errar para o lado ligado custa mensagem indevida em grupo de cliente.
+- **Webhook na instância:** `npm run uazapi:webhook -- --apply`. Usa
+  `action: "add"` — o modo simples da UAZAPI sobrescreveria o webhook que já
+  alimenta `controle.agenciaf3f.com.br`.
 
 ---
 
