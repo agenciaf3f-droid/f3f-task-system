@@ -212,7 +212,7 @@ export async function scheduleMeetingReminders(
   if (!meeting || meeting.status !== "confirmed") return null;
 
   const groupId = meeting.clientGroupId?.trim();
-  const clientName = meeting.clientName?.trim();
+  const clientName = groupId ? await resolveClientName(groupId, meeting.clientName) : null;
   const summary: ScheduleSummary = {
     meetingId: meeting.id,
     scheduled: 0,
@@ -297,6 +297,28 @@ export async function scheduleMeetingReminders(
   }
 
   return summary;
+}
+
+/**
+ * Nome do cliente para a saudação da mensagem.
+ *
+ * `Meeting.clientName` NÃO serve: quando a reunião é criada pelo /calendario
+ * ele guarda um rótulo de exibição — `"${título} · ${cliente}"` — e a saudação
+ * sairia como "🤖 Reunião de alinhamento · Padaria do João, tudo bem?".
+ *
+ * O grupo de WhatsApp é a identidade confiável do cliente, então o nome vem do
+ * cadastro. Só cai no campo da reunião quando não há cadastro correspondente
+ * (reunião vinda do Google Calendar, por exemplo), onde ele é o nome puro.
+ */
+async function resolveClientName(
+  groupId: string,
+  fallback: string | null,
+): Promise<string | null> {
+  const client = await prisma.client.findFirst({
+    where: { whatsappGroupId: groupId, deletedAt: null },
+    select: { name: true },
+  });
+  return client?.name.trim() || fallback?.trim() || null;
 }
 
 async function upsertReminder(
