@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientSession } from "@/lib/client-session";
-import { deleteCalendarMeeting } from "@/lib/google-calendar";
+import { markCalendarMeetingCancelled } from "@/lib/google-calendar";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import { cancelMeetingReminders } from "@/lib/meeting-reminders";
 
@@ -51,10 +51,12 @@ export async function POST(
   // com a reunião cancelada.
   await cancelMeetingReminders(meetings.map((m) => m.id));
 
+  // Cancelamento feito pelo cliente: os eventos ficam na agenda como registro,
+  // marcados "(Cancelado)" e Disponíveis, em vez de sumirem.
   await Promise.allSettled(
     meetings
       .filter((m) => m.googleEventId)
-      .map((m) => deleteCalendarMeeting(m.googleEventId!)),
+      .map((m) => markCalendarMeetingCancelled(m.googleEventId!)),
   );
 
   return NextResponse.json({ ok: true, cancelled: meetings.length });

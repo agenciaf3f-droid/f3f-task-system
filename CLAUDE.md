@@ -167,8 +167,16 @@ motivo da escolha, depois de a conta ser pausada por estouro de cota.
 (autenticado por `UAZAPI_WEBHOOK_TOKEN` na query).
 
 - "Sim" → `Meeting.clientResponse = "confirmed"`, ✓ no `/calendario`.
-- "Não" → cancela de verdade: `status = "cancelled"`, apaga o evento do Google,
-  libera o horário e desmarca os lembretes restantes.
+- "Não" → cancela de verdade: `status = "cancelled"`, libera o horário e
+  desmarca os lembretes restantes. No Google o evento NÃO é apagado: recebe
+  `(Cancelado)` no título e `transparency: "transparent"` (Disponível), para
+  ficar o registro. O `transparent` é obrigatório — sem ele o evento continuaria
+  ocupando o horário e ninguém conseguiria reagendar ali.
+- Cancelamento pelo cliente (botão, `meetings/[id]` DELETE, `cancel-all`) marca;
+  cancelamento pela equipe em `/calendario` ainda apaga o evento.
+- **Evento `transparent` conta como cancelado** em `calendar-sync` e é ignorado
+  no cálculo de horários livres. Sem isso a sincronização devolveria a reunião
+  para `confirmed` e reagendaria os lembretes recém-cancelados.
 - **O formato do evento de clique NÃO está na spec da UAZAPI** — foi capturado
   via `/message/find`. O id vem em `buttonOrListid` e `content.selectedButtonID`;
   `messageType` é `ButtonsResponseMessage`. **`contextInfo.quotedMessage` repete

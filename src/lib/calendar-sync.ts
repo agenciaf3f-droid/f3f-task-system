@@ -137,8 +137,11 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
 
       const existing = existingByEventId.get(ev.id) ?? null;
 
-      // Cancelado no Google
-      if (ev.status === "cancelled") {
+      // Cancelado no Google — apagado de vez, ou marcado como Disponível, que é
+      // como fica a reunião desmarcada pelo cliente. Sem tratar o segundo caso,
+      // a sincronização veria o evento ainda ativo e devolveria a reunião para
+      // "confirmed", reagendando os lembretes recém-cancelados.
+      if (ev.status === "cancelled" || ev.transparency === "transparent") {
         if (existing && existing.status !== "cancelled") {
           await prisma.meeting.update({
             where: { id: existing.id },

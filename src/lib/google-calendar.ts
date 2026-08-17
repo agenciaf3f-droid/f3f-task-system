@@ -107,6 +107,53 @@ export async function listAllCalendarSummaries(): Promise<{ id: string; summary:
   }
 }
 
+/** Prefixo que marca no título que a reunião foi desmarcada. */
+export const CANCELLED_SUMMARY_PREFIX = "(Cancelado)";
+
+/**
+ * Marca o evento como cancelado no Google em vez de apagá-lo: prefixa o título
+ * e o deixa como "Disponível".
+ *
+ * O `transparency: "transparent"` é o que impede o efeito colateral — sem ele o
+ * evento continuaria ocupando o horário, e ninguém mais conseguiria agendar
+ * naquele intervalo. Com ele, o registro fica visível na agenda mas o horário
+ * volta a ficar livre.
+ */
+export async function markCalendarMeetingCancelled(
+  googleEventId: string,
+  customCalendarId?: string,
+): Promise<boolean> {
+  const client = getClient();
+  if (!client) return true;
+
+  const calendarId = customCalendarId || client.calendarId;
+
+  try {
+    const current = await client.calendar.events.get({ calendarId, eventId: googleEventId });
+    const summary = current.data.summary ?? "";
+
+    await client.calendar.events.patch({
+      calendarId,
+      eventId: googleEventId,
+      requestBody: {
+        // Cancelar duas vezes não deve empilhar prefixo.
+        summary: summary.startsWith(CANCELLED_SUMMARY_PREFIX)
+          ? summary
+          : `${CANCELLED_SUMMARY_PREFIX} ${summary}`.trim(),
+        transparency: "transparent",
+        colorId: "8", // Grafite — visualmente apagado perto dos ativos.
+      },
+    });
+    return true;
+  } catch (err) {
+    const status = (err as { code?: number; response?: { status?: number } }).code
+      ?? (err as { response?: { status?: number } }).response?.status;
+    if (status === 404 || status === 410) return true;
+    console.error("[GCal] Erro ao marcar evento como cancelado:", err);
+    return false;
+  }
+}
+
 export async function deleteCalendarMeeting(
   googleEventId: string,
   customCalendarId?: string,
@@ -132,6 +179,8 @@ export async function deleteCalendarMeeting(
 export type RawCalendarEvent = {
   id: string;
   status: string;                  // "confirmed" | "cancelled" | "tentative"
+  /** "transparent" = marcado como Disponível no Google → não ocupa o horário. */
+  transparency: string;
   summary: string;
   description?: string;
   date: string;                    // "YYYY-MM-DD"
@@ -191,6 +240,7 @@ export async function listCalendarEvents({
           out.push({
             id: ev.id,
             status: ev.status ?? "confirmed",
+            transparency: ev.transparency ?? "opaque",
             summary: ev.summary ?? "",
             description: ev.description ?? undefined,
             date: startParts.date,

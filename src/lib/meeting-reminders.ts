@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { deleteCalendarMeeting } from "@/lib/google-calendar";
+import { markCalendarMeetingCancelled } from "@/lib/google-calendar";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { cancelWhatsAppSchedule, scheduleWhatsAppMessage } from "@/lib/whatsapp";
 
@@ -410,8 +410,11 @@ export type ClientResponseOutcome =
  * Aplica o toque do cliente no botão do lembrete de véspera.
  *
  * "Não vou conseguir" cancela a reunião de verdade: marca como `cancelled`,
- * apaga o evento do Google Calendar, libera o horário e desmarca os lembretes
- * seguintes — que já estão na fila da UAZAPI e sairiam mesmo assim.
+ * libera o horário e desmarca os lembretes seguintes — que já estão na fila da
+ * UAZAPI e sairiam mesmo assim.
+ *
+ * No Google o evento não é apagado: ganha "(Cancelado)" no título e passa a
+ * Disponível, para ficar o registro de que a reunião existiu e foi desmarcada.
  */
 export async function applyClientResponse(
   meetingId: string,
@@ -446,9 +449,9 @@ export async function applyClientResponse(
 
   if (meeting.googleEventId) {
     // O evento pode estar na agenda do plano, não na primária — sem resolver o
-    // calendarId o delete cai em 404 e o horário fica ocupado no Google.
+    // calendarId a alteração cai em 404 e o horário fica ocupado no Google.
     const calendarId = await resolvePlanCalendarId(meeting.clientPlan);
-    await deleteCalendarMeeting(meeting.googleEventId, calendarId);
+    await markCalendarMeetingCancelled(meeting.googleEventId, calendarId);
   }
 
   return { ok: true, response, alreadyHandled: false };

@@ -116,7 +116,14 @@ export async function GET(
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
   const bookedFromGcal = [...(gcalEvents ?? []), ...(planCalEvents ?? [])]
-    .filter((ev) => ev.status === "confirmed" && !ev.isAllDay && ev.date === date)
+    // "transparent" = marcado como Disponível no Google. É o que reuniões
+    // desmarcadas pelo cliente recebem: o evento continua visível como
+    // registro, mas o horário volta a ser oferecido.
+    .filter((ev) =>
+      ev.status === "confirmed"
+      && ev.transparency !== "transparent"
+      && !ev.isAllDay
+      && ev.date === date)
     .map((ev) => ({ startTime: ev.startTime, endTime: ev.endTime }));
 
   // União de ambos — dedupe por (startTime, endTime). Eventos criados via /agendar

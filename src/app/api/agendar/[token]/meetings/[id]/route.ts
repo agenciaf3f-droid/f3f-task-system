@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getClientSession } from "@/lib/client-session";
-import { createCalendarMeeting, deleteCalendarMeeting } from "@/lib/google-calendar";
+import {
+  createCalendarMeeting,
+  deleteCalendarMeeting,
+  markCalendarMeetingCancelled,
+} from "@/lib/google-calendar";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
 import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
 import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
@@ -170,8 +174,10 @@ export async function DELETE(
 
   await cancelMeetingReminders([meeting.id]);
 
+  // Cancelamento feito pelo cliente: o evento fica na agenda como registro,
+  // marcado "(Cancelado)" e Disponível, em vez de sumir.
   if (meeting.googleEventId) {
-    await deleteCalendarMeeting(meeting.googleEventId);
+    await markCalendarMeetingCancelled(meeting.googleEventId);
   }
 
   return NextResponse.json({ ok: true });
