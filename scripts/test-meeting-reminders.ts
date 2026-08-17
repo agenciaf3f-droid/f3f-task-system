@@ -226,6 +226,21 @@ async function testReminderTimes({ computeReminderTimes, brazilWallClockToInstan
   );
 }
 
+function testGroupIdNormalization({ normalizeGroupId }: WhatsAppModule) {
+  // O evento do Google guarda o grupo como "<digitos>-group" e a sincronizacao
+  // devolve isso para Meeting.clientGroupId. Sem converter, todo lembrete de
+  // reuniao vinda do Google era recusado antes de sair.
+  assert.equal(normalizeGroupId("120363290811576538-group"), "120363290811576538@g.us");
+  assert.equal(normalizeGroupId("120363290811576538"), "120363290811576538@g.us");
+  assert.equal(normalizeGroupId("120363290811576538@g.us"), "120363290811576538@g.us");
+  assert.equal(normalizeGroupId("  120363290811576538-group  "), "120363290811576538@g.us");
+
+  // O que não for reconhecido passa intacto e é barrado adiante pelo padrão —
+  // inventar um destino seria pior que recusar.
+  assert.equal(normalizeGroupId("5511999999999@s.whatsapp.net"), "5511999999999@s.whatsapp.net");
+  assert.equal(normalizeGroupId("nao-e-um-grupo"), "nao-e-um-grupo");
+}
+
 async function testScheduleSafety({ scheduleWhatsAppMessage }: WhatsAppModule) {
   const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -296,6 +311,7 @@ async function main() {
     testUnreadReplyDetection(reminders);
     testKillSwitch(reminders);
     await testReminderTimes(reminders);
+    testGroupIdNormalization(whatsapp);
     await testScheduleSafety(whatsapp);
 
     console.log("Meeting reminder checks passed");

@@ -101,11 +101,28 @@ export async function verifyWhatsAppGroupDestination(groupId: string): Promise<b
  * grupo autorizado de homologação — é o que impede um teste de vazar para o
  * grupo de um cliente real.
  */
+/**
+ * Devolve o JID de grupo a partir das formas que circulam pelo sistema.
+ *
+ * O evento do Google guarda o grupo na descrição como `<dígitos>-group`
+ * (ver toGroupIdDescription em google-calendar.ts, que troca o `@g.us` para não
+ * pôr um e-mail aparente na descrição). A sincronização lê essa descrição de
+ * volta e grava em `Meeting.clientGroupId` — então reunião vinda do Google
+ * chega aqui com o formato trocado, e sem esta conversão o envio é recusado.
+ */
+export function normalizeGroupId(raw: string): string {
+  const value = raw.trim();
+  if (GROUP_ID_PATTERN.test(value)) return value;
+
+  const digits = /^(\d+)(?:-group)?$/.exec(value)?.[1];
+  return digits ? `${digits}@g.us` : value;
+}
+
 function resolveDestination(
   groupId: string,
   mode: UazapiMode,
 ): { ok: true; destination: string } | { ok: false; reason: "not_configured" | "rejected" } {
-  let destination = groupId.trim();
+  let destination = normalizeGroupId(groupId);
 
   if (mode === "test") {
     const configuredTestGroup = process.env.UAZAPI_TEST_GROUP_ID?.trim();
