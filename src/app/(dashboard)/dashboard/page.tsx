@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/link-button";
 import { KanbanView } from "@/app/(dashboard)/projetos/[id]/kanban-view";
 import { DashboardTaskRow } from "./dashboard-task-row";
 import { MemberFilter } from "./member-filter";
+import { ClientFilter } from "./client-filter";
 import { DashboardGreeting } from "./dashboard-greeting";
 import { isElevated } from "@/lib/task-visibility";
 
@@ -30,7 +31,7 @@ const DASHBOARD_COLUMNS = [
   { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
 ];
 
-async function getDashboardData(memberId: string | null, companyId: string, includeCancelled: boolean) {
+async function getDashboardData(memberId: string | null, clientId: string | null, companyId: string, includeCancelled: boolean) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
@@ -39,21 +40,26 @@ async function getDashboardData(memberId: string | null, companyId: string, incl
   // "Minhas tarefas" = onde sou assignee primário ou multi-assignee.
   // Não inclui creator/watcher pra evitar poluir o dashboard de admins/managers que criam muito.
   // userId null = modo "Todos" (cargos elevados) — sem restrição de assignee, empresa toda.
-  const memberScope: Prisma.TaskWhereInput = memberId
-    ? { OR: [{ assigneeId: memberId }, { assignees: { some: { userId: memberId } } }] }
-    : {};
+  const taskScopes: Prisma.TaskWhereInput[] = [];
+  if (memberId) {
+    taskScopes.push({ OR: [{ assigneeId: memberId }, { assignees: { some: { userId: memberId } } }] });
+  }
+  if (clientId) {
+    // Algumas tarefas guardam o cliente diretamente; outras o herdam do projeto.
+    taskScopes.push({ OR: [{ clientId }, { project: { clientId } }] });
+  }
 
   const [activeMine, doneMine, cancelledMine, overdueCount, todayCount, completedTodayCount, inProgressCount] = await Promise.all([
     // Pendentes minhas: todas menos done/cancelled.
     prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
+      where: { companyId, deletedAt: null, archivedAt: null, AND: taskScopes, status: { in: ["todo", "in_progress", "review", "blocked"] as TaskStatus[] } },
       orderBy: [{ dueDate: "asc" }],
       take: 100,
       select: boardTaskSelect,
     }),
     // Board: Concluído — só recentes (7 dias), senão a coluna cresce sem limite
     prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "done", completedAt: { gte: sevenDaysAgo } },
+      where: { companyId, deletedAt: null, archivedAt: null, AND: taskScopes, status: "done", completedAt: { gte: sevenDaysAgo } },
       orderBy: [{ completedAt: "desc" }],
       take: 50,
       select: boardTaskSelect,
@@ -61,24 +67,24 @@ async function getDashboardData(memberId: string | null, companyId: string, incl
     // Board: canceladas mais recentes, disponíveis para consulta ou reativação por drag.
     includeCancelled
       ? prisma.task.findMany({
-          where: { companyId, deletedAt: null, archivedAt: null, AND: memberScope, status: "cancelled" },
+          where: { companyId, deletedAt: null, archivedAt: null, AND: taskScopes, status: "cancelled" },
           orderBy: [{ updatedAt: "desc" }],
           take: 50,
           select: boardTaskSelect,
         })
       : Promise.resolve([]),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: memberScope },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { lt: todayStart }, deletedAt: null, archivedAt: null, AND: taskScopes },
     }),
     prisma.task.count({
-      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, archivedAt: null, AND: memberScope },
+      where: { companyId, status: { notIn: ["done", "cancelled"] }, dueDate: { gte: todayStart, lt: todayEnd }, deletedAt: null, archivedAt: null, AND: taskScopes },
     }),
     prisma.task.count({
-      where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: memberScope },
+      where: { companyId, status: "done", completedAt: { gte: todayStart }, deletedAt: null, AND: taskScopes },
     }),
     // KPI "Em andamento" via count() dedicado (não derivar do array truncado em take:100)
     prisma.task.count({
-      where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: memberScope },
+      where: { companyId, status: "in_progress", deletedAt: null, archivedAt: null, AND: taskScopes },
     }),
   ]);
 
@@ -90,7 +96,7 @@ async function getDashboardData(memberId: string | null, companyId: string, incl
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string; member?: string; cancelled?: string }>;
+  searchParams?: Promise<{ view?: string; member?: string; client?: string; cancelled?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
@@ -105,14 +111,31 @@ export default async function DashboardPage({
   let viewingUser: { id: string; name: string } | null = null;
   let viewingAll = false;
   let members: { id: string; name: string }[] = [];
+  let clients: { id: string; name: string }[] = [];
 
   if (canFilterByMember) {
-    members = await prisma.user.findMany({
-      where: { companyId: user.companyId, isActive: true, deletedAt: null, id: { not: user.userId } },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    });
-    if (sp?.member === "all" || (user.role === "admin" && !sp?.member)) {
+    [members, clients] = await Promise.all([
+      prisma.user.findMany({
+        where: { companyId: user.companyId, isActive: true, deletedAt: null, id: { not: user.userId } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.client.findMany({
+        where: {
+          companyId: user.companyId,
+          deletedAt: null,
+          OR: [
+            { tasks: { some: { deletedAt: null, archivedAt: null } } },
+            { projects: { some: { deletedAt: null, tasks: { some: { deletedAt: null, archivedAt: null } } } } },
+          ],
+        },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
+    // Mesmo para admins, a home sempre abre nas tarefas da própria conta. O modo "Todos"
+    // só é ativado por uma escolha explícita no filtro.
+    if (sp?.member === "all") {
       viewingAll = true;
     } else if (sp?.member && sp.member !== user.userId) {
       const target = members.find((m) => m.id === sp.member);
@@ -121,10 +144,16 @@ export default async function DashboardPage({
   }
 
   const viewingUserId = viewingAll ? null : (viewingUser?.id ?? user.userId);
+  const selectedClient = clients.find((client) => client.id === sp?.client) ?? null;
   const memberParam = viewingAll ? "&member=all" : viewingUser ? `&member=${viewingUser.id}` : "";
+  const clientParam = selectedClient ? `&client=${selectedClient.id}` : "";
+  const filterParams = `${memberParam}${clientParam}`;
+  const taskHeading = `${
+    viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"
+  }${selectedClient ? ` · ${selectedClient.name}` : ""}`;
 
   const { myTasks, cancelledTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
-    await getDashboardData(viewingUserId, user.companyId, showCancelled);
+    await getDashboardData(viewingUserId, selectedClient?.id ?? null, user.companyId, showCancelled);
 
   const pendingTasks = myTasks.filter((t) => t.status !== "done" && t.status !== "cancelled");
 
@@ -204,14 +233,16 @@ export default async function DashboardPage({
 
       {/* Minhas tarefas — lista ou board. Board: arraste o card pra mudar status */}
       <div className="flex flex-col gap-4 min-w-0">
-        {(view !== "board" || showCancelled) && (
+        {/* O cabeçalho também precisa aparecer no board vazio. Sem isso, um admin
+            sem tarefas próprias não consegue acessar "Todos" nem outro membro. */}
+        {(view !== "board" || showCancelled || myTasks.length === 0) && (
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="text-base font-bold text-neutral-900">
-                {viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
+                {taskHeading}
               </h2>
               <Link
-                href={`/dashboard?view=${view}${memberParam}${showCancelled ? "" : "&cancelled=1"}`}
+                href={`/dashboard?view=${view}${filterParams}${showCancelled ? "" : "&cancelled=1"}`}
                 className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   showCancelled
                     ? "border-orange-200 bg-orange-50 text-orange-700"
@@ -224,18 +255,21 @@ export default async function DashboardPage({
             </div>
             <div className="flex items-center gap-2">
               {canFilterByMember && (
-                <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                <MemberFilter members={members} selfName={user.name} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+              )}
+              {canFilterByMember && (
+                <ClientFilter clients={clients} selected={selectedClient?.id ?? ""} view={view} />
               )}
               <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
                 <Link
-                  href={`/dashboard?view=list${memberParam}`}
+                  href={`/dashboard?view=list${filterParams}`}
                   className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "list" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
                   title="Visão lista"
                 >
                   <LayoutList className="w-3.5 h-3.5" />
                 </Link>
                 <Link
-                  href={`/dashboard?view=board${memberParam}`}
+                  href={`/dashboard?view=board${filterParams}`}
                   className={`flex items-center gap-1 px-2.5 py-1.5 text-xs transition-colors ${view === "board" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:bg-neutral-50"}`}
                   title="Visão board"
                 >
@@ -276,26 +310,29 @@ export default async function DashboardPage({
             </div>
           ) : view === "board" ? (
             <KanbanView
-              key={viewingAll ? "all" : viewingUserId}
+              key={`${viewingAll ? "all" : viewingUserId}:${selectedClient?.id ?? "all-clients"}`}
               tasks={myTasks}
               columns={DASHBOARD_COLUMNS}
-              headerTitle={viewingAll ? "Tarefas de todos os membros" : viewingUser ? `Tarefas de ${viewingUser.name.split(" ")[0]}` : "Minhas tarefas"}
-              cancelledHref={`/dashboard?view=${view}${memberParam}&cancelled=1`}
+              headerTitle={taskHeading}
+              cancelledHref={`/dashboard?view=${view}${filterParams}&cancelled=1`}
               toolbarActions={
                 <div className="flex items-center gap-2">
                   {canFilterByMember && (
-                    <MemberFilter members={members} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                    <MemberFilter members={members} selfName={user.name} selected={viewingAll ? "all" : (viewingUser?.id ?? "")} view={view} />
+                  )}
+                  {canFilterByMember && (
+                    <ClientFilter clients={clients} selected={selectedClient?.id ?? ""} view={view} />
                   )}
                   <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden">
                     <Link
-                      href={`/dashboard?view=list${memberParam}`}
+                      href={`/dashboard?view=list${filterParams}`}
                       className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-neutral-500 transition-colors hover:bg-neutral-50"
                       title="Visão lista"
                     >
                       <LayoutList className="w-3.5 h-3.5" />
                     </Link>
                     <Link
-                      href={`/dashboard?view=board${memberParam}`}
+                      href={`/dashboard?view=board${filterParams}`}
                       className="flex items-center gap-1 bg-neutral-900 px-2.5 py-1.5 text-xs text-white transition-colors"
                       title="Visão board"
                     >

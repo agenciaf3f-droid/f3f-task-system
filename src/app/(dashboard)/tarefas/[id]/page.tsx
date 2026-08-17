@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
-import { ArrowLeft, BriefcaseBusiness, User, Pencil, FolderKanban } from "lucide-react";
+import { ArrowLeft, User, Pencil, FolderKanban } from "lucide-react";
 import { StatusBadge } from "@/components/tasks/task-badges";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "./task-actions";
@@ -15,6 +15,7 @@ import { Linkify } from "@/components/ui/linkify";
 import { TaskContentTabs } from "./task-content-tabs";
 import { TaskHistorySection } from "./task-history-section";
 import { TaskDueDateEditor } from "@/components/tasks/task-due-date-editor";
+import { TaskClientEditor } from "@/components/tasks/task-client-editor";
 
 export default async function TaskDetailPage({
   params,
@@ -24,7 +25,7 @@ export default async function TaskDetailPage({
   const user = await requireAuth();
   const { id } = await params;
 
-  const [task, activities] = await Promise.all([
+  const [task, clients, activities] = await Promise.all([
     prisma.task.findFirst({
     where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
     include: {
@@ -40,6 +41,11 @@ export default async function TaskDetailPage({
         include: { user: { select: { name: true } } },
       },
     },
+    }),
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
     prisma.activityLog.findMany({
       where: { companyId: user.companyId, resourceType: "task", resourceId: id },
@@ -110,12 +116,12 @@ export default async function TaskDetailPage({
                 </Link>
               </div>
             )}
-            {task.client && (
-              <div className="flex items-center gap-2 text-neutral-600 col-span-2">
-                <BriefcaseBusiness className="w-4 h-4 text-neutral-400 shrink-0" />
-                <span>Cliente: <span className="font-medium">{task.client.name}</span></span>
-              </div>
-            )}
+            <TaskClientEditor
+              taskId={task.id}
+              initialClient={task.client}
+              clients={clients}
+              canEdit={canEdit}
+            />
             {task.assignee && (
               <div className="flex items-center gap-2 text-neutral-600">
                 <User className="w-4 h-4 text-neutral-400 shrink-0" />

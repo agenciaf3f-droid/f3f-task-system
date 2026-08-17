@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeNextOccurrence, parseRecurrenceRuleFromDb } from "@/lib/recurrence";
-import { generateDueNotifications } from "@/lib/notifications";
 
 // Protege com CRON_SECRET — Vercel envia Authorization: Bearer <secret> em chamadas de cron
 function isAuthorized(req: Request): boolean {
@@ -126,8 +125,5 @@ export async function GET(req: Request) {
       AND deleted_at IS NULL
   `;
 
-  // Notificações de vencimento/atraso (dedup interno)
-  const dueNotifs = await generateDueNotifications();
-
-  return NextResponse.json({ ok: true, created, purged: Number(purgeResult), dueNotifs });
+  return NextResponse.json({ ok: true, created, purged: Number(purgeResult) });
 }

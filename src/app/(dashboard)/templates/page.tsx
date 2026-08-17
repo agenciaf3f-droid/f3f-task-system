@@ -4,7 +4,6 @@ import { FileText, Plus, Hash, Pencil, LockKeyhole, UserRound } from "lucide-rea
 import { LinkButton } from "@/components/ui/link-button";
 import { ToggleTemplateButton } from "./toggle-template-button";
 import { DeleteTemplateButton } from "./delete-template-button";
-import { ActivateTemplateDialog } from "./activate-template-dialog";
 import { templateVisibilityFilter } from "@/lib/template-access";
 
 export default async function TemplatesPage() {
@@ -12,8 +11,7 @@ export default async function TemplatesPage() {
 
   const canManageShared = user.role === "admin" || user.role === "manager";
   const canViewAllPersonal = user.role === "admin";
-  const [templates, users] = await Promise.all([
-    prisma.template.findMany({
+  const templates = await prisma.template.findMany({
     where: {
       companyId: user.companyId,
       deletedAt: null,
@@ -27,13 +25,7 @@ export default async function TemplatesPage() {
       createdBy: { select: { name: true } },
       _count: { select: { templateTasks: true } },
     },
-    }),
-    prisma.user.findMany({
-      where: { companyId: user.companyId, isActive: true, deletedAt: null },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-  ]);
+  });
 
   const active = templates.filter((t) => t.isActive);
   const inactive = templates.filter((t) => !t.isActive);
@@ -161,22 +153,12 @@ export default async function TemplatesPage() {
                 </div>
 
                 {/* Footer actions */}
-                <div className="flex flex-col gap-2 pt-3 mt-auto border-t border-neutral-100">
-                  <div className="w-full min-w-0">
-                    <ActivateTemplateDialog
-                      templateId={template.id}
-                      templateName={template.name}
-                      taskCount={template._count.templateTasks}
-                      users={users}
-                    />
+                {(template.isPersonal ? template.createdById === user.userId || canViewAllPersonal : canManageShared) && (
+                  <div className="mt-auto flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 border-t border-neutral-100 pt-3">
+                    <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
+                    <DeleteTemplateButton templateId={template.id} templateName={template.name} />
                   </div>
-                  {(template.isPersonal ? template.createdById === user.userId || canViewAllPersonal : canManageShared) && (
-                    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 min-w-0">
-                      <ToggleTemplateButton templateId={template.id} isActive={template.isActive} />
-                      <DeleteTemplateButton templateId={template.id} templateName={template.name} />
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             ))}
           </div>

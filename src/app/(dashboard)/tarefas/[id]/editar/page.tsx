@@ -28,6 +28,7 @@ export default async function EditarTaskPage({
         sectorId: true,
         clientId: true,
         projectId: true,
+        project: { select: { clientId: true } },
         dueDate: true,
         recurrenceRule: true,
         createdById: true,

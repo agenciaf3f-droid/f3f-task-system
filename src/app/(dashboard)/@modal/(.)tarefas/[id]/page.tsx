@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
-import { BriefcaseBusiness, Pencil, FolderKanban } from "lucide-react";
+import { Pencil, FolderKanban } from "lucide-react";
 import { StatusBadge } from "@/components/tasks/task-badges";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "@/app/(dashboard)/tarefas/[id]/task-actions";
@@ -19,6 +19,7 @@ import { Linkify } from "@/components/ui/linkify";
 import { ModalClient } from "./modal-client";
 import Link from "next/link";
 import { TaskDueDateEditor } from "@/components/tasks/task-due-date-editor";
+import { TaskClientEditor } from "@/components/tasks/task-client-editor";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,7 +37,7 @@ export default async function TaskModalPage({
   // Rotas estáticas como /tarefas/nova caem aqui — não renderiza modal, deixa o children mostrar a página real.
   if (!UUID_RE.test(id)) return null;
 
-  const [task, allUsers, activities] = await Promise.all([
+  const [task, allUsers, clients, activities] = await Promise.all([
     prisma.task.findFirst({
       where: { id, deletedAt: null, AND: taskVisibilityFilter(user) },
       include: {
@@ -65,6 +66,11 @@ export default async function TaskModalPage({
     }),
     prisma.user.findMany({
       where: { companyId: user.companyId, isActive: true, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.client.findMany({
+      where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -160,12 +166,12 @@ export default async function TaskModalPage({
               </Link>
             </div>
           )}
-          {task.client && (
-            <div className="flex items-center gap-2 text-neutral-600 col-span-2">
-              <BriefcaseBusiness className="w-4 h-4 text-neutral-400 shrink-0" />
-              <span>Cliente: <span className="font-medium">{task.client.name}</span></span>
-            </div>
-          )}
+          <TaskClientEditor
+            taskId={task.id}
+            initialClient={task.client}
+            clients={clients}
+            canEdit={canEdit}
+          />
           <div className="col-span-2">
             <AssigneesSection
               taskId={task.id}
