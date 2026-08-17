@@ -46,6 +46,24 @@ function testMessages({ buildReminderMessage }: RemindersModule) {
   );
 }
 
+function testKillSwitch({ meetingRemindersEnabled }: RemindersModule) {
+  // Opt-in explícito. Qualquer coisa que não seja exatamente "true" mantém os
+  // agendamentos desligados — errar para o lado ligado custa mensagem indevida
+  // em grupo de cliente real.
+  const original = process.env.MEETING_REMINDERS_ENABLED;
+  try {
+    for (const value of [undefined, "", "false", "TRUE", "1", "sim", " true "]) {
+      if (value === undefined) delete process.env.MEETING_REMINDERS_ENABLED;
+      else process.env.MEETING_REMINDERS_ENABLED = value;
+      const esperado = value?.trim() === "true";
+      assert.equal(meetingRemindersEnabled(), esperado, `valor ${JSON.stringify(value)}`);
+    }
+  } finally {
+    if (original === undefined) delete process.env.MEETING_REMINDERS_ENABLED;
+    else process.env.MEETING_REMINDERS_ENABLED = original;
+  }
+}
+
 function testUnreadReplyDetection({ looksLikeUnreadButtonReply }: RemindersModule) {
   // Só decide se vale logar. Mensagem comum de grupo — o caso de longe mais
   // frequente — precisa sair barato, sem varrer o payload.
@@ -276,6 +294,7 @@ async function main() {
     testMessages(reminders);
     testButtonExtraction(reminders);
     testUnreadReplyDetection(reminders);
+    testKillSwitch(reminders);
     await testReminderTimes(reminders);
     await testScheduleSafety(whatsapp);
 

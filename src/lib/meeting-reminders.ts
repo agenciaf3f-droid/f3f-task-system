@@ -159,6 +159,17 @@ export type ScheduleSummary = {
  */
 const SCHEDULE_HORIZON_DAYS = 7;
 
+/**
+ * Interruptor geral, checado em TODO caminho que agenda — não só no cron.
+ *
+ * Reunião marcada pela tela também agenda, então uma trava só no cron deixaria
+ * a primeira marcação depois do deploy disparar mensagem em grupo de cliente
+ * real. Opt-in explícito: ausente, vazia ou escrita errada = desligado.
+ */
+export function meetingRemindersEnabled(): boolean {
+  return process.env.MEETING_REMINDERS_ENABLED?.trim() === "true";
+}
+
 const MEETING_FIELDS = {
   id: true,
   date: true,
@@ -197,6 +208,7 @@ export async function scheduleMeetingReminders(
     ? await prisma.meeting.findUnique({ where: { id: meetingOrId }, select: MEETING_FIELDS })
     : meetingOrId;
 
+  if (!meetingRemindersEnabled()) return null;
   if (!meeting || meeting.status !== "confirmed") return null;
 
   const groupId = meeting.clientGroupId?.trim();

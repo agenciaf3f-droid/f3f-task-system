@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/github-oidc";
-import { reconcileMeetingReminders } from "@/lib/meeting-reminders";
+import { meetingRemindersEnabled, reconcileMeetingReminders } from "@/lib/meeting-reminders";
 import { isUazapiConfigured, isUazapiTestMode } from "@/lib/whatsapp";
 
 /**
@@ -23,10 +23,7 @@ async function handle(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  // Opt-in explícito, não opt-out: variável ausente, vazia ou escrita errada
-  // deixa os agendamentos DESLIGADOS. O estado seguro precisa ser o padrão — o
-  // erro aqui custaria mensagem indevida em grupo de cliente real.
-  if (process.env.MEETING_REMINDERS_ENABLED?.trim() !== "true") {
+  if (!meetingRemindersEnabled()) {
     return NextResponse.json({ ok: true, disabled: true });
   }
 
