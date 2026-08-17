@@ -52,15 +52,6 @@ enum ProjectStatus {
   cancelled
 }
 
-enum NotificationType {
-  task_assigned
-  task_due
-  task_overdue
-  comment
-  mention
-  system
-}
-
 // ============================================================
 // CORE TENANT
 // ============================================================
@@ -80,7 +71,6 @@ model Company {
   sectors           Sector[]
   tasks             Task[]
   templates         Template[]
-  notifications     Notification[]
   activityLogs      ActivityLog[]
   permissions       Permission[]
   clients           Client[]
@@ -124,7 +114,6 @@ model User {
   templates               Template[]
   templateTargets         TemplateUser[]
   templateTaskAssignments TemplateTask[]         @relation("TemplateTaskAssignee")
-  notifications           Notification[]
   activityLogs            ActivityLog[]
   permissions             Permission[]
   projects                Project[]
@@ -490,28 +479,8 @@ model TemplateChecklistItem {
 }
 
 // ============================================================
-// NOTIFICATIONS & AUDIT
+// AUDIT
 // ============================================================
-
-model Notification {
-  id           String           @id @default(uuid()) @db.Uuid
-  companyId    String           @map("company_id") @db.Uuid
-  userId       String           @map("user_id") @db.Uuid
-  type         NotificationType
-  title        String           @db.VarChar(255)
-  body         String?
-  isRead       Boolean          @default(false) @map("is_read")
-  resourceType String?          @map("resource_type") @db.VarChar(50)
-  resourceId   String?          @map("resource_id") @db.Uuid
-  createdAt    DateTime         @default(now()) @map("created_at")
-
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, isRead])
-  @@index([companyId])
-  @@map("notifications")
-}
 
 model ActivityLog {
   id           String   @id @default(uuid()) @db.Uuid
