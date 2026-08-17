@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unsealData } from "iron-session";
 import type { SessionData } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login", "/criar-conta", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/agendar", "/favicon.ico", "/_next", "/api/auth", "/api/agendar", "/api/test-email", "/api/cron"];
+// "/api/webhooks": chamado por serviço externo, que não tem sessão. A própria
+// rota exige o segredo compartilhado (UAZAPI_WEBHOOK_TOKEN) — sem esta entrada
+// aqui o middleware redireciona para /login e o webhook nunca chega no handler.
+const PUBLIC_PATHS = ["/login", "/criar-conta", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/agendar", "/favicon.ico", "/_next", "/api/auth", "/api/agendar", "/api/test-email", "/api/cron", "/api/webhooks"];
 
 const sessionSecret = process.env.SESSION_SECRET!;
 const COOKIE_NAME = "f3f_session";
