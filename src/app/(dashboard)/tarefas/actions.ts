@@ -69,8 +69,8 @@ const createTaskSchema = taskSchema.extend({
   dueDate: requiredDueDate,
 });
 
-// Garante que o responsável pertence à empresa do ator — evita assign cross-tenant
-// (assigneeId vem do cliente e User é FK global, sem constraint de company).
+// Garante que o responsável pertence à empresa do ator — evita atribuição
+// cross-tenant (assigneeId vem do cliente e User é FK global, sem constraint de company).
 async function resolveCompanyAssignee(
   assigneeId: string | null | undefined,
   companyId: string,
