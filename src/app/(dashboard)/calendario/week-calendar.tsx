@@ -28,6 +28,8 @@ type Meeting = {
   clientName: string | null;
   /** Foto do gestor responsável — é quem identifica a agenda. */
   hostAvatarUrl: string | null;
+  /** Plano do cliente — define a cor do evento. */
+  clientPlan: string | null;
   /** Resposta do cliente ao lembrete de véspera. "declined" cancela a reunião,
    *  então na prática só "confirmed" e null chegam ao calendário. */
   clientResponse: string | null;
@@ -55,9 +57,46 @@ const HOST_EVENT_STYLES = [
   "border-teal-500 bg-teal-50 text-teal-950 hover:bg-teal-100",
 ];
 
-function styleForHost(hostId: string) {
+/**
+ * Cor por plano do cliente.
+ *
+ * O plano é o que define a natureza do atendimento, então é ele que orienta a
+ * leitura da agenda — mais útil que colorir por gestor, que já aparece no
+ * avatar e no nome. As chaves vêm normalizadas porque a planilha mistura caixa
+ * ("Premium"/"PREMIUM", "Low-Ticket"/"Low-ticket").
+ */
+const PLAN_EVENT_STYLES: Record<string, string> = {
+  "1 fase": "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
+  "fase 1": "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
+  "2 fases": "border-teal-500 bg-teal-50 text-teal-950 hover:bg-teal-100",
+  "3 fases": "border-cyan-500 bg-cyan-50 text-cyan-950 hover:bg-cyan-100",
+  "16 fases": "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-950 hover:bg-fuchsia-100",
+  funil: "border-blue-500 bg-blue-50 text-blue-950 hover:bg-blue-100",
+  "low-ticket": "border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100",
+  premium: "border-violet-500 bg-violet-50 text-violet-950 hover:bg-violet-100",
+};
+
+/** Reunião interna (sem cliente) fica neutra e não disputa atenção. */
+const INTERNAL_EVENT_STYLE = "border-slate-400 bg-slate-100 text-slate-800 hover:bg-slate-200";
+
+function normalizePlan(plan: string | null): string {
+  return (plan ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function styleForPlan(plan: string | null): string {
+  const chave = normalizePlan(plan);
+  if (!chave) return INTERNAL_EVENT_STYLE;
+  const conhecido = PLAN_EVENT_STYLES[chave];
+  if (conhecido) return conhecido;
+
+  // Plano novo que ainda não está no mapa: cor estável em vez de tudo cinza.
   let hash = 0;
-  for (let i = 0; i < hostId.length; i++) hash = (hash * 31 + hostId.charCodeAt(i)) | 0;
+  for (let i = 0; i < chave.length; i++) hash = (hash * 31 + chave.charCodeAt(i)) | 0;
   return HOST_EVENT_STYLES[Math.abs(hash) % HOST_EVENT_STYLES.length];
 }
 
@@ -334,7 +373,6 @@ function WeekTimeGrid({
 
             {days.map((day) => {
               const dateStr = toDateStr(day);
-              const isToday = dateStr === todayStr;
               const posicionadas = layoutDayMeetings(meetingsByDate.get(dateStr) ?? []);
               const disponivel = availableDays.has(day.getUTCDay());
 
@@ -342,7 +380,7 @@ function WeekTimeGrid({
                 <div
                   key={dateStr}
                   className={`relative flex-1 border-r border-slate-200/80 last:border-r-0 ${
-                    isToday ? "bg-blue-50/40" : disponivel ? "bg-white" : "bg-slate-50/40"
+                    disponivel ? "bg-white" : "bg-slate-50/40"
                   }`}
                 >
                   {horas.map((h, i) => (
@@ -365,7 +403,7 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForHost(meeting.hostId)}`}
+                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForPlan(meeting.clientPlan)}`}
                         style={{
                           top: topoDe(inicio),
                           height: altura,
@@ -529,7 +567,7 @@ const DayCell = memo(function DayCell({
       {/* Eventos compactos com overflow no padrão do Google Calendar. */}
       <div className="flex min-h-0 flex-col gap-1">
         {visible.map((m) => {
-          const eventStyle = styleForHost(m.hostId);
+          const eventStyle = styleForPlan(m.clientPlan);
           const canManage = canManageAll || m.hostId === userId;
           const displayName = m.clientName || m.hostName;
           const tooltipPrefix = m.clientName
@@ -651,7 +689,7 @@ function DayMeetingsDialog({
           <div className="flex flex-col gap-2">
             {meetings.map((meeting) => {
               const displayName = meeting.clientName || meeting.hostName;
-              const eventStyle = styleForHost(meeting.hostId);
+              const eventStyle = styleForPlan(meeting.clientPlan);
               const canManage = canManageAll || meeting.hostId === userId;
               return (
                 <div
