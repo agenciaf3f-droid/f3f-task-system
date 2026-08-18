@@ -81,7 +81,7 @@ export default async function CalendarioPage({
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, managerId: true, whatsappGroupId: true },
+      select: { id: true, name: true, managerId: true, whatsappGroupId: true, avatarUrl: true, color: true },
     }),
   ]);
 
@@ -94,6 +94,13 @@ export default async function CalendarioPage({
     ),
   );
   const userNames = new Map(users.map((item) => [item.id, item.name]));
+  // Avatar e cor do cliente pelo grupo de WhatsApp — é o vínculo que a reunião
+  // carrega. Sem isto o evento no calendário é só texto.
+  const clientByGroupId = new Map(
+    clients.flatMap((client) =>
+      client.whatsappGroupId ? [[client.whatsappGroupId, client] as const] : [],
+    ),
+  );
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const slugOrToken = currentUser?.calendarSlug || calendarToken;
@@ -108,6 +115,8 @@ export default async function CalendarioPage({
           : null) ?? findManagerByClientName(m.clientName, clientManagerIndex);
         const hostId = clientManagerId ?? m.user.id;
 
+        const client = m.clientGroupId ? clientByGroupId.get(m.clientGroupId) : null;
+
         return {
           id: m.id,
           date: m.date,
@@ -118,6 +127,8 @@ export default async function CalendarioPage({
           hostName: userNames.get(hostId) ?? m.user.name,
           isShared: clientManagerId === null && m.user.calendarSlug === "admin",
           clientName: m.clientName,
+          clientAvatarUrl: client?.avatarUrl ?? null,
+          clientColor: client?.color ?? null,
           clientResponse: m.clientResponse,
           isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
         };

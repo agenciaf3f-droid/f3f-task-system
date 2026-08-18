@@ -1,8 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, CalendarX, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
 import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
 import { cancelMeetingAction, deleteMeetingForeverAction, type CancelScope } from "./actions";
@@ -25,6 +26,8 @@ type Meeting = {
   hostName: string;
   isShared: boolean;
   clientName: string | null;
+  clientAvatarUrl: string | null;
+  clientColor: string | null;
   /** Resposta do cliente ao lembrete de véspera. "declined" cancela a reunião,
    *  então na prática só "confirmed" e null chegam ao calendário. */
   clientResponse: string | null;
@@ -176,16 +179,29 @@ const DayCell = memo(function DayCell({
               className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${eventStyle}`}
               title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}${m.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
             >
-              {m.clientResponse === "confirmed" && (
-                <CheckCheck
-                  className="h-3.5 w-3.5 shrink-0 text-emerald-600"
-                  aria-label="Cliente confirmou presença"
+              {/* Avatar identifica o cliente de relance — antes o evento era só texto. */}
+              <span className="relative shrink-0 self-start">
+                <UserAvatar
+                  name={displayName}
+                  src={m.clientAvatarUrl}
+                  bgColor={m.clientColor}
+                  size={20}
                 />
-              )}
-              {m.isRecurring && <Repeat className="h-3.5 w-3.5 shrink-0 opacity-60" />}
-              <span className="shrink-0 self-start pt-1 font-semibold tabular-nums">{m.startTime}</span>
+                {m.clientResponse === "confirmed" && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                    aria-label="Cliente confirmou presença"
+                  >
+                    <Check className="h-2 w-2 text-white" strokeWidth={4} />
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 self-start pt-0.5 font-semibold tabular-nums">{m.startTime}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold leading-4">{displayName}</span>
+                <span className="flex items-center gap-1">
+                  <span className="truncate font-semibold leading-4">{displayName}</span>
+                  {m.isRecurring && <Repeat className="h-3 w-3 shrink-0 opacity-50" />}
+                </span>
                 {m.clientName ? (
                   <span className="block truncate text-[11px] leading-4 opacity-65">{m.hostName}</span>
                 ) : null}
@@ -285,7 +301,24 @@ function DayMeetingsDialog({
                   key={meeting.id}
                   className={`flex items-center gap-3 rounded-xl border border-l-4 px-3 py-3 shadow-sm ${eventStyle}`}
                 >
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <span className="relative shrink-0">
+                      <UserAvatar
+                        name={displayName}
+                        src={meeting.clientAvatarUrl}
+                        bgColor={meeting.clientColor}
+                        size={36}
+                        ring
+                      />
+                      {meeting.clientResponse === "confirmed" && (
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                          aria-label="Cliente confirmou presença"
+                        >
+                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={4} />
+                        </span>
+                      )}
+                    </span>
                     <span className="flex w-24 shrink-0 items-center gap-1 text-xs font-semibold tabular-nums">
                       <Clock className="h-3.5 w-3.5 text-slate-400" />
                       {meeting.startTime}–{meeting.endTime}
@@ -296,12 +329,6 @@ function DayMeetingsDialog({
                         <span className="block truncate text-xs opacity-65">{meeting.hostName}</span>
                       ) : null}
                     </span>
-                    {meeting.clientResponse === "confirmed" ? (
-                      <CheckCheck
-                        className="h-3.5 w-3.5 shrink-0 text-emerald-600"
-                        aria-label="Cliente confirmou presença"
-                      />
-                    ) : null}
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
                   </div>
                   {canManage ? (
