@@ -30,14 +30,22 @@ function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((word) => word[0]).join("").toUpperCase();
 }
 
-function getBaseScale(imageSize: ImageSize) {
-  return Math.max(CROP_SIZE / imageSize.width, CROP_SIZE / imageSize.height);
+function getRotatedSize(imageSize: ImageSize, rotation: number): ImageSize {
+  return rotation % 180 === 0
+    ? imageSize
+    : { width: imageSize.height, height: imageSize.width };
 }
 
-function clampOffset(offset: Point, imageSize: ImageSize, zoom: number): Point {
-  const baseScale = getBaseScale(imageSize);
-  const maxX = Math.max(0, (imageSize.width * baseScale * zoom - CROP_SIZE) / 2);
-  const maxY = Math.max(0, (imageSize.height * baseScale * zoom - CROP_SIZE) / 2);
+function getBaseScale(imageSize: ImageSize, rotation: number) {
+  const rotatedSize = getRotatedSize(imageSize, rotation);
+  return Math.max(CROP_SIZE / rotatedSize.width, CROP_SIZE / rotatedSize.height);
+}
+
+function clampOffset(offset: Point, imageSize: ImageSize, zoom: number, rotation: number): Point {
+  const rotatedSize = getRotatedSize(imageSize, rotation);
+  const baseScale = getBaseScale(imageSize, rotation);
+  const maxX = Math.max(0, (rotatedSize.width * baseScale * zoom - CROP_SIZE) / 2);
+  const maxY = Math.max(0, (rotatedSize.height * baseScale * zoom - CROP_SIZE) / 2);
 
   return {
     x: Math.max(-maxX, Math.min(maxX, offset.x)),
@@ -62,6 +70,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
   const [imageSize, setImageSize] = useState<ImageSize | null>(null);
   const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
   const [cropOpen, setCropOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -72,6 +81,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
   function resetCrop() {
     setOffset({ x: 0, y: 0 });
     setZoom(1);
+    setRotation(0);
   }
 
   function closeCropEditor() {
@@ -133,7 +143,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
     setOffset(clampOffset({
       x: drag.origin.x + event.clientX - drag.start.x,
       y: drag.origin.y + event.clientY - drag.start.y,
-    }, imageSize, zoom));
+    }, imageSize, zoom, rotation));
   }
 
   function handlePointerEnd(event: React.PointerEvent<HTMLDivElement>) {
@@ -151,28 +161,30 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
       ArrowRight: { x: -step, y: 0 },
     };
     const delta = movement[event.key];
-    setOffset((current) => clampOffset({ x: current.x + delta.x, y: current.y + delta.y }, imageSize, zoom));
+    setOffset((current) => clampOffset(
+      { x: current.x + delta.x, y: current.y + delta.y },
+      imageSize,
+      zoom,
+      rotation,
+    ));
   }
 
   function handleZoomChange(event: React.ChangeEvent<HTMLInputElement>) {
     const nextZoom = Number(event.target.value);
     setZoom(nextZoom);
-    if (imageSize) setOffset((current) => clampOffset(current, imageSize, nextZoom));
+    if (imageSize) setOffset((current) => clampOffset(current, imageSize, nextZoom, rotation));
+  }
+
+  function handleRotate() {
+    if (!imageSize || isPending) return;
+    const nextRotation = (rotation + 90) % 360;
+    setRotation(nextRotation);
+    setOffset((current) => clampOffset(current, imageSize, zoom, nextRotation));
   }
 
   async function createCroppedFile() {
     const image = imageRef.current;
     if (!image || !imageSize) throw new Error("A imagem ainda não está pronta.");
-
-    const baseScale = getBaseScale(imageSize);
-    const displayedWidth = imageSize.width * baseScale * zoom;
-    const displayedHeight = imageSize.height * baseScale * zoom;
-    const imageLeft = CROP_SIZE / 2 - displayedWidth / 2 + offset.x;
-    const imageTop = CROP_SIZE / 2 - displayedHeight / 2 + offset.y;
-    const sourceX = Math.max(0, -imageLeft / displayedWidth * imageSize.width);
-    const sourceY = Math.max(0, -imageTop / displayedHeight * imageSize.height);
-    const sourceWidth = Math.min(imageSize.width - sourceX, CROP_SIZE / displayedWidth * imageSize.width);
-    const sourceHeight = Math.min(imageSize.height - sourceY, CROP_SIZE / displayedHeight * imageSize.height);
 
     const canvas = document.createElement("canvas");
     canvas.width = OUTPUT_SIZE;
@@ -182,17 +194,15 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
 
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = "high";
-    context.drawImage(
-      image,
-      sourceX,
-      sourceY,
-      sourceWidth,
-      sourceHeight,
-      0,
-      0,
-      OUTPUT_SIZE,
-      OUTPUT_SIZE,
+    const outputRatio = OUTPUT_SIZE / CROP_SIZE;
+    const renderedScale = getBaseScale(imageSize, rotation) * zoom * outputRatio;
+    context.translate(
+      OUTPUT_SIZE / 2 + offset.x * outputRatio,
+      OUTPUT_SIZE / 2 + offset.y * outputRatio,
     );
+    context.rotate(rotation * Math.PI / 180);
+    context.scale(renderedScale, renderedScale);
+    context.drawImage(image, -imageSize.width / 2, -imageSize.height / 2);
 
     const blob = await canvasToBlob(canvas);
     return new File([blob], "avatar.webp", { type: "image/webp" });
@@ -237,7 +247,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
     });
   }
 
-  const baseScale = imageSize ? getBaseScale(imageSize) : 1;
+  const baseScale = imageSize ? getBaseScale(imageSize, rotation) : 1;
 
   return (
     <>
@@ -298,7 +308,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
               <Crop className="w-5 h-5 text-blue-600" />
               Ajustar foto de perfil
             </DialogTitle>
-            <DialogDescription>Arraste a imagem para escolher a região e use o zoom para ajustar o enquadramento.</DialogDescription>
+            <DialogDescription>Arraste, gire ou use o zoom para ajustar o enquadramento.</DialogDescription>
           </DialogHeader>
 
           <div className="flex justify-center">
@@ -325,7 +335,7 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
                   style={imageSize ? {
                     width: imageSize.width * baseScale,
                     height: imageSize.height * baseScale,
-                    transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+                    transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) rotate(${rotation}deg) scale(${zoom})`,
                   } : undefined}
                 />
               )}
@@ -349,10 +359,10 @@ export function AvatarUpload({ currentAvatar, userName }: AvatarUploadProps) {
             />
             <button
               type="button"
-              onClick={resetCrop}
+              onClick={handleRotate}
               disabled={!imageSize || isPending}
-              title="Centralizar imagem"
-              aria-label="Centralizar imagem"
+              title="Girar foto 90 graus"
+              aria-label="Girar foto 90 graus"
               className="w-8 h-8 flex items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 hover:bg-neutral-50 disabled:opacity-50"
             >
               <RotateCcw className="w-4 h-4" />
