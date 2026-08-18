@@ -61,7 +61,9 @@ export default async function CalendarioPage({
           OR: [
             { userId: user.userId },
             { user: { calendarSlug: { not: "admin" } } },
-            { user: { calendarSlug: "admin" }, visibleTo: { none: {} } },
+            // Reuniões internas do Admin F3F são públicas para toda a equipe,
+            // mesmo quando há participantes responsáveis selecionados.
+            { user: { calendarSlug: "admin" } },
             { visibleTo: { some: { userId: user.userId } } },
           ],
         }),
@@ -133,7 +135,7 @@ export default async function CalendarioPage({
           participantNames: m.visibleTo.map((item) => item.user.name),
           guestEmails: m.guestEmails,
           responsibleIds: [...new Set([hostId, ...m.visibleTo.map((item) => item.userId)])],
-          isShared: clientManagerId === null && m.user.calendarSlug === "admin" && m.visibleTo.length === 0,
+          isShared: m.user.calendarSlug === "admin",
           clientName: m.clientName,
           hostAvatarUrl: userAvatars.get(hostId) ?? null,
           clientResponse: m.clientResponse,

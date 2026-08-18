@@ -864,15 +864,15 @@ export function WeekCalendar({
   const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
-  // "Minhas" exibe somente reuniões dos clientes do gestor responsável.
-  // Reuniões gerais/compartilhadas continuam disponíveis em "Todas".
+  // Reuniões do Admin F3F são internas e permanecem visíveis para toda a
+  // equipe, inclusive em "Minhas" e ao filtrar a agenda por uma pessoa.
   const visibleMeetings = useMemo(() => {
     const scopedMeetings = viewMode === "mine"
-      ? meetings.filter((meeting) => meeting.responsibleIds.includes(userId))
+      ? meetings.filter((meeting) => meeting.isShared || meeting.responsibleIds.includes(userId))
       : meetings;
 
     return canFilterByUser && selectedHostId !== "all"
-      ? scopedMeetings.filter((meeting) => meeting.responsibleIds.includes(selectedHostId))
+      ? scopedMeetings.filter((meeting) => meeting.isShared || meeting.responsibleIds.includes(selectedHostId))
       : scopedMeetings;
   }, [canFilterByUser, meetings, selectedHostId, userId, viewMode]);
 
