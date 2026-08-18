@@ -214,8 +214,9 @@ export async function scheduleMeetingReminders(
   if (!meeting || meeting.status !== "confirmed") return null;
 
   const alvo = await resolveClientTarget(meeting);
-  const groupId = alvo?.groupId;
-  const clientName = alvo?.name;
+  const encontrado = alvo && "groupId" in alvo ? alvo : null;
+  const groupId = encontrado?.groupId;
+  const clientName = encontrado?.name;
   const summary: ScheduleSummary = {
     meetingId: meeting.id,
     scheduled: 0,
@@ -240,7 +241,11 @@ export async function scheduleMeetingReminders(
       ),
     );
     summary.skipped = REMINDER_KINDS.length;
-    conta(!groupId ? "sem_grupo_whatsapp" : "sem_nome_do_cliente");
+    conta(
+      alvo && "falha" in alvo
+        ? `${alvo.falha}:${alvo.padrao}`
+        : "sem_grupo_whatsapp",
+    );
     return summary;
   }
 
@@ -354,10 +359,24 @@ async function loadClients() {
  * `Meeting.clientName` também não serve como saudação: em reunião criada pelo
  * /calendario ele é um rótulo, `"${título} · ${cliente}"`.
  */
+export type TargetFailure =
+  | "sem_nome"
+  | "nome_sem_correspondencia"
+  | "nome_ambiguo";
+
+/** Formato do nome guardado, para diagnosticar sem expor dado de cliente. */
+export function describeNamePattern(raw: string): string {
+  if (raw.includes(" · ")) return "rotulo_calendario";        // "titulo · cliente"
+  if (/\s[—–-]\s\d{2}:\d{2}$/.test(raw)) return "titulo_com_horario"; // "Cliente — 14:00"
+  if (/^f3f\s*-/i.test(raw)) return "com_prefixo_f3f";
+  if (!raw.trim()) return "vazio";
+  return "nome_simples";
+}
+
 async function resolveClientTarget(meeting: {
   clientGroupId: string | null;
   clientName: string | null;
-}): Promise<{ groupId: string; name: string } | null> {
+}): Promise<{ groupId: string; name: string } | { falha: TargetFailure; padrao: string } | null> {
   const clients = await loadClients();
 
   const direct = meeting.clientGroupId?.trim();
@@ -368,13 +387,15 @@ async function resolveClientTarget(meeting: {
   }
 
   const rawName = meeting.clientName?.trim();
-  if (!rawName) return null;
+  if (!rawName) return { falha: "sem_nome", padrao: "vazio" };
 
+  const padrao = describeNamePattern(rawName);
   const alvo = normalizeClientName(rawName);
-  if (!alvo) return null;
+  if (!alvo) return { falha: "sem_nome", padrao };
 
   const candidatos = clients.filter((c) => normalizeClientName(c.name) === alvo);
-  if (candidatos.length !== 1) return null;
+  if (candidatos.length === 0) return { falha: "nome_sem_correspondencia", padrao };
+  if (candidatos.length > 1) return { falha: "nome_ambiguo", padrao };
 
   return { groupId: candidatos[0].groupId, name: candidatos[0].name.trim() };
 }
