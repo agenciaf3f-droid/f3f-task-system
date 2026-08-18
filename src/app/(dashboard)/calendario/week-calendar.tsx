@@ -217,7 +217,7 @@ function WeekTimeGrid({
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="min-w-[1100px]">
+      <div className={days.length > 1 ? "min-w-[1100px]" : ""}>
         {/* Cabeçalho fixo com os dias */}
         <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-50/95 backdrop-blur">
           <div className="w-14 shrink-0 border-r border-slate-200/80" />
@@ -294,7 +294,7 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] px-1.5 py-1 text-xs shadow-sm transition-colors ${styleForHost(meeting.hostId)}`}
+                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForHost(meeting.hostId)}`}
                         style={{
                           top: topoDe(inicio),
                           height: altura,
@@ -303,29 +303,41 @@ function WeekTimeGrid({
                         }}
                         title={`${displayName} com ${meeting.hostName} · ${meeting.startTime}–${meeting.endTime}${meeting.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
                       >
+                        {/* Quanto mais reuniões dividem o horário, menos largura
+                            sobra. Avatar, horário e ícone saem antes do nome —
+                            card ilegível não serve para nada. */}
                         <div className="flex items-start gap-1">
-                          <span className="relative shrink-0">
-                            <UserAvatar
-                              name={meeting.hostName}
-                              src={meeting.hostAvatarUrl}
-                              size={18}
-                            />
-                            {meeting.clientResponse === "confirmed" && (
-                              <span
-                                className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
-                                aria-label="Cliente confirmou presença"
-                              >
-                                <Check className="h-1.5 w-1.5 text-white" strokeWidth={5} />
+                          {columns <= 2 && (
+                            <span className="relative shrink-0">
+                              <UserAvatar
+                                name={meeting.hostName}
+                                src={meeting.hostAvatarUrl}
+                                size={18}
+                              />
+                              {meeting.clientResponse === "confirmed" && (
+                                <span
+                                  className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                                  aria-label="Cliente confirmou presença"
+                                >
+                                  <Check className="h-1.5 w-1.5 text-white" strokeWidth={5} />
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className={`block truncate font-semibold ${columns >= 3 ? "text-[11px]" : ""}`}>
+                              {columns >= 3 && meeting.clientResponse === "confirmed" ? "✓ " : ""}
+                              {displayName}
+                            </span>
+                            {columns === 1 && altura >= 40 && (
+                              <span className="block truncate text-[10px] tabular-nums opacity-70">
+                                {meeting.startTime}–{meeting.endTime}
                               </span>
                             )}
                           </span>
-                          <span className="min-w-0 flex-1 leading-tight">
-                            <span className="block truncate font-semibold">{displayName}</span>
-                            <span className="block truncate text-[10px] tabular-nums opacity-70">
-                              {meeting.startTime}–{meeting.endTime}
-                            </span>
-                          </span>
-                          {meeting.isRecurring && <Repeat className="h-3 w-3 shrink-0 opacity-50" />}
+                          {meeting.isRecurring && columns <= 2 && (
+                            <Repeat className="h-3 w-3 shrink-0 opacity-50" />
+                          )}
                         </div>
 
                         {canManage && (
@@ -382,7 +394,7 @@ type DayCellProps = {
   onDeleteClick: (m: Meeting) => void;
   onOpenDay: (dateStr: string) => void;
   onHoverOverflow: (dateStr: string | null) => void;
-  calendarView: "week" | "month";
+  calendarView: "day" | "week" | "month";
 };
 
 const DayCell = memo(function DayCell({
@@ -661,7 +673,7 @@ export function WeekCalendar({
   canFilterByUser: boolean;
   defaultDate: string;
   focusDate?: string;
-  initialCalendarView: "week" | "month";
+  initialCalendarView: "day" | "week" | "month";
   internalHostId?: string;
 }) {
   const router = useRouter();
@@ -670,7 +682,7 @@ export function WeekCalendar({
   const [deleting, startDelete] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
-  const [calendarView, setCalendarView] = useState<"week" | "month">(initialCalendarView);
+  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">(initialCalendarView);
   const [weekAnchorDate, setWeekAnchorDate] = useState(focusDate ?? defaultDate);
   const [selectedHostId, setSelectedHostId] = useState("all");
   const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
@@ -707,6 +719,8 @@ export function WeekCalendar({
   });
   const displayedDays = calendarView === "month"
     ? days
+    : calendarView === "day"
+    ? [new Date(weekAnchorDate + "T00:00:00Z")]
     : Array.from({ length: 7 }, (_, index) => {
         const day = new Date(weekStart);
         day.setUTCDate(weekStart.getUTCDate() + index);
@@ -760,6 +774,16 @@ export function WeekCalendar({
       router.push(`/calendario?view=week&date=${date}&month=${toMonthStr(next)}`);
     },
     [router, weekStart],
+  );
+
+  // A visão de dia anda de um em um, sem recarregar: o âncora é estado local.
+  const navigateDay = useCallback(
+    (delta: number) => {
+      const atual = new Date(weekAnchorDate + "T00:00:00Z");
+      atual.setUTCDate(atual.getUTCDate() + delta);
+      setWeekAnchorDate(toDateStr(atual));
+    },
+    [weekAnchorDate],
   );
 
   const copyLink = useCallback(() => {
@@ -825,21 +849,24 @@ export function WeekCalendar({
           </h1>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => calendarView === "month" ? navigateMonth(-1) : navigateWeek(-1)}
+              onClick={() => calendarView === "month" ? navigateMonth(-1) : calendarView === "day" ? navigateDay(-1) : navigateWeek(-1)}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-              aria-label={calendarView === "month" ? "Mês anterior" : "Semana anterior"}
+              aria-label={calendarView === "month" ? "Mês anterior" : calendarView === "day" ? "Dia anterior" : "Semana anterior"}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={() => calendarView === "month" ? navigateMonth(1) : navigateWeek(1)}
+              onClick={() => calendarView === "month" ? navigateMonth(1) : calendarView === "day" ? navigateDay(1) : navigateWeek(1)}
               className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-600 transition-colors"
-              aria-label={calendarView === "month" ? "Próximo mês" : "Próxima semana"}
+              aria-label={calendarView === "month" ? "Próximo mês" : calendarView === "day" ? "Próximo dia" : "Próxima semana"}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => router.push(calendarView === "week" ? `/calendario?view=week&date=${todayStr}` : "/calendario")}
+              onClick={() => {
+                if (calendarView === "month") { router.push("/calendario?view=month"); return; }
+                setWeekAnchorDate(todayStr);
+              }}
               className="ml-2 px-4 py-1.5 text-sm font-medium text-slate-700 border border-slate-300 rounded-full hover:bg-slate-50 transition-colors"
             >
               Hoje
@@ -848,6 +875,18 @@ export function WeekCalendar({
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-full bg-slate-100 p-0.5" aria-label="Visualização do calendário">
+            <button
+              type="button"
+              onClick={() => {
+                setWeekAnchorDate(todayStr);
+                setCalendarView("day");
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                calendarView === "day" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Dia
+            </button>
             <button
               type="button"
               onClick={() => {

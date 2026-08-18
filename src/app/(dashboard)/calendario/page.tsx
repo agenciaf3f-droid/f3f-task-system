@@ -138,7 +138,7 @@ export default async function CalendarioPage({
       internalHostId={users.find((item) => item.calendarSlug === "admin")?.id}
       defaultDate={todayInBrazil()}
       focusDate={sp?.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined}
-      initialCalendarView={sp?.view === "month" ? "month" : "week"}
+      initialCalendarView={sp?.view === "month" ? "month" : sp?.view === "day" ? "day" : "week"}
     />
   );
 }
