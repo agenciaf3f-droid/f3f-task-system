@@ -166,6 +166,76 @@ function layoutDayMeetings(meetings: Meeting[]): PositionedMeeting[] {
   return posicionadas;
 }
 
+
+type HoverInfo = { meeting: Meeting; dateStr: string; x: number; y: number };
+
+/**
+ * Detalhes da reunião ao passar o mouse.
+ *
+ * Renderizado fora da grade, em posição fixa: dentro do card o
+ * `overflow-hidden` e a rolagem vertical cortariam o painel. Não captura mouse
+ * para não piscar quando o cursor passa por cima dele.
+ */
+function MeetingHoverCard({ info }: { info: HoverInfo }) {
+  const { meeting } = info;
+  const LARGURA = 260;
+  // Vira para a esquerda quando não cabe à direita da tela.
+  const x = typeof window !== "undefined" && info.x + LARGURA + 24 > window.innerWidth
+    ? info.x - LARGURA - 12
+    : info.x + 12;
+  const y = typeof window !== "undefined"
+    ? Math.min(info.y, window.innerHeight - 200)
+    : info.y;
+
+  return (
+    <div
+      className="pointer-events-none fixed z-50 rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
+      style={{ left: x, top: y, width: LARGURA }}
+      role="tooltip"
+    >
+      <div className="flex items-start gap-2">
+        <UserAvatar name={meeting.hostName} src={meeting.hostAvatarUrl} size={32} />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold leading-tight text-slate-900">
+            {meeting.clientName || meeting.hostName}
+          </p>
+          <p className="text-xs text-slate-500">com {meeting.hostName}</p>
+        </div>
+      </div>
+
+      <dl className="mt-2.5 space-y-1 text-xs">
+        <div className="flex gap-2">
+          <dt className="w-16 shrink-0 text-slate-400">Data</dt>
+          <dd className="font-medium text-slate-700">{formatDayTitle(info.dateStr)}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="w-16 shrink-0 text-slate-400">Horário</dt>
+          <dd className="font-medium tabular-nums text-slate-700">
+            {meeting.startTime} – {meeting.endTime}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {meeting.clientResponse === "confirmed" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+            <Check className="h-3 w-3" strokeWidth={3} /> Cliente confirmou
+          </span>
+        ) : meeting.clientName ? (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+            Aguardando confirmação
+          </span>
+        ) : null}
+        {meeting.isRecurring && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+            <Repeat className="h-3 w-3" /> Recorrente
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type WeekTimeGridProps = {
   days: Date[];
   todayStr: string;
@@ -191,6 +261,7 @@ function WeekTimeGrid({
   onCancelClick,
   onDeleteClick,
 }: WeekTimeGridProps) {
+  const [hover, setHover] = useState<HoverInfo | null>(null);
   // A faixa acompanha o que existe na semana: dia cheio mostra mais horas, dia
   // vazio não vira um paredão de linhas em branco.
   const { primeiraHora, ultimaHora } = useMemo(() => {
@@ -301,7 +372,11 @@ function WeekTimeGrid({
                           left: `calc(${(column / columns) * 100}% + 2px)`,
                           width: `calc(${(1 / columns) * 100}% - 4px)`,
                         }}
-                        title={`${displayName} com ${meeting.hostName} · ${meeting.startTime}–${meeting.endTime}${meeting.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
+                        onMouseEnter={(event) => {
+                          const r = event.currentTarget.getBoundingClientRect();
+                          setHover({ meeting, dateStr, x: r.right, y: r.top });
+                        }}
+                        onMouseLeave={() => setHover(null)}
                       >
                         {/* Quanto mais reuniões dividem o horário, menos largura
                             sobra. Avatar, horário e ícone saem antes do nome —
@@ -373,6 +448,7 @@ function WeekTimeGrid({
           </div>
         </div>
       </div>
+      {hover && <MeetingHoverCard info={hover} />}
     </div>
   );
 }
@@ -968,7 +1044,7 @@ export function WeekCalendar({
         </div>
       </div>
 
-      {calendarView === "week" ? (
+      {calendarView !== "month" ? (
         <WeekTimeGrid
           days={displayedDays}
           todayStr={todayStr}
