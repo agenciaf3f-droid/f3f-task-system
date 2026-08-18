@@ -213,8 +213,9 @@ export async function scheduleMeetingReminders(
   if (!meetingRemindersEnabled()) return null;
   if (!meeting || meeting.status !== "confirmed") return null;
 
-  const groupId = meeting.clientGroupId?.trim();
-  const clientName = groupId ? await resolveClientName(groupId, meeting.clientName) : null;
+  const alvo = await resolveClientTarget(meeting);
+  const groupId = alvo?.groupId;
+  const clientName = alvo?.name;
   const summary: ScheduleSummary = {
     meetingId: meeting.id,
     scheduled: 0,
@@ -310,26 +311,72 @@ export async function scheduleMeetingReminders(
   return summary;
 }
 
+function normalizeClientName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 /**
- * Nome do cliente para a saudação da mensagem.
+ * Cadastro de clientes em memória.
  *
- * `Meeting.clientName` NÃO serve: quando a reunião é criada pelo /calendario
- * ele guarda um rótulo de exibição — `"${título} · ${cliente}"` — e a saudação
- * sairia como "🤖 Reunião de alinhamento · Padaria do João, tudo bem?".
- *
- * O grupo de WhatsApp é a identidade confiável do cliente, então o nome vem do
- * cadastro. Só cai no campo da reunião quando não há cadastro correspondente
- * (reunião vinda do Google Calendar, por exemplo), onde ele é o nome puro.
+ * São ~100 registros e a reconciliação percorre centenas de reuniões; buscar um
+ * a um seria uma consulta por reunião. O cache vive só enquanto a lambda está
+ * quente.
  */
-async function resolveClientName(
-  groupId: string,
-  fallback: string | null,
-): Promise<string | null> {
-  const client = await prisma.client.findFirst({
-    where: { whatsappGroupId: groupId, deletedAt: null },
-    select: { name: true },
+let clientCache: { name: string; groupId: string }[] | null = null;
+
+async function loadClients() {
+  if (clientCache) return clientCache;
+  const rows = await prisma.client.findMany({
+    where: { deletedAt: null, whatsappGroupId: { not: null } },
+    select: { name: true, whatsappGroupId: true },
   });
-  return client?.name.trim() || fallback?.trim() || null;
+  clientCache = rows.map((r) => ({ name: r.name, groupId: r.whatsappGroupId! }));
+  return clientCache;
+}
+
+/**
+ * Destino e nome do cliente de uma reunião.
+ *
+ * `Meeting.clientGroupId` é a fonte preferida, mas vem vazio em reunião criada
+ * direto no Google Calendar — o sistema só o obtém quando ele está na descrição
+ * do evento. Sem tratamento, esses clientes simplesmente nunca eram avisados.
+ *
+ * O reparo é achar o cliente pelo nome. A correspondência é EXATA (após tirar
+ * acento, caixa e espaço repetido) e precisa ser ÚNICA: aproximar nomes aqui
+ * significaria mandar o lembrete de um cliente no grupo de outro, o que é bem
+ * pior do que não mandar.
+ *
+ * `Meeting.clientName` também não serve como saudação: em reunião criada pelo
+ * /calendario ele é um rótulo, `"${título} · ${cliente}"`.
+ */
+async function resolveClientTarget(meeting: {
+  clientGroupId: string | null;
+  clientName: string | null;
+}): Promise<{ groupId: string; name: string } | null> {
+  const clients = await loadClients();
+
+  const direct = meeting.clientGroupId?.trim();
+  if (direct) {
+    const match = clients.find((c) => c.groupId === direct);
+    const name = match?.name.trim() || meeting.clientName?.trim();
+    return name ? { groupId: direct, name } : null;
+  }
+
+  const rawName = meeting.clientName?.trim();
+  if (!rawName) return null;
+
+  const alvo = normalizeClientName(rawName);
+  if (!alvo) return null;
+
+  const candidatos = clients.filter((c) => normalizeClientName(c.name) === alvo);
+  if (candidatos.length !== 1) return null;
+
+  return { groupId: candidatos[0].groupId, name: candidatos[0].name.trim() };
 }
 
 async function upsertReminder(
