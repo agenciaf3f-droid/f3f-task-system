@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createCalendarMeeting, deleteCalendarMeeting } from "@/lib/google-calendar";
+import { createCalendarMeeting, deleteCalendarMeeting, updateCalendarMeeting } from "@/lib/google-calendar";
 import { isPastDate, nowInBrazil, todayInBrazil } from "@/lib/meeting-recurrence";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { isElevated } from "@/lib/task-visibility";
@@ -87,10 +87,6 @@ function parseGuestEmails(raw: string): { emails?: string[]; error?: string } {
   return { emails };
 }
 
-function eventStart(date: string, time: string): string {
-  return `${date}T${time}`;
-}
-
 export async function createManualMeetingAction(
   formData: FormData,
 ): Promise<{ success?: true; error?: string }> {
@@ -154,39 +150,6 @@ export async function createManualMeetingAction(
     return { error: "Um ou mais responsáveis adicionais são inválidos." };
   }
   const displayName = client ? `${title} · ${client.name}` : title;
-  const responsibleIds = [host.id, ...participantUserIds];
-
-  const candidates = await prisma.meeting.findMany({
-    where: {
-      user: { companyId: user.companyId },
-      status: "confirmed",
-      date: { lte: endDate },
-      AND: [
-        { OR: [{ endDate: { gte: startDate } }, { endDate: null, date: { gte: startDate } }] },
-        { OR: [{ userId: { in: responsibleIds } }, { visibleTo: { some: { userId: { in: responsibleIds } } } }] },
-      ],
-    },
-    select: {
-      id: true,
-      userId: true,
-      date: true,
-      endDate: true,
-      startTime: true,
-      endTime: true,
-      visibleTo: { select: { userId: true } },
-    },
-  });
-  const requestedStart = eventStart(startDate, startTime);
-  const requestedEnd = eventStart(endDate, endTime);
-  const conflict = candidates.find((meeting) => {
-    const meetingEndDate = meeting.endDate ?? meeting.date;
-    const overlaps = requestedStart < eventStart(meetingEndDate, meeting.endTime)
-      && requestedEnd > eventStart(meeting.date, meeting.startTime);
-    if (!overlaps) return false;
-    const meetingResponsibleIds = new Set([meeting.userId, ...meeting.visibleTo.map((item) => item.userId)]);
-    return responsibleIds.some((id) => meetingResponsibleIds.has(id));
-  });
-  if (conflict) return { error: "Um dos responsáveis já possui uma reunião nesse período." };
 
   const meeting = await prisma.meeting.create({
     data: {
@@ -256,6 +219,206 @@ export async function createManualMeetingAction(
   });
   revalidatePath("/calendario");
   return { success: true };
+}
+
+export async function updateManualMeetingAction(
+  formData: FormData,
+): Promise<{ success?: true; error?: string; warning?: string }> {
+  const user = await requireAuth();
+  const meetingId = z.string().uuid().safeParse(formData.get("meetingId"));
+  if (!meetingId.success) return { error: "Reunião inválida." };
+
+  const existing = await prisma.meeting.findFirst({
+    where: {
+      id: meetingId.data,
+      user: { companyId: user.companyId },
+      ...(isElevated(user.role)
+        ? {}
+        : { OR: [{ userId: user.userId }, { visibleTo: { some: { userId: user.userId } } }] }),
+    },
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      endDate: true,
+      startTime: true,
+      endTime: true,
+      isAllDay: true,
+      clientName: true,
+      clientGroupId: true,
+      clientPlan: true,
+      guestEmails: true,
+      googleEventId: true,
+      user: { select: { name: true, googleCalendarId: true } },
+      visibleTo: { select: { userId: true } },
+    },
+  });
+  if (!existing) return { error: "Reunião não encontrada ou sem permissão para editar." };
+
+  const parsed = manualMeetingSchema.safeParse({
+    title: formData.get("title"),
+    hostId: formData.get("hostId"),
+    clientId: formData.get("clientId"),
+    startDate: formData.get("startDate"),
+    endDate: formData.get("endDate"),
+    startTime: formData.get("startTime") ?? "",
+    endTime: formData.get("endTime") ?? "",
+    isAllDay: formData.get("isAllDay") === "on",
+    participantUserIds: formData.getAll("participantUserIds"),
+    guestEmails: formData.get("guestEmails") ?? "",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+
+  const { title, startDate, endDate, clientId, isAllDay } = parsed.data;
+  const startTime = isAllDay ? "00:00" : parsed.data.startTime;
+  const endTime = isAllDay ? "23:59" : parsed.data.endTime;
+  if (!startTime || !endTime) return { error: "Informe os horários de início e término." };
+  if (endDate < startDate) return { error: "A data final não pode ser anterior à data inicial." };
+  const durationDays = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000;
+  if (durationDays > 731) return { error: "A reunião pode durar no máximo 2 anos." };
+  if (endDate === startDate && endTime <= startTime) {
+    return { error: "O horário final deve ser posterior ao inicial." };
+  }
+  const parsedGuests = parseGuestEmails(parsed.data.guestEmails);
+  if (parsedGuests.error) return { error: parsedGuests.error };
+  const guestEmails = parsedGuests.emails ?? [];
+
+  const hostId = isElevated(user.role) ? parsed.data.hostId : existing.userId;
+  const participantUserIds = [...new Set(parsed.data.participantUserIds)].filter((id) => id !== hostId);
+  const [host, participants, client] = await Promise.all([
+    prisma.user.findFirst({
+      where: { id: hostId, companyId: user.companyId, isActive: true, deletedAt: null },
+      select: { id: true, name: true, email: true, googleCalendarId: true },
+    }),
+    participantUserIds.length
+      ? prisma.user.findMany({
+          where: { id: { in: participantUserIds }, companyId: user.companyId, isActive: true, deletedAt: null },
+          select: { id: true, name: true, email: true },
+        })
+      : [],
+    clientId
+      ? prisma.client.findFirst({
+          where: { id: clientId, companyId: user.companyId, deletedAt: null },
+          select: { name: true, whatsappGroupId: true, meetingPlan: true },
+        })
+      : null,
+  ]);
+  if (!host) return { error: "Responsável não encontrado." };
+  if (clientId && !client) return { error: "Cliente não encontrado." };
+  if (participants.length !== participantUserIds.length) {
+    return { error: "Um ou mais responsáveis adicionais são inválidos." };
+  }
+
+  const displayName = client ? `${title} · ${client.name}` : title;
+  await prisma.meeting.update({
+    where: { id: existing.id },
+    data: {
+      userId: host.id,
+      date: startDate,
+      endDate,
+      startTime,
+      endTime,
+      isAllDay,
+      guestEmails,
+      clientName: displayName,
+      clientGroupId: client?.whatsappGroupId ?? null,
+      clientPlan: client?.meetingPlan ?? null,
+      visibleTo: {
+        deleteMany: {},
+        ...(participantUserIds.length
+          ? { create: participantUserIds.map((participantUserId) => ({ userId: participantUserId })) }
+          : {}),
+      },
+    },
+  });
+
+  const oldCalendarId = await resolvePlanCalendarId(existing.clientPlan)
+    ?? existing.user.googleCalendarId
+    ?? undefined;
+  const newCalendarId = await resolvePlanCalendarId(client?.meetingPlan ?? null)
+    ?? host.googleCalendarId
+    ?? undefined;
+  const calendarPayload = {
+    date: startDate,
+    endDate,
+    startTime,
+    endTime,
+    isAllDay,
+    ownerName: host.name,
+    clientName: displayName,
+    clientGroupId: client?.whatsappGroupId ?? undefined,
+    attendeeEmails: [...participants.map((participant) => participant.email), ...guestEmails],
+  };
+  let warning: string | undefined;
+  let nextGoogleEventId = existing.googleEventId;
+
+  if (existing.googleEventId && oldCalendarId === newCalendarId) {
+    const updated = await updateCalendarMeeting({
+      googleEventId: existing.googleEventId,
+      ...calendarPayload,
+      calendarId: newCalendarId,
+    });
+    if (!updated) warning = "Evento salvo no Task, mas não foi possível atualizar o Google Calendar.";
+  } else {
+    let canCreateGoogleEvent = true;
+    if (existing.googleEventId) {
+      canCreateGoogleEvent = await deleteCalendarMeeting(existing.googleEventId, oldCalendarId);
+    }
+    if (canCreateGoogleEvent) {
+      nextGoogleEventId = await createCalendarMeeting({ ...calendarPayload, calendarId: newCalendarId });
+      if (!nextGoogleEventId && existing.googleEventId) {
+        warning = "Evento salvo no Task, mas não foi possível recriá-lo no Google Calendar.";
+      }
+    } else {
+      warning = "Evento salvo no Task, mas não foi possível movê-lo no Google Calendar.";
+    }
+  }
+  if (nextGoogleEventId !== existing.googleEventId) {
+    await prisma.meeting.update({ where: { id: existing.id }, data: { googleEventId: nextGoogleEventId } });
+  }
+
+  after(async () => {
+    try {
+      await cancelMeetingReminders([existing.id]);
+      await scheduleMeetingReminders(existing.id);
+    } catch (error) {
+      console.error("[calendario] falha ao reagendar lembretes", { meetingId: existing.id, error });
+    }
+  });
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "meeting.updated",
+    resourceType: "meeting",
+    resourceId: existing.id,
+    oldValue: {
+      hostId: existing.userId,
+      participantUserIds: existing.visibleTo.map((item) => item.userId),
+      guestEmails: existing.guestEmails,
+      startDate: existing.date,
+      endDate: existing.endDate ?? existing.date,
+      startTime: existing.startTime,
+      endTime: existing.endTime,
+      isAllDay: existing.isAllDay,
+      clientName: existing.clientName,
+      clientGroupId: existing.clientGroupId,
+    },
+    newValue: {
+      title,
+      clientId: clientId || null,
+      hostId: host.id,
+      participantUserIds,
+      guestEmails,
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      isAllDay,
+    },
+  });
+  revalidatePath("/calendario");
+  return { success: true, warning };
 }
 
 export async function cancelMeetingAction(

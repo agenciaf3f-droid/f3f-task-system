@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Repeat, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, Trash2 } from "lucide-react";
 import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
+import { EditMeetingDialog } from "./edit-meeting-dialog";
 import { cancelMeetingAction, deleteMeetingForeverAction, type CancelScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import {
@@ -18,6 +19,8 @@ import {
 
 type Meeting = {
   id: string;
+  title: string;
+  clientId: string;
   date: string;
   endDate: string;
   startTime: string;
@@ -255,6 +258,7 @@ type WeekTimeGridProps = {
   canManageAll: boolean;
   cancelling: boolean;
   deleting: boolean;
+  onEditClick: (m: Meeting) => void;
   onCancelClick: (m: Meeting) => void;
   onDeleteClick: (m: Meeting) => void;
 };
@@ -268,6 +272,7 @@ function WeekTimeGrid({
   canManageAll,
   cancelling,
   deleting,
+  onEditClick,
   onCancelClick,
   onDeleteClick,
 }: WeekTimeGridProps) {
@@ -307,6 +312,7 @@ function WeekTimeGrid({
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className={days.length > 1 ? "min-w-[1100px]" : ""}>
+        <div className="max-h-[calc(100vh-15rem)] min-h-[24rem] overflow-y-auto [scrollbar-gutter:stable]">
         {/* Cabeçalho fixo com os dias */}
         <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-50/95 backdrop-blur">
           <div className="w-14 shrink-0 border-r border-slate-200/80" />
@@ -362,6 +368,15 @@ function WeekTimeGrid({
                           <span className="flex shrink-0 opacity-0 group-hover/m:opacity-100">
                             <button
                               type="button"
+                              onClick={() => onEditClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded p-0.5 hover:bg-white/70"
+                              aria-label="Editar reunião"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => onCancelClick(meeting)}
                               disabled={cancelling || deleting}
                               className="rounded p-0.5 hover:bg-white/70"
@@ -389,8 +404,9 @@ function WeekTimeGrid({
           </div>
         ) : null}
 
-        {/* Corpo rolável: sem corte de eventos, o usuário rola para ver o resto */}
-        <div className="max-h-[calc(100vh-19rem)] min-h-[24rem] overflow-y-auto">
+        {/* Corpo do calendário usa o mesmo viewport do cabeçalho para que as
+            divisões dos dias permaneçam alinhadas mesmo com scrollbar. */}
+        <div>
           <div className="flex" style={{ height: alturaTotal }}>
             {/* Régua de horas */}
             <div className="relative w-14 shrink-0 border-r border-slate-200/80">
@@ -494,6 +510,16 @@ function WeekTimeGrid({
                           <span className="absolute right-1 top-1 flex items-center opacity-0 transition-opacity group-hover/m:opacity-100">
                             <button
                               type="button"
+                              onClick={() => onEditClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded bg-white/70 p-0.5 hover:bg-white"
+                              aria-label="Editar reunião"
+                              title="Editar reunião"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => onCancelClick(meeting)}
                               disabled={cancelling || deleting}
                               className="rounded bg-white/70 p-0.5 hover:bg-white"
@@ -521,6 +547,7 @@ function WeekTimeGrid({
               );
             })}
           </div>
+        </div>
         </div>
       </div>
       {hover && <MeetingHoverCard info={hover} />}
@@ -564,6 +591,7 @@ type DayCellProps = {
   canManageAll: boolean;
   cancelling: boolean;
   deleting: boolean;
+  onEditClick: (m: Meeting) => void;
   onCancelClick: (m: Meeting) => void;
   onDeleteClick: (m: Meeting) => void;
   onOpenDay: (dateStr: string) => void;
@@ -584,6 +612,7 @@ const DayCell = memo(function DayCell({
   canManageAll,
   cancelling,
   deleting,
+  onEditClick,
   onCancelClick,
   onDeleteClick,
   onOpenDay,
@@ -666,6 +695,16 @@ const DayCell = memo(function DayCell({
                 <span className="ml-auto flex items-center opacity-0 transition-opacity group-hover/m:opacity-100 focus-within:opacity-100">
                   <button
                     type="button"
+                    onClick={() => onEditClick(m)}
+                    disabled={cancelling || deleting}
+                    className="rounded p-0.5 hover:bg-black/10"
+                    aria-label="Editar reunião"
+                    title="Editar reunião"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => onCancelClick(m)}
                     disabled={cancelling || deleting}
                     className="rounded p-0.5 hover:bg-black/10"
@@ -719,6 +758,7 @@ function DayMeetingsDialog({
   canManageAll,
   cancelling,
   deleting,
+  onEditClick,
   onCancelClick,
   onDeleteClick,
 }: {
@@ -730,6 +770,7 @@ function DayMeetingsDialog({
   canManageAll: boolean;
   cancelling: boolean;
   deleting: boolean;
+  onEditClick: (meeting: Meeting) => void;
   onCancelClick: (meeting: Meeting) => void;
   onDeleteClick: (meeting: Meeting) => void;
 }) {
@@ -789,6 +830,16 @@ function DayMeetingsDialog({
                   </div>
                   {canManage ? (
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onEditClick(meeting)}
+                        disabled={cancelling || deleting}
+                        className="rounded-lg p-1.5 hover:bg-white/70 disabled:opacity-50"
+                        aria-label={`Editar reunião ${displayName}`}
+                        title="Editar reunião"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => onCancelClick(meeting)}
@@ -857,6 +908,7 @@ export function WeekCalendar({
   const [cancelling, startCancel] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
+  const [editTarget, setEditTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
   const [calendarView, setCalendarView] = useState<"day" | "week" | "month">(initialCalendarView);
   const [weekAnchorDate, setWeekAnchorDate] = useState(focusDate ?? defaultDate);
@@ -987,6 +1039,12 @@ export function WeekCalendar({
     },
     [router]
   );
+
+  const handleEditClick = useCallback((meeting: Meeting) => {
+    setOpenDayDate(null);
+    setHoveredOverflowDate(null);
+    setEditTarget(meeting);
+  }, []);
 
   const handleDeleteClick = useCallback(
     (meeting: Meeting) => {
@@ -1156,6 +1214,7 @@ export function WeekCalendar({
           canManageAll={canManageAll}
           cancelling={cancelling}
           deleting={deleting}
+          onEditClick={handleEditClick}
           onCancelClick={handleCancelClick}
           onDeleteClick={handleDeleteClick}
         />
@@ -1200,6 +1259,7 @@ export function WeekCalendar({
                 canManageAll={canManageAll}
                 cancelling={cancelling}
                 deleting={deleting}
+                onEditClick={handleEditClick}
                 onCancelClick={handleCancelClick}
                 onDeleteClick={handleDeleteClick}
                 onOpenDay={setOpenDayDate}
@@ -1221,9 +1281,23 @@ export function WeekCalendar({
         canManageAll={canManageAll}
         cancelling={cancelling}
         deleting={deleting}
+        onEditClick={handleEditClick}
         onCancelClick={handleCancelClick}
         onDeleteClick={handleDeleteClick}
       />
+
+      {editTarget ? (
+        <EditMeetingDialog
+          key={editTarget.id}
+          meeting={editTarget}
+          users={users}
+          clients={clients}
+          currentUserId={userId}
+          canManageAll={canManageAll}
+          internalHostId={internalHostId}
+          onClose={() => setEditTarget(null)}
+        />
+      ) : null}
 
       {/* Cancel recurring modal */}
       {cancelTarget && (

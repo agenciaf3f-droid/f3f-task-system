@@ -92,6 +92,67 @@ export async function createCalendarMeeting({
   }
 }
 
+export async function updateCalendarMeeting({
+  googleEventId,
+  date,
+  endDate = date,
+  startTime,
+  endTime,
+  isAllDay = false,
+  ownerName,
+  clientName,
+  clientGroupId,
+  attendeeEmails = [],
+  calendarId: customCalendarId,
+}: {
+  googleEventId: string;
+  date: string;
+  endDate?: string;
+  startTime: string;
+  endTime: string;
+  isAllDay?: boolean;
+  ownerName: string;
+  clientName?: string;
+  clientGroupId?: string;
+  attendeeEmails?: string[];
+  calendarId?: string;
+}): Promise<boolean> {
+  const client = getClient();
+  if (!client) return true;
+
+  try {
+    const normalizedAttendees = [...new Set(
+      attendeeEmails.map((email) => email.trim().toLowerCase()).filter(Boolean),
+    )];
+    await client.calendar.events.patch({
+      calendarId: customCalendarId || client.calendarId,
+      eventId: googleEventId,
+      sendUpdates: "all",
+      requestBody: {
+        summary: clientName
+          ? `${clientName}${isAllDay ? "" : ` — ${startTime}`}`
+          : `Reunião — ${ownerName}`,
+        description: toGroupIdDescription(clientGroupId) ?? "",
+        start: isAllDay
+          ? { date }
+          : { dateTime: `${date}T${startTime}:00`, timeZone: TIMEZONE },
+        end: isAllDay
+          ? { date: addDays(endDate, 1) }
+          : { dateTime: `${endDate}T${endTime}:00`, timeZone: TIMEZONE },
+        attendees: normalizedAttendees.map((email) => ({ email })),
+        transparency: "opaque",
+      },
+    });
+    return true;
+  } catch (err) {
+    const status = (err as { code?: number; response?: { status?: number } }).code
+      ?? (err as { response?: { status?: number } }).response?.status;
+    if (status === 404 || status === 410) return false;
+    console.error("[GCal] Erro ao atualizar evento:", err);
+    return false;
+  }
+}
+
 function addDays(date: string, amount: number): string {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + amount);
