@@ -316,6 +316,18 @@ export async function scheduleMeetingReminders(
   return summary;
 }
 
+/** Palavras que não identificam ninguém e poluem a comparação. */
+const NAME_STOPWORDS = new Set([
+  "reuniao", "reuniao", "call", "meeting", "daily", "alinhamento", "apresentacao",
+  "com", "para", "de", "da", "do", "dos", "das", "e", "f3f",
+]);
+
+function nameTokens(value: string): string[] {
+  return normalizeClientName(value)
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !NAME_STOPWORDS.has(t) && !/^\d+$/.test(t));
+}
+
 function normalizeClientName(value: string): string {
   return value
     .normalize("NFD")
@@ -342,6 +354,48 @@ async function loadClients() {
   });
   clientCache = rows.map((r) => ({ name: r.name, groupId: r.whatsappGroupId! }));
   return clientCache;
+}
+
+export type ClientCandidate = { name: string; groupId: string };
+
+/**
+ * Escolhe o cliente a partir do nome guardado na reunião.
+ *
+ * Pura de propósito: é ela que decide para qual grupo de WhatsApp a mensagem
+ * vai, e errar aqui significa mandar o lembrete de um cliente na conversa de
+ * outro. Empate nunca vira envio.
+ */
+export function pickClientByName(
+  rawName: string,
+  clients: ClientCandidate[],
+  padrao = "nome_simples",
+): { groupId: string; name: string } | { falha: TargetFailure; padrao: string } {
+  const alvo = normalizeClientName(rawName);
+
+  const exatos = clients.filter((c) => normalizeClientName(c.name) === alvo);
+  if (exatos.length === 1) return { groupId: exatos[0].groupId, name: exatos[0].name.trim() };
+  if (exatos.length > 1) return { falha: "nome_ambiguo", padrao };
+
+  // O título do evento costuma ser uma forma encurtada do cadastro
+  // ("Luana Lang" para "Luana Macedo Lang"). Exigir que TODAS as palavras do
+  // título existam no nome do cliente mantém o encurtamento e barra homônimo
+  // parcial. Duas palavras no mínimo — só o primeiro nome identifica gente
+  // demais.
+  const alvoTokens = nameTokens(rawName);
+  if (alvoTokens.length < 2) return { falha: "nome_sem_correspondencia", padrao };
+
+  const parciais = clients.filter((c) => {
+    const tokens = new Set(nameTokens(c.name));
+    return alvoTokens.every((t) => tokens.has(t));
+  });
+
+  if (parciais.length !== 1) {
+    return {
+      falha: parciais.length === 0 ? "nome_sem_correspondencia" : "nome_ambiguo",
+      padrao,
+    };
+  }
+  return { groupId: parciais[0].groupId, name: parciais[0].name.trim() };
 }
 
 /**
@@ -393,11 +447,7 @@ async function resolveClientTarget(meeting: {
   const alvo = normalizeClientName(rawName);
   if (!alvo) return { falha: "sem_nome", padrao };
 
-  const candidatos = clients.filter((c) => normalizeClientName(c.name) === alvo);
-  if (candidatos.length === 0) return { falha: "nome_sem_correspondencia", padrao };
-  if (candidatos.length > 1) return { falha: "nome_ambiguo", padrao };
-
-  return { groupId: candidatos[0].groupId, name: candidatos[0].name.trim() };
+  return pickClientByName(rawName, clients, padrao);
 }
 
 async function upsertReminder(

@@ -46,6 +46,39 @@ function testMessages({ buildReminderMessage }: RemindersModule) {
   );
 }
 
+function testClientMatching({ pickClientByName }: RemindersModule) {
+  const base = [
+    { name: "Luana Macedo Lang", groupId: "1@g.us" },
+    { name: "Rodrigo Cristino Moreira", groupId: "2@g.us" },
+    { name: "Padaria do João", groupId: "3@g.us" },
+  ];
+  const achou = (r: unknown) => (r && typeof r === "object" && "groupId" in r ? (r as { groupId: string }).groupId : null);
+
+  // Exato, com e sem acento/caixa.
+  assert.equal(achou(pickClientByName("Luana Macedo Lang", base)), "1@g.us");
+  assert.equal(achou(pickClientByName("  PADARIA DO JOAO ", base)), "3@g.us");
+
+  // Encurtamento — o caso real: título do evento traz menos nomes que o cadastro.
+  assert.equal(achou(pickClientByName("Luana Lang", base)), "1@g.us");
+  assert.equal(achou(pickClientByName("Reunião Rodrigo Moreira", base)), "2@g.us");
+
+  // Só o primeiro nome NÃO resolve: identifica gente demais.
+  assert.equal(achou(pickClientByName("Luana", base)), null);
+
+  // Palavra que o cadastro não tem: não é encurtamento, é outra pessoa.
+  assert.equal(achou(pickClientByName("Luana Lang Ferreira", base)), null);
+
+  // Empate nunca vira envio — mandar no grupo errado é pior que não mandar.
+  const homonimos = [
+    { name: "Ana Paula Souza", groupId: "4@g.us" },
+    { name: "Ana Paula Costa", groupId: "5@g.us" },
+  ];
+  assert.equal(achou(pickClientByName("Ana Paula", homonimos)), null);
+
+  // Nome que não existe.
+  assert.equal(achou(pickClientByName("Cliente Inexistente", base)), null);
+}
+
 function testKillSwitch({ meetingRemindersEnabled }: RemindersModule) {
   // Opt-in explícito. Qualquer coisa que não seja exatamente "true" mantém os
   // agendamentos desligados — errar para o lado ligado custa mensagem indevida
@@ -310,6 +343,7 @@ async function main() {
     testButtonExtraction(reminders);
     testUnreadReplyDetection(reminders);
     testKillSwitch(reminders);
+    testClientMatching(reminders);
     await testReminderTimes(reminders);
     testGroupIdNormalization(whatsapp);
     await testScheduleSafety(whatsapp);
