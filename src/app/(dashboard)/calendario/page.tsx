@@ -47,19 +47,32 @@ export default async function CalendarioPage({
     prisma.meeting.findMany({
       where: {
         user: { companyId: user.companyId },
-        date: { gte: toDateStr(gridStart), lte: toDateStr(gridEnd) },
+        date: { lte: toDateStr(gridEnd) },
         status: "confirmed",
+        AND: [
+          {
+            OR: [
+              { endDate: { gte: toDateStr(gridStart) } },
+              { endDate: null, date: { gte: toDateStr(gridStart) } },
+            ],
+          },
+        ],
         ...(canManageAll ? {} : {
           OR: [
             { userId: user.userId },
             { user: { calendarSlug: { not: "admin" } } },
-            { user: { calendarSlug: "admin" }, visibleTo: { none: {} } },
+            // Reuniões internas do Admin F3F são públicas para toda a equipe,
+            // mesmo quando há participantes responsáveis selecionados.
+            { user: { calendarSlug: "admin" } },
             { visibleTo: { some: { userId: user.userId } } },
           ],
         }),
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      include: { user: { select: { id: true, name: true, calendarSlug: true } } },
+      include: {
+        user: { select: { id: true, name: true, calendarSlug: true } },
+        visibleTo: { include: { user: { select: { id: true, name: true } } } },
+      },
       // recurrenceRule + recurrenceParentId já vêm por padrão; explicito não precisa.
     }),
     prisma.calendarAvailability.findMany({
@@ -73,7 +86,6 @@ export default async function CalendarioPage({
         companyId: user.companyId,
         isActive: true,
         deletedAt: null,
-        ...(canManageAll ? {} : { id: user.userId }),
       },
       orderBy: { name: "asc" },
       select: { id: true, name: true, calendarSlug: true, avatarUrl: true },
@@ -93,6 +105,10 @@ export default async function CalendarioPage({
         : [],
     ),
   );
+  const clientByGroupId = new Map(
+    clients.flatMap((client) => client.whatsappGroupId ? [[client.whatsappGroupId, client] as const] : []),
+  );
+  const clientsByLongestName = [...clients].sort((a, b) => b.name.length - a.name.length);
   const userNames = new Map(users.map((item) => [item.id, item.name]));
   const userAvatars = new Map(users.map((item) => [item.id, item.avatarUrl]));
 
@@ -104,20 +120,41 @@ export default async function CalendarioPage({
       gridStart={gridStart.toISOString()}
       monthRefIso={firstOfMonth.toISOString()}
       meetings={meetings.map((m) => {
+        const matchedClient = (m.clientGroupId ? clientByGroupId.get(m.clientGroupId) : null)
+          ?? clientsByLongestName.find((client) => {
+            const meetingName = m.clientName?.trim().toLocaleLowerCase("pt-BR") ?? "";
+            const clientName = client.name.trim().toLocaleLowerCase("pt-BR");
+            return meetingName === clientName || meetingName.endsWith(` · ${clientName}`);
+          });
         const clientManagerId = (m.clientGroupId
           ? managerByGroupId.get(m.clientGroupId)
           : null) ?? findManagerByClientName(m.clientName, clientManagerIndex);
         const hostId = clientManagerId ?? m.user.id;
+        const storedTitle = m.clientName?.trim() || "Reunião";
+        const clientSuffix = matchedClient ? ` · ${matchedClient.name}` : "";
+        const title = clientSuffix && storedTitle.endsWith(clientSuffix)
+          ? storedTitle.slice(0, -clientSuffix.length).trim() || "Reunião"
+          : matchedClient && storedTitle === matchedClient.name
+            ? "Reunião"
+            : storedTitle;
 
         return {
           id: m.id,
+          title,
+          clientId: matchedClient?.id ?? "",
           date: m.date,
+          endDate: m.endDate ?? m.date,
           startTime: m.startTime,
           endTime: m.endTime,
+          isAllDay: m.isAllDay,
           status: m.status,
           hostId,
           hostName: userNames.get(hostId) ?? m.user.name,
-          isShared: clientManagerId === null && m.user.calendarSlug === "admin",
+          participantIds: m.visibleTo.map((item) => item.userId),
+          participantNames: m.visibleTo.map((item) => item.user.name),
+          guestEmails: m.guestEmails,
+          responsibleIds: [...new Set([hostId, ...m.visibleTo.map((item) => item.userId)])],
+          isShared: m.user.calendarSlug === "admin",
           clientName: m.clientName,
           hostAvatarUrl: userAvatars.get(hostId) ?? null,
           clientPlan: m.clientPlan,

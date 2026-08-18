@@ -2,82 +2,95 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, Loader2 } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { createManualMeetingAction } from "./actions";
+import { updateManualMeetingAction } from "./actions";
 
 type Option = { id: string; name: string };
 
-export function NewMeetingDialog({
+export type EditableMeeting = {
+  id: string;
+  title: string;
+  clientId: string;
+  hostId: string;
+  participantIds: string[];
+  guestEmails: string[];
+  date: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+  isRecurring: boolean;
+};
+
+export function EditMeetingDialog({
+  meeting,
   users,
   clients,
   currentUserId,
   canManageAll,
-  defaultDate,
   internalHostId,
+  onClose,
 }: {
+  meeting: EditableMeeting;
   users: Option[];
   clients: Option[];
   currentUserId: string;
   canManageAll: boolean;
-  defaultDate: string;
   internalHostId?: string;
+  onClose: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [hostId, setHostId] = useState(currentUserId);
-  const [startDate, setStartDate] = useState(defaultDate);
-  const [endDate, setEndDate] = useState(defaultDate);
-  const [isAllDay, setIsAllDay] = useState(false);
-  const isInternalMeeting = hostId === internalHostId;
+  const [hostId, setHostId] = useState(meeting.hostId);
+  const [startDate, setStartDate] = useState(meeting.date);
+  const [endDate, setEndDate] = useState(meeting.endDate);
+  const [isAllDay, setIsAllDay] = useState(meeting.isAllDay);
 
   function submit(formData: FormData) {
     setError(null);
     startTransition(async () => {
-      const result = await createManualMeetingAction(formData);
+      const result = await updateManualMeetingAction(formData);
       if (result.error) {
         setError(result.error);
         return;
       }
-      setOpen(false);
+      onClose();
       router.refresh();
+      if (result.warning) window.alert(result.warning);
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setError(null); }}>
-      <DialogTrigger
-        render={<button type="button" />}
-        className="flex items-center gap-2 rounded-full bg-blue-600 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-      >
-        <CalendarPlus className="h-4 w-4" />
-        Nova reunião
-      </DialogTrigger>
+    <Dialog open onOpenChange={(open) => { if (!open && !pending) onClose(); }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Adicionar reunião</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4 text-blue-600" />
+            Editar reunião
+          </DialogTitle>
           <DialogDescription>
-            Cadastre diretamente no calendário, sem enviar um link para o cliente.
+            As alterações serão aplicadas no Task e no Google Calendar.
           </DialogDescription>
         </DialogHeader>
 
         <form action={submit} className="mt-2 grid gap-4">
+          <input type="hidden" name="meetingId" value={meeting.id} />
+
           <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-            Título <span className="sr-only">obrigatório</span>
+            Título
             <input
               name="title"
               required
               maxLength={255}
-              placeholder="Ex.: Reunião de alinhamento"
+              defaultValue={meeting.title}
               className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </label>
@@ -90,9 +103,9 @@ export function NewMeetingDialog({
                 value={hostId}
                 onChange={(event) => setHostId(event.target.value)}
                 disabled={!canManageAll}
-                className="h-10 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none disabled:bg-slate-50"
               >
-                {users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                {users.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
               </select>
               {!canManageAll ? <input type="hidden" name="hostId" value={currentUserId} /> : null}
             </label>
@@ -101,8 +114,8 @@ export function NewMeetingDialog({
               Cliente (opcional)
               <select
                 name="clientId"
-                defaultValue=""
-                className="h-10 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                defaultValue={meeting.clientId}
+                className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none"
               >
                 <option value="">Sem cliente</option>
                 {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
@@ -112,18 +125,18 @@ export function NewMeetingDialog({
 
           <fieldset className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
             <legend className="px-1 text-sm font-semibold text-slate-900">Outros responsáveis ou convidados internos</legend>
-            <p className="text-xs text-slate-600">
-              As pessoas marcadas verão a reunião em “Minhas”, poderão gerenciá-la e receberão o convite do Google Calendar.
-            </p>
-            {isInternalMeeting && canManageAll ? (
-              <p className="text-xs text-sky-700">
-                Em reuniões do Admin F3F, sem ninguém marcado o evento continua visível para toda a equipe.
-              </p>
+            {hostId === internalHostId ? (
+              <p className="text-xs text-sky-700">Reuniões do Admin F3F continuam visíveis para toda a equipe.</p>
             ) : null}
             <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
               {users.filter((person) => person.id !== hostId).map((person) => (
                 <label key={person.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm font-normal text-slate-700 hover:bg-white">
-                  <input type="checkbox" name="participantUserIds" value={person.id} />
+                  <input
+                    type="checkbox"
+                    name="participantUserIds"
+                    value={person.id}
+                    defaultChecked={meeting.participantIds.includes(person.id)}
+                  />
                   {person.name}
                 </label>
               ))}
@@ -135,10 +148,10 @@ export function NewMeetingDialog({
             <textarea
               name="guestEmails"
               rows={2}
+              defaultValue={meeting.guestEmails.join(", ")}
               placeholder="email@empresa.com, outro@empresa.com"
-              className="min-h-20 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="min-h-20 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
             />
-            <span className="text-xs font-normal text-slate-500">Separe os e-mails por vírgula, espaço ou ponto e vírgula.</span>
           </label>
 
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -148,17 +161,15 @@ export function NewMeetingDialog({
                 type="date"
                 name="startDate"
                 required
-                min={defaultDate}
                 value={startDate}
                 onChange={(event) => {
                   const nextStart = event.target.value;
                   setStartDate(nextStart);
                   if (endDate < nextStart) setEndDate(nextStart);
                 }}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none"
               />
             </label>
-
             <label className="grid gap-1.5 text-sm font-medium text-slate-700">
               Data de término
               <input
@@ -168,7 +179,7 @@ export function NewMeetingDialog({
                 min={startDate}
                 value={endDate}
                 onChange={(event) => setEndDate(event.target.value)}
-                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none"
               />
             </label>
           </div>
@@ -183,41 +194,45 @@ export function NewMeetingDialog({
             Dia inteiro
           </label>
 
-          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
               Horário de início
               <input
                 type="time"
                 name="startTime"
                 required={!isAllDay}
                 disabled={isAllDay}
-                defaultValue="09:00"
-                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                defaultValue={meeting.startTime}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none disabled:bg-slate-100"
               />
             </label>
-            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
               Horário de término
               <input
                 type="time"
                 name="endTime"
                 required={!isAllDay}
                 disabled={isAllDay}
-                defaultValue="09:30"
-                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
+                defaultValue={meeting.endTime}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none disabled:bg-slate-100"
               />
             </label>
           </div>
 
-          {error ? (
-            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
+          {meeting.isRecurring ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              A edição altera apenas esta ocorrência da reunião recorrente.
             </p>
           ) : null}
+          <p className="rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            É permitido manter reuniões sobrepostas no mesmo período.
+          </p>
+          {error ? <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
 
-          <div className="mt-1 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex justify-end gap-2">
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={onClose}
               disabled={pending}
               className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
@@ -228,8 +243,8 @@ export function NewMeetingDialog({
               disabled={pending}
               className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
-              {pending ? "Salvando..." : "Adicionar reunião"}
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+              {pending ? "Salvando..." : "Salvar alterações"}
             </button>
           </div>
         </form>

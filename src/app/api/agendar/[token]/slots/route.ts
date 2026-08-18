@@ -80,14 +80,20 @@ export async function GET(
     // - Admin bucket (Daily Agência, Reunião de Gestores, etc — shared, bloqueia todos)
     prisma.meeting.findMany({
       where: {
-        date,
+        date: { lte: date },
         status: "confirmed",
-        OR: [
-          { userId: user.id },
-          { user: { calendarSlug: "admin" } },
+        AND: [
+          { OR: [{ endDate: { gte: date } }, { endDate: null, date }] },
+          {
+            OR: [
+              { userId: user.id },
+              { visibleTo: { some: { userId: user.id } } },
+              { user: { calendarSlug: "admin" } },
+            ],
+          },
         ],
       },
-      select: { startTime: true, endTime: true },
+      select: { date: true, endDate: true, startTime: true, endTime: true, isAllDay: true },
     }),
     user.googleCalendarId
       ? listCalendarEvents({
@@ -115,6 +121,18 @@ export async function GET(
   // Slots na granularidade da duração do plano.
   const allSlots = generateSlots(availability.startTime, availability.endTime, durationMinutes);
 
+  const intervalForDate = (event: {
+    date: string;
+    endDate: string | null;
+    startTime: string;
+    endTime: string;
+    isAllDay: boolean;
+  }) => ({
+    startTime: event.isAllDay || date > event.date ? "00:00" : event.startTime,
+    endTime: event.isAllDay || date < (event.endDate ?? event.date) ? "23:59" : event.endTime,
+  });
+
+  const bookedFromMeetings = bookedFromDb.map(intervalForDate);
   const bookedFromGcal = [...(gcalEvents ?? []), ...(planCalEvents ?? [])]
     // "transparent" = marcado como Disponível no Google. É o que reuniões
     // desmarcadas pelo cliente recebem: o evento continua visível como
@@ -122,15 +140,15 @@ export async function GET(
     .filter((ev) =>
       ev.status === "confirmed"
       && ev.transparency !== "transparent"
-      && !ev.isAllDay
-      && ev.date === date)
-    .map((ev) => ({ startTime: ev.startTime, endTime: ev.endTime }));
+      && ev.date <= date
+      && ev.endDate >= date)
+    .map((ev) => intervalForDate(ev));
 
   // União de ambos — dedupe por (startTime, endTime). Eventos criados via /agendar
   // têm tanto Meeting quanto evento Google com o mesmo intervalo.
   const seen = new Set<string>();
   const booked: { startTime: string; endTime: string }[] = [];
-  for (const b of [...bookedFromDb, ...bookedFromGcal]) {
+  for (const b of [...bookedFromMeetings, ...bookedFromGcal]) {
     const key = `${b.startTime}-${b.endTime}`;
     if (seen.has(key)) continue;
     seen.add(key);

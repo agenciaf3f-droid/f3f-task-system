@@ -34,36 +34,54 @@ function getClient(): CalendarClient | null {
 
 export async function createCalendarMeeting({
   date,
+  endDate = date,
   startTime,
   endTime,
+  isAllDay = false,
   ownerName,
   clientName,
   clientGroupId,
+  attendeeEmails = [],
   calendarId: customCalendarId,
 }: {
   date: string;       // "YYYY-MM-DD"
+  endDate?: string;   // "YYYY-MM-DD" (inclusiva)
   startTime: string;  // "HH:MM"
   endTime: string;    // "HH:MM"
+  isAllDay?: boolean;
   ownerName: string;
   clientName?: string;
   clientGroupId?: string;
+  attendeeEmails?: string[];
   calendarId?: string;
 }): Promise<string | null> {
   const client = getClient();
   if (!client) return null;
 
   try {
-    const summary = clientName ? `${clientName} — ${startTime}` : `Reunião — ${ownerName}`;
+    const summary = clientName
+      ? `${clientName}${isAllDay ? "" : ` — ${startTime}`}`
+      : `Reunião — ${ownerName}`;
     const description = toGroupIdDescription(clientGroupId);
     const targetCalendarId = customCalendarId || client.calendarId;
+    const normalizedAttendees = [...new Set(attendeeEmails.map((email) => email.trim().toLowerCase()).filter(Boolean))];
+    const start = isAllDay
+      ? { date }
+      : { dateTime: `${date}T${startTime}:00`, timeZone: TIMEZONE };
+    // Em eventos de dia inteiro, o Google usa data final exclusiva.
+    const end = isAllDay
+      ? { date: addDays(endDate, 1) }
+      : { dateTime: `${endDate}T${endTime}:00`, timeZone: TIMEZONE };
 
     const res = await client.calendar.events.insert({
       calendarId: targetCalendarId,
+      sendUpdates: normalizedAttendees.length > 0 ? "all" : "none",
       requestBody: {
         summary,
         description,
-        start: { dateTime: `${date}T${startTime}:00`, timeZone: TIMEZONE },
-        end:   { dateTime: `${date}T${endTime}:00`,   timeZone: TIMEZONE },
+        start,
+        end,
+        attendees: normalizedAttendees.map((email) => ({ email })),
         colorId: "7", // Peacock (azul)
       },
     });
@@ -72,6 +90,73 @@ export async function createCalendarMeeting({
     console.error("[GCal] Erro ao criar evento:", err);
     return null;
   }
+}
+
+export async function updateCalendarMeeting({
+  googleEventId,
+  date,
+  endDate = date,
+  startTime,
+  endTime,
+  isAllDay = false,
+  ownerName,
+  clientName,
+  clientGroupId,
+  attendeeEmails = [],
+  calendarId: customCalendarId,
+}: {
+  googleEventId: string;
+  date: string;
+  endDate?: string;
+  startTime: string;
+  endTime: string;
+  isAllDay?: boolean;
+  ownerName: string;
+  clientName?: string;
+  clientGroupId?: string;
+  attendeeEmails?: string[];
+  calendarId?: string;
+}): Promise<boolean> {
+  const client = getClient();
+  if (!client) return true;
+
+  try {
+    const normalizedAttendees = [...new Set(
+      attendeeEmails.map((email) => email.trim().toLowerCase()).filter(Boolean),
+    )];
+    await client.calendar.events.patch({
+      calendarId: customCalendarId || client.calendarId,
+      eventId: googleEventId,
+      sendUpdates: "all",
+      requestBody: {
+        summary: clientName
+          ? `${clientName}${isAllDay ? "" : ` — ${startTime}`}`
+          : `Reunião — ${ownerName}`,
+        description: toGroupIdDescription(clientGroupId) ?? "",
+        start: isAllDay
+          ? { date }
+          : { dateTime: `${date}T${startTime}:00`, timeZone: TIMEZONE },
+        end: isAllDay
+          ? { date: addDays(endDate, 1) }
+          : { dateTime: `${endDate}T${endTime}:00`, timeZone: TIMEZONE },
+        attendees: normalizedAttendees.map((email) => ({ email })),
+        transparency: "opaque",
+      },
+    });
+    return true;
+  } catch (err) {
+    const status = (err as { code?: number; response?: { status?: number } }).code
+      ?? (err as { response?: { status?: number } }).response?.status;
+    if (status === 404 || status === 410) return false;
+    console.error("[GCal] Erro ao atualizar evento:", err);
+    return false;
+  }
+}
+
+function addDays(date: string, amount: number): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
 }
 
 /**
@@ -184,9 +269,11 @@ export type RawCalendarEvent = {
   summary: string;
   description?: string;
   date: string;                    // "YYYY-MM-DD"
+  endDate: string;                 // "YYYY-MM-DD" (inclusiva)
   startTime: string;               // "HH:MM"
   endTime: string;                 // "HH:MM"
   isAllDay: boolean;
+  attendeeEmails: string[];
   updatedAt: string;               // ISO
   sourceCalendarId: string;        // debug: qual agenda o evento veio
 };
@@ -236,6 +323,7 @@ export async function listCalendarEvents({
           const isAllDay = !ev.start?.dateTime;
           const startParts = parseEventInstant(startDateTime, isAllDay);
           const endParts = parseEventInstant(endDateTime, isAllDay);
+          const inclusiveEndDate = isAllDay ? addDays(endParts.date, -1) : endParts.date;
 
           out.push({
             id: ev.id,
@@ -244,9 +332,13 @@ export async function listCalendarEvents({
             summary: ev.summary ?? "",
             description: ev.description ?? undefined,
             date: startParts.date,
+            endDate: inclusiveEndDate,
             startTime: startParts.time,
-            endTime: endParts.time,
+            endTime: isAllDay ? "23:59" : endParts.time,
             isAllDay,
+            attendeeEmails: (ev.attendees ?? [])
+              .map((attendee) => attendee.email?.trim().toLowerCase())
+              .filter((email): email is string => Boolean(email)),
             updatedAt: ev.updated ?? new Date().toISOString(),
             sourceCalendarId: calendarId,
           });
