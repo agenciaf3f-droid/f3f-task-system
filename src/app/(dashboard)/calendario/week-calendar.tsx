@@ -19,11 +19,17 @@ import {
 type Meeting = {
   id: string;
   date: string;
+  endDate: string;
   startTime: string;
   endTime: string;
+  isAllDay: boolean;
   status: string;
   hostId: string;
   hostName: string;
+  participantIds: string[];
+  participantNames: string[];
+  guestEmails: string[];
+  responsibleIds: string[];
   isShared: boolean;
   clientName: string | null;
   /** Foto do gestor responsável — é quem identifica a agenda. */
@@ -199,19 +205,23 @@ function MeetingHoverCard({ info }: { info: HoverInfo }) {
           <p className="text-sm font-semibold leading-tight text-slate-900">
             {meeting.clientName || meeting.hostName}
           </p>
-          <p className="text-xs text-slate-500">com {meeting.hostName}</p>
+          <p className="text-xs text-slate-500">com {responsibleLabel(meeting)}</p>
         </div>
       </div>
 
       <dl className="mt-2.5 space-y-1 text-xs">
         <div className="flex gap-2">
           <dt className="w-16 shrink-0 text-slate-400">Data</dt>
-          <dd className="font-medium text-slate-700">{formatDayTitle(info.dateStr)}</dd>
+          <dd className="font-medium text-slate-700">
+            {meeting.date === meeting.endDate
+              ? formatDayTitle(info.dateStr)
+              : `${formatDayTitle(meeting.date)} até ${formatDayTitle(meeting.endDate)}`}
+          </dd>
         </div>
         <div className="flex gap-2">
           <dt className="w-16 shrink-0 text-slate-400">Horário</dt>
           <dd className="font-medium tabular-nums text-slate-700">
-            {meeting.startTime} – {meeting.endTime}
+            {meeting.isAllDay ? "Dia inteiro" : `${meeting.startTime} – ${meeting.endTime}`}
           </dd>
         </div>
       </dl>
@@ -262,6 +272,13 @@ function WeekTimeGrid({
   onDeleteClick,
 }: WeekTimeGridProps) {
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  const allDayMeetingsByDate = useMemo(() => new Map(
+    days.map((day) => {
+      const dateStr = toDateStr(day);
+      return [dateStr, (meetingsByDate.get(dateStr) ?? []).filter((meeting) => meeting.isAllDay)];
+    }),
+  ), [days, meetingsByDate]);
+  const hasAllDayMeetings = [...allDayMeetingsByDate.values()].some((items) => items.length > 0);
   // A faixa acompanha o que existe na semana: dia cheio mostra mais horas, dia
   // vazio não vira um paredão de linhas em branco.
   const { primeiraHora, ultimaHora } = useMemo(() => {
@@ -269,6 +286,7 @@ function WeekTimeGrid({
     let max = 18 * 60;
     for (const day of days) {
       for (const m of meetingsByDate.get(toDateStr(day)) ?? []) {
+        if (m.isAllDay) continue;
         min = Math.min(min, timeToMinutes(m.startTime));
         max = Math.max(max, timeToMinutes(m.endTime));
       }
@@ -316,6 +334,61 @@ function WeekTimeGrid({
           })}
         </div>
 
+        {hasAllDayMeetings ? (
+          <div className="flex border-b border-slate-200 bg-white">
+            <div className="flex w-14 shrink-0 items-center justify-center border-r border-slate-200/80 px-1 py-2 text-center text-[10px] font-medium leading-tight text-slate-400">
+              Dia inteiro
+            </div>
+            {days.map((day) => {
+              const dateStr = toDateStr(day);
+              return (
+                <div key={dateStr} className="min-w-0 flex-1 space-y-1 border-r border-slate-200/80 p-1 last:border-r-0">
+                  {(allDayMeetingsByDate.get(dateStr) ?? []).map((meeting) => {
+                    const canManage = canManageAll || meeting.responsibleIds.includes(userId);
+                    return (
+                      <div
+                        key={meeting.id}
+                        className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${styleForHost(meeting.hostId)}`}
+                        onMouseEnter={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setHover({ meeting, dateStr, x: rect.right, y: rect.top });
+                        }}
+                        onMouseLeave={() => setHover(null)}
+                      >
+                        <span className="min-w-0 flex-1 truncate font-semibold">
+                          {meeting.clientName || meeting.hostName}
+                        </span>
+                        {canManage ? (
+                          <span className="flex shrink-0 opacity-0 group-hover/m:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => onCancelClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded p-0.5 hover:bg-white/70"
+                              aria-label="Cancelar reunião"
+                            >
+                              <CalendarX className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded p-0.5 text-red-600 hover:bg-white/70"
+                              aria-label="Excluir reunião"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
         {/* Corpo rolável: sem corte de eventos, o usuário rola para ver o resto */}
         <div className="max-h-[calc(100vh-19rem)] min-h-[24rem] overflow-y-auto">
           <div className="flex" style={{ height: alturaTotal }}>
@@ -335,7 +408,9 @@ function WeekTimeGrid({
             {days.map((day) => {
               const dateStr = toDateStr(day);
               const isToday = dateStr === todayStr;
-              const posicionadas = layoutDayMeetings(meetingsByDate.get(dateStr) ?? []);
+              const posicionadas = layoutDayMeetings(
+                (meetingsByDate.get(dateStr) ?? []).filter((meeting) => !meeting.isAllDay),
+              );
               const disponivel = availableDays.has(day.getUTCDay());
 
               return (
@@ -360,7 +435,7 @@ function WeekTimeGrid({
                     // caber o nome e o avatar.
                     const altura = Math.max(28, ((fim - inicio) / 60) * HOUR_HEIGHT - 2);
                     const displayName = meeting.clientName || meeting.hostName;
-                    const canManage = canManageAll || meeting.hostId === userId;
+                    const canManage = canManageAll || meeting.responsibleIds.includes(userId);
 
                     return (
                       <div
@@ -452,6 +527,29 @@ function WeekTimeGrid({
     </div>
   );
 }
+function datesInRange(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const cursor = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  // Limite defensivo: impede um registro inválido de travar a grade.
+  for (let count = 0; cursor <= end && count < 732; count += 1) {
+    dates.push(toDateStr(cursor));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+function meetingTimeLabel(meeting: Meeting, dateStr: string): string {
+  if (meeting.isAllDay) return "Dia inteiro";
+  if (meeting.date === meeting.endDate) return `${meeting.startTime}–${meeting.endTime}`;
+  if (dateStr === meeting.date) return `Início ${meeting.startTime}`;
+  if (dateStr === meeting.endDate) return `Fim ${meeting.endTime}`;
+  return "Em andamento";
+}
+
+function responsibleLabel(meeting: Meeting): string {
+  return [...new Set([meeting.hostName, ...meeting.participantNames])].join(", ");
+}
 
 type DayCellProps = {
   day: Date;
@@ -530,16 +628,17 @@ const DayCell = memo(function DayCell({
       <div className="flex min-h-0 flex-col gap-1">
         {visible.map((m) => {
           const eventStyle = styleForHost(m.hostId);
-          const canManage = canManageAll || m.hostId === userId;
+          const canManage = canManageAll || m.responsibleIds.includes(userId);
           const displayName = m.clientName || m.hostName;
           const tooltipPrefix = m.clientName
-            ? `${m.clientName} com ${m.hostName}`
-            : m.hostName;
+            ? `${m.clientName} com ${responsibleLabel(m)}`
+            : responsibleLabel(m);
+          const timeLabel = meetingTimeLabel(m, dateStr);
           return (
             <div
               key={m.id}
               className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${eventStyle}`}
-              title={`${tooltipPrefix} · ${m.startTime}–${m.endTime}${m.isRecurring ? " (recorrente mensal)" : ""}${m.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
+              title={`${tooltipPrefix} · ${timeLabel}${m.date !== m.endDate ? ` · ${m.date} a ${m.endDate}` : ""}${m.isRecurring ? " (recorrente mensal)" : ""}${m.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
             >
               {/* Avatar identifica o cliente de relance — antes o evento era só texto. */}
               <span className="relative shrink-0 self-start">
@@ -553,14 +652,14 @@ const DayCell = memo(function DayCell({
                   </span>
                 )}
               </span>
-              <span className="shrink-0 self-start pt-0.5 font-semibold tabular-nums">{m.startTime}</span>
+              <span className="shrink-0 self-start pt-1 font-semibold tabular-nums">{timeLabel}</span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1">
                   <span className="truncate font-semibold leading-4">{displayName}</span>
                   {m.isRecurring && <Repeat className="h-3 w-3 shrink-0 opacity-50" />}
                 </span>
                 {m.clientName ? (
-                  <span className="block truncate text-[11px] leading-4 opacity-65">{m.hostName}</span>
+                  <span className="block truncate text-[11px] leading-4 opacity-65">{responsibleLabel(m)}</span>
                 ) : null}
               </span>
               {canManage ? (
@@ -652,7 +751,8 @@ function DayMeetingsDialog({
             {meetings.map((meeting) => {
               const displayName = meeting.clientName || meeting.hostName;
               const eventStyle = styleForHost(meeting.hostId);
-              const canManage = canManageAll || meeting.hostId === userId;
+              const canManage = canManageAll || meeting.responsibleIds.includes(userId);
+              const timeLabel = meetingTimeLabel(meeting, dateStr ?? meeting.date);
               return (
                 <div
                   key={meeting.id}
@@ -677,12 +777,12 @@ function DayMeetingsDialog({
                     </span>
                     <span className="flex w-24 shrink-0 items-center gap-1 text-xs font-semibold tabular-nums">
                       <Clock className="h-3.5 w-3.5 text-slate-400" />
-                      {meeting.startTime}–{meeting.endTime}
+                      {timeLabel}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{displayName}</span>
                       {meeting.clientName ? (
-                        <span className="block truncate text-xs opacity-65">{meeting.hostName}</span>
+                        <span className="block truncate text-xs opacity-65">{responsibleLabel(meeting)}</span>
                       ) : null}
                     </span>
                     {meeting.isRecurring ? <Repeat className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : null}
@@ -768,11 +868,11 @@ export function WeekCalendar({
   // Reuniões gerais/compartilhadas continuam disponíveis em "Todas".
   const visibleMeetings = useMemo(() => {
     const scopedMeetings = viewMode === "mine"
-      ? meetings.filter((meeting) => meeting.hostId === userId)
+      ? meetings.filter((meeting) => meeting.responsibleIds.includes(userId))
       : meetings;
 
     return canFilterByUser && selectedHostId !== "all"
-      ? scopedMeetings.filter((meeting) => meeting.hostId === selectedHostId)
+      ? scopedMeetings.filter((meeting) => meeting.responsibleIds.includes(selectedHostId))
       : scopedMeetings;
   }, [canFilterByUser, meetings, selectedHostId, userId, viewMode]);
 
@@ -806,9 +906,11 @@ export function WeekCalendar({
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, Meeting[]>();
     for (const m of visibleMeetings) {
-      const arr = map.get(m.date);
-      if (arr) arr.push(m);
-      else map.set(m.date, [m]);
+      for (const date of datesInRange(m.date, m.endDate)) {
+        const arr = map.get(date);
+        if (arr) arr.push(m);
+        else map.set(date, [m]);
+      }
     }
     return map;
   }, [visibleMeetings]);

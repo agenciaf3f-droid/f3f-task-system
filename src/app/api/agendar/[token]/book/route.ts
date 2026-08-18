@@ -33,6 +33,22 @@ function timeToMinutes(t: string): number {
   return h * 60 + m;
 }
 
+type BlockingMeeting = {
+  date: string;
+  endDate: string | null;
+  startTime: string;
+  endTime: string;
+  isAllDay: boolean;
+};
+
+function blocksSlot(meeting: BlockingMeeting, date: string, startTime: string, endTime: string) {
+  if (meeting.date > date || (meeting.endDate ?? meeting.date) < date) return false;
+  if (meeting.isAllDay || date > meeting.date || date < (meeting.endDate ?? meeting.date)) return true;
+
+  return timeToMinutes(startTime) < timeToMinutes(meeting.endTime)
+    && timeToMinutes(endTime) > timeToMinutes(meeting.startTime);
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> },
@@ -133,14 +149,32 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Não foi possível gerar ocorrências." }, { status: 400 });
   }
 
-  // Parent precisa existir pra dar sentido à série; se a primeira data conflita,
-  // aborta o booking todo (caller pode tentar outra data).
-  // Filhos são criados independentes — conflitos individuais skipam silenciosamente.
-  const parentConflict = await prisma.meeting.findFirst({
-    where: { userId: user.id, date: dates[0], startTime, status: "confirmed" },
-    select: { id: true },
+  // Considera toda a duração de eventos com vários dias e também reuniões em que
+  // o gestor participa como responsável adicional. A primeira ocorrência aborta
+  // a série quando conflita; conflitos posteriores são ignorados individualmente.
+  const existingMeetings = await prisma.meeting.findMany({
+    where: {
+      date: { lte: dates.at(-1) },
+      status: "confirmed",
+      AND: [
+        { OR: [{ endDate: { gte: dates[0] } }, { endDate: null, date: { gte: dates[0] } }] },
+        {
+          OR: [
+            { userId: user.id },
+            { visibleTo: { some: { userId: user.id } } },
+            { user: { calendarSlug: "admin" } },
+          ],
+        },
+      ],
+    },
+    select: { date: true, endDate: true, startTime: true, endTime: true, isAllDay: true },
   });
-  if (parentConflict) {
+  const conflictingDates = new Set(
+    dates.filter((occurrenceDate) =>
+      existingMeetings.some((meeting) => blocksSlot(meeting, occurrenceDate, startTime, endTime)),
+    ),
+  );
+  if (conflictingDates.has(dates[0])) {
     return NextResponse.json({ ok: false, error: "Primeiro horário já reservado." }, { status: 409 });
   }
   let parent: { id: string };
@@ -168,12 +202,7 @@ export async function POST(
   const parentId = parent.id;
 
   const childDates = dates.slice(1);
-  const conflicts = await prisma.meeting.findMany({
-    where: { userId: user.id, date: { in: childDates }, startTime, status: "confirmed" },
-    select: { date: true },
-  });
-  const conflictSet = new Set(conflicts.map((c) => c.date));
-  const survivorDates = childDates.filter((d) => !conflictSet.has(d));
+  const survivorDates = childDates.filter((occurrenceDate) => !conflictingDates.has(occurrenceDate));
   const skippedCount = childDates.length - survivorDates.length;
 
   const createdChildren = survivorDates.length

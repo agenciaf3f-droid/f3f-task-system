@@ -109,7 +109,20 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
   const existingMeetings = eventIds.length > 0
     ? await prisma.meeting.findMany({
         where: { googleEventId: { in: eventIds } },
-        select: { id: true, status: true, date: true, startTime: true, endTime: true, clientName: true, clientGroupId: true, userId: true, googleEventId: true },
+        select: {
+          id: true,
+          status: true,
+          date: true,
+          endDate: true,
+          startTime: true,
+          endTime: true,
+          isAllDay: true,
+          guestEmails: true,
+          clientName: true,
+          clientGroupId: true,
+          userId: true,
+          googleEventId: true,
+        },
       })
     : [];
   const existingByEventId = new Map<string, typeof existingMeetings[number]>();
@@ -119,12 +132,6 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
 
   for (const ev of events) {
     try {
-      // Ignorar all-day (recorrentes do Google já vêm expandidos via singleEvents: true)
-      if (ev.isAllDay) {
-        result.skipped++;
-        continue;
-      }
-
       // Atribuição em cascata:
       // 1) Match por Client.name → Client.managerId (automático, prioridade)
       // 2) Mapeamento manual gestor→agenda no /equipe (override)
@@ -160,8 +167,11 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
         // Detectar mudanças (inclui reatribuição se mapeamento mudou)
         const changed =
           existing.date !== ev.date ||
+          (existing.endDate ?? existing.date) !== ev.endDate ||
           existing.startTime !== ev.startTime ||
           existing.endTime !== ev.endTime ||
+          existing.isAllDay !== ev.isAllDay ||
+          [...existing.guestEmails].sort().join(",") !== [...ev.attendeeEmails].sort().join(",") ||
           existing.clientName !== parsed.clientName ||
           existing.clientGroupId !== parsed.clientGroupId ||
           existing.userId !== targetUserId ||
@@ -173,8 +183,11 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
             data: {
               userId: targetUserId,
               date: ev.date,
+              endDate: ev.endDate,
               startTime: ev.startTime,
               endTime: ev.endTime,
+              isAllDay: ev.isAllDay,
+              guestEmails: ev.attendeeEmails,
               clientName: parsed.clientName,
               clientGroupId: parsed.clientGroupId,
               status: "confirmed",
@@ -196,8 +209,11 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
           data: {
             userId: targetUserId,
             date: ev.date,
+            endDate: ev.endDate,
             startTime: ev.startTime,
             endTime: ev.endTime,
+            isAllDay: ev.isAllDay,
+            guestEmails: ev.attendeeEmails,
             status: "confirmed",
             googleEventId: ev.id,
             clientName: parsed.clientName,

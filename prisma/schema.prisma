@@ -584,8 +584,11 @@ model Meeting {
   id            String   @id @default(uuid()) @db.Uuid
   userId        String   @map("user_id") @db.Uuid
   date          String   @db.VarChar(10) // "YYYY-MM-DD"
+  endDate       String?  @map("end_date") @db.VarChar(10) // "YYYY-MM-DD"; null = mesmo dia (legado)
   startTime     String   @map("start_time") @db.VarChar(5) // "09:00"
   endTime       String   @map("end_time") @db.VarChar(5) // "09:30"
+  isAllDay      Boolean  @default(false) @map("is_all_day")
+  guestEmails   String[] @default([]) @map("guest_emails")
   status        String   @default("confirmed") @db.VarChar(20)
   googleEventId String?  @map("google_event_id")
   bookedAt      DateTime @default(now()) @map("booked_at")
@@ -613,6 +616,7 @@ model Meeting {
   @@index([recurrenceParentId])
   @@index([googleEventId])
   @@index([date, status])
+  @@index([endDate, status])
   @@map("meetings")
 }
 

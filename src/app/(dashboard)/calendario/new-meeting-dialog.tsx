@@ -35,6 +35,9 @@ export function NewMeetingDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [hostId, setHostId] = useState(currentUserId);
+  const [startDate, setStartDate] = useState(defaultDate);
+  const [endDate, setEndDate] = useState(defaultDate);
+  const [isAllDay, setIsAllDay] = useState(false);
   const isInternalMeeting = hostId === internalHostId;
 
   function submit(formData: FormData) {
@@ -59,7 +62,7 @@ export function NewMeetingDialog({
         <CalendarPlus className="h-4 w-4" />
         Nova reunião
       </DialogTrigger>
-      <DialogContent className="rounded-2xl sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Adicionar reunião</DialogTitle>
           <DialogDescription>
@@ -107,52 +110,100 @@ export function NewMeetingDialog({
             </label>
           </div>
 
-          {isInternalMeeting && canManageAll ? (
-            <fieldset className="grid gap-2 rounded-xl border border-sky-200 bg-sky-50 p-3">
-              <legend className="px-1 text-sm font-semibold text-sky-900">Visibilidade da reunião interna</legend>
-              <p className="text-xs text-sky-800">Sem ninguém marcado, a reunião do Admin F3F aparecerá para toda a equipe. Marque pessoas apenas quando quiser restringir a visualização.</p>
-              <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
-                {users.filter((person) => person.id !== internalHostId).map((person) => (
-                  <label key={person.id} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm text-slate-700">
-                    <input type="checkbox" name="audienceUserIds" value={person.id} />
-                    {person.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ) : null}
+          <fieldset className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <legend className="px-1 text-sm font-semibold text-slate-900">Outros responsáveis ou convidados internos</legend>
+            <p className="text-xs text-slate-600">
+              As pessoas marcadas verão a reunião em “Minhas”, poderão gerenciá-la e receberão o convite do Google Calendar.
+            </p>
+            {isInternalMeeting && canManageAll ? (
+              <p className="text-xs text-sky-700">
+                Em reuniões do Admin F3F, sem ninguém marcado o evento continua visível para toda a equipe.
+              </p>
+            ) : null}
+            <div className="grid max-h-36 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+              {users.filter((person) => person.id !== hostId).map((person) => (
+                <label key={person.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm font-normal text-slate-700 hover:bg-white">
+                  <input type="checkbox" name="participantUserIds" value={person.id} />
+                  {person.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <label className="grid gap-1.5 text-sm font-medium text-slate-700">
-            Data
-            <input
-              type="date"
-              name="date"
-              required
-              min={defaultDate}
-              defaultValue={defaultDate}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            Convidados externos (opcional)
+            <textarea
+              name="guestEmails"
+              rows={2}
+              placeholder="email@empresa.com, outro@empresa.com"
+              className="min-h-20 resize-y rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
+            <span className="text-xs font-normal text-slate-500">Separe os e-mails por vírgula, espaço ou ponto e vírgula.</span>
+          </label>
+
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+              Data de início
+              <input
+                type="date"
+                name="startDate"
+                required
+                min={defaultDate}
+                value={startDate}
+                onChange={(event) => {
+                  const nextStart = event.target.value;
+                  setStartDate(nextStart);
+                  if (endDate < nextStart) setEndDate(nextStart);
+                }}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+              Data de término
+              <input
+                type="date"
+                name="endDate"
+                required
+                min={startDate}
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              name="isAllDay"
+              checked={isAllDay}
+              onChange={(event) => setIsAllDay(event.target.checked)}
+            />
+            Dia inteiro
           </label>
 
           <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
-              Início
+              Horário de início
               <input
                 type="time"
                 name="startTime"
-                required
+                required={!isAllDay}
+                disabled={isAllDay}
                 defaultValue="09:00"
-                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
             <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
-              Término
+              Horário de término
               <input
                 type="time"
                 name="endTime"
-                required
+                required={!isAllDay}
+                disabled={isAllDay}
                 defaultValue="09:30"
-                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-10 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400"
               />
             </label>
           </div>

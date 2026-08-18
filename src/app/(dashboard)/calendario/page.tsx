@@ -47,8 +47,16 @@ export default async function CalendarioPage({
     prisma.meeting.findMany({
       where: {
         user: { companyId: user.companyId },
-        date: { gte: toDateStr(gridStart), lte: toDateStr(gridEnd) },
+        date: { lte: toDateStr(gridEnd) },
         status: "confirmed",
+        AND: [
+          {
+            OR: [
+              { endDate: { gte: toDateStr(gridStart) } },
+              { endDate: null, date: { gte: toDateStr(gridStart) } },
+            ],
+          },
+        ],
         ...(canManageAll ? {} : {
           OR: [
             { userId: user.userId },
@@ -59,7 +67,10 @@ export default async function CalendarioPage({
         }),
       },
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
-      include: { user: { select: { id: true, name: true, calendarSlug: true } } },
+      include: {
+        user: { select: { id: true, name: true, calendarSlug: true } },
+        visibleTo: { include: { user: { select: { id: true, name: true } } } },
+      },
       // recurrenceRule + recurrenceParentId já vêm por padrão; explicito não precisa.
     }),
     prisma.calendarAvailability.findMany({
@@ -73,7 +84,6 @@ export default async function CalendarioPage({
         companyId: user.companyId,
         isActive: true,
         deletedAt: null,
-        ...(canManageAll ? {} : { id: user.userId }),
       },
       orderBy: { name: "asc" },
       select: { id: true, name: true, calendarSlug: true, avatarUrl: true },
@@ -112,12 +122,18 @@ export default async function CalendarioPage({
         return {
           id: m.id,
           date: m.date,
+          endDate: m.endDate ?? m.date,
           startTime: m.startTime,
           endTime: m.endTime,
+          isAllDay: m.isAllDay,
           status: m.status,
           hostId,
           hostName: userNames.get(hostId) ?? m.user.name,
-          isShared: clientManagerId === null && m.user.calendarSlug === "admin",
+          participantIds: m.visibleTo.map((item) => item.userId),
+          participantNames: m.visibleTo.map((item) => item.user.name),
+          guestEmails: m.guestEmails,
+          responsibleIds: [...new Set([hostId, ...m.visibleTo.map((item) => item.userId)])],
+          isShared: clientManagerId === null && m.user.calendarSlug === "admin" && m.visibleTo.length === 0,
           clientName: m.clientName,
           hostAvatarUrl: userAvatars.get(hostId) ?? null,
           clientResponse: m.clientResponse,
