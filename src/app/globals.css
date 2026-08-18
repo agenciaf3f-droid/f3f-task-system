@@ -221,6 +221,69 @@
   --color-orange-800:   oklch(0.88 0.11 60);
   --color-orange-900:   oklch(0.92 0.08 60);
   --color-orange-950:   oklch(0.96 0.05 60);
+
+  /* Mesma rampa das demais: sem isto o calendário mistura cor escura com
+     pastel claro no modo escuro, e um gestor destoa dos outros. */
+
+  --color-violet-50:      oklch(0.30 0.07 290);
+  --color-violet-100:     oklch(0.35 0.10 290);
+  --color-violet-200:     oklch(0.43 0.13 290);
+  --color-violet-300:     oklch(0.53 0.16 290);
+  --color-violet-400:     oklch(0.63 0.19 290);
+  --color-violet-500:     oklch(0.70 0.20 290);
+  --color-violet-600:     oklch(0.75 0.18 290);
+  --color-violet-700:     oklch(0.82 0.15 290);
+  --color-violet-800:     oklch(0.88 0.12 290);
+  --color-violet-900:     oklch(0.92 0.09 290);
+  --color-violet-950:     oklch(0.96 0.04 290);
+
+  --color-fuchsia-50:      oklch(0.30 0.07 320);
+  --color-fuchsia-100:     oklch(0.35 0.10 320);
+  --color-fuchsia-200:     oklch(0.43 0.13 320);
+  --color-fuchsia-300:     oklch(0.53 0.16 320);
+  --color-fuchsia-400:     oklch(0.63 0.19 320);
+  --color-fuchsia-500:     oklch(0.70 0.20 320);
+  --color-fuchsia-600:     oklch(0.75 0.18 320);
+  --color-fuchsia-700:     oklch(0.82 0.15 320);
+  --color-fuchsia-800:     oklch(0.88 0.12 320);
+  --color-fuchsia-900:     oklch(0.92 0.09 320);
+  --color-fuchsia-950:     oklch(0.96 0.04 320);
+
+  --color-rose-50:      oklch(0.30 0.07 15);
+  --color-rose-100:     oklch(0.35 0.10 15);
+  --color-rose-200:     oklch(0.43 0.13 15);
+  --color-rose-300:     oklch(0.53 0.16 15);
+  --color-rose-400:     oklch(0.63 0.19 15);
+  --color-rose-500:     oklch(0.70 0.20 15);
+  --color-rose-600:     oklch(0.75 0.18 15);
+  --color-rose-700:     oklch(0.82 0.15 15);
+  --color-rose-800:     oklch(0.88 0.12 15);
+  --color-rose-900:     oklch(0.92 0.09 15);
+  --color-rose-950:     oklch(0.96 0.04 15);
+
+  --color-cyan-50:      oklch(0.30 0.06 205);
+  --color-cyan-100:     oklch(0.35 0.09 205);
+  --color-cyan-200:     oklch(0.43 0.12 205);
+  --color-cyan-300:     oklch(0.53 0.15 205);
+  --color-cyan-400:     oklch(0.63 0.18 205);
+  --color-cyan-500:     oklch(0.70 0.19 205);
+  --color-cyan-600:     oklch(0.75 0.17 205);
+  --color-cyan-700:     oklch(0.82 0.14 205);
+  --color-cyan-800:     oklch(0.88 0.11 205);
+  --color-cyan-900:     oklch(0.92 0.08 205);
+  --color-cyan-950:     oklch(0.96 0.04 205);
+
+  --color-teal-50:      oklch(0.30 0.06 185);
+  --color-teal-100:     oklch(0.35 0.09 185);
+  --color-teal-200:     oklch(0.43 0.12 185);
+  --color-teal-300:     oklch(0.53 0.15 185);
+  --color-teal-400:     oklch(0.63 0.18 185);
+  --color-teal-500:     oklch(0.70 0.19 185);
+  --color-teal-600:     oklch(0.75 0.17 185);
+  --color-teal-700:     oklch(0.82 0.14 185);
+  --color-teal-800:     oklch(0.88 0.11 185);
+  --color-teal-900:     oklch(0.92 0.08 185);
+  --color-teal-950:     oklch(0.96 0.04 185);
 }
 
 @layer base {

@@ -26,8 +26,8 @@ type Meeting = {
   hostName: string;
   isShared: boolean;
   clientName: string | null;
-  clientAvatarUrl: string | null;
-  clientColor: string | null;
+  /** Foto do gestor responsável — é quem identifica a agenda. */
+  hostAvatarUrl: string | null;
   /** Resposta do cliente ao lembrete de véspera. "declined" cancela a reunião,
    *  então na prática só "confirmed" e null chegam ao calendário. */
   clientResponse: string | null;
@@ -89,6 +89,280 @@ function formatDayTitle(dateStr: string): string {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+// ─────────────────── visão de semana em grade de horários ───────────────────
+
+const HOUR_HEIGHT = 60;
+const GRID_MIN_HOUR = 6;
+const GRID_MAX_HOUR = 22;
+
+function timeToMinutes(value: string): number {
+  const [h, m] = value.split(":").map(Number);
+  return h * 60 + m;
+}
+
+type PositionedMeeting = { meeting: Meeting; column: number; columns: number };
+
+/**
+ * Distribui reuniões sobrepostas em colunas lado a lado, no comportamento do
+ * Google Agenda: quem acontece ao mesmo tempo divide a largura do dia em vez de
+ * uma esconder a outra.
+ *
+ * Agrupa por sobreposição transitiva (A cobre B, B cobre C → os três dividem a
+ * mesma faixa) e, dentro do grupo, encaixa cada reunião na primeira coluna
+ * livre.
+ */
+function layoutDayMeetings(meetings: Meeting[]): PositionedMeeting[] {
+  const ordenadas = [...meetings].sort(
+    (a, b) =>
+      timeToMinutes(a.startTime) - timeToMinutes(b.startTime) ||
+      timeToMinutes(b.endTime) - timeToMinutes(a.endTime),
+  );
+
+  const posicionadas: PositionedMeeting[] = [];
+  let grupo: Meeting[] = [];
+  let fimDoGrupo = -1;
+
+  const fecharGrupo = () => {
+    if (grupo.length === 0) return;
+    const colunas: Meeting[][] = [];
+    const atribuicao = new Map<string, number>();
+
+    for (const reuniao of grupo) {
+      const inicio = timeToMinutes(reuniao.startTime);
+      let indice = colunas.findIndex((coluna) => {
+        const ultima = coluna[coluna.length - 1];
+        return timeToMinutes(ultima.endTime) <= inicio;
+      });
+      if (indice === -1) {
+        colunas.push([reuniao]);
+        indice = colunas.length - 1;
+      } else {
+        colunas[indice].push(reuniao);
+      }
+      atribuicao.set(reuniao.id, indice);
+    }
+
+    for (const reuniao of grupo) {
+      posicionadas.push({
+        meeting: reuniao,
+        column: atribuicao.get(reuniao.id) ?? 0,
+        columns: colunas.length,
+      });
+    }
+    grupo = [];
+    fimDoGrupo = -1;
+  };
+
+  for (const reuniao of ordenadas) {
+    const inicio = timeToMinutes(reuniao.startTime);
+    if (grupo.length > 0 && inicio >= fimDoGrupo) fecharGrupo();
+    grupo.push(reuniao);
+    fimDoGrupo = Math.max(fimDoGrupo, timeToMinutes(reuniao.endTime));
+  }
+  fecharGrupo();
+
+  return posicionadas;
+}
+
+type WeekTimeGridProps = {
+  days: Date[];
+  todayStr: string;
+  meetingsByDate: Map<string, Meeting[]>;
+  availableDays: Set<number>;
+  userId: string;
+  canManageAll: boolean;
+  cancelling: boolean;
+  deleting: boolean;
+  onCancelClick: (m: Meeting) => void;
+  onDeleteClick: (m: Meeting) => void;
+};
+
+function WeekTimeGrid({
+  days,
+  todayStr,
+  meetingsByDate,
+  availableDays,
+  userId,
+  canManageAll,
+  cancelling,
+  deleting,
+  onCancelClick,
+  onDeleteClick,
+}: WeekTimeGridProps) {
+  // A faixa acompanha o que existe na semana: dia cheio mostra mais horas, dia
+  // vazio não vira um paredão de linhas em branco.
+  const { primeiraHora, ultimaHora } = useMemo(() => {
+    let min = 9 * 60;
+    let max = 18 * 60;
+    for (const day of days) {
+      for (const m of meetingsByDate.get(toDateStr(day)) ?? []) {
+        min = Math.min(min, timeToMinutes(m.startTime));
+        max = Math.max(max, timeToMinutes(m.endTime));
+      }
+    }
+    return {
+      primeiraHora: Math.max(GRID_MIN_HOUR, Math.floor(min / 60) - 1),
+      ultimaHora: Math.min(GRID_MAX_HOUR, Math.ceil(max / 60) + 1),
+    };
+  }, [days, meetingsByDate]);
+
+  const horas = useMemo(
+    () => Array.from({ length: ultimaHora - primeiraHora }, (_, i) => primeiraHora + i),
+    [primeiraHora, ultimaHora],
+  );
+  const alturaTotal = horas.length * HOUR_HEIGHT;
+  const topoDe = (minutos: number) => ((minutos - primeiraHora * 60) / 60) * HOUR_HEIGHT;
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="min-w-[1100px]">
+        {/* Cabeçalho fixo com os dias */}
+        <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-50/95 backdrop-blur">
+          <div className="w-14 shrink-0 border-r border-slate-200/80" />
+          {days.map((day) => {
+            const dateStr = toDateStr(day);
+            const isToday = dateStr === todayStr;
+            return (
+              <div key={dateStr} className="flex-1 border-r border-slate-200/80 py-2 text-center last:border-r-0">
+                <div className="text-[11px] font-semibold tracking-[0.12em] text-slate-500">
+                  {DAY_NAMES[day.getUTCDay()]}
+                </div>
+                <div className="mt-0.5 flex justify-center">
+                  <span
+                    className={
+                      isToday
+                        ? "flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-sm font-semibold text-white"
+                        : "flex h-7 w-7 items-center justify-center text-sm font-medium text-slate-600"
+                    }
+                  >
+                    {day.getUTCDate()}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Corpo rolável: sem corte de eventos, o usuário rola para ver o resto */}
+        <div className="max-h-[calc(100vh-19rem)] min-h-[24rem] overflow-y-auto">
+          <div className="flex" style={{ height: alturaTotal }}>
+            {/* Régua de horas */}
+            <div className="relative w-14 shrink-0 border-r border-slate-200/80">
+              {horas.map((h, i) => (
+                <div
+                  key={h}
+                  className="absolute right-1.5 -translate-y-1/2 text-[11px] tabular-nums text-slate-400"
+                  style={{ top: i * HOUR_HEIGHT }}
+                >
+                  {i === 0 ? "" : `${String(h).padStart(2, "0")}:00`}
+                </div>
+              ))}
+            </div>
+
+            {days.map((day) => {
+              const dateStr = toDateStr(day);
+              const isToday = dateStr === todayStr;
+              const posicionadas = layoutDayMeetings(meetingsByDate.get(dateStr) ?? []);
+              const disponivel = availableDays.has(day.getUTCDay());
+
+              return (
+                <div
+                  key={dateStr}
+                  className={`relative flex-1 border-r border-slate-200/80 last:border-r-0 ${
+                    isToday ? "bg-blue-50/40" : disponivel ? "bg-white" : "bg-slate-50/40"
+                  }`}
+                >
+                  {horas.map((h, i) => (
+                    <div
+                      key={h}
+                      className="absolute inset-x-0 border-t border-slate-200/70"
+                      style={{ top: i * HOUR_HEIGHT }}
+                    />
+                  ))}
+
+                  {posicionadas.map(({ meeting, column, columns }) => {
+                    const inicio = timeToMinutes(meeting.startTime);
+                    const fim = timeToMinutes(meeting.endTime);
+                    // Mínimo de 30 min de altura: reunião curta ainda precisa
+                    // caber o nome e o avatar.
+                    const altura = Math.max(28, ((fim - inicio) / 60) * HOUR_HEIGHT - 2);
+                    const displayName = meeting.clientName || meeting.hostName;
+                    const canManage = canManageAll || meeting.hostId === userId;
+
+                    return (
+                      <div
+                        key={meeting.id}
+                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] px-1.5 py-1 text-xs shadow-sm transition-colors ${styleForHost(meeting.hostId)}`}
+                        style={{
+                          top: topoDe(inicio),
+                          height: altura,
+                          left: `calc(${(column / columns) * 100}% + 2px)`,
+                          width: `calc(${(1 / columns) * 100}% - 4px)`,
+                        }}
+                        title={`${displayName} com ${meeting.hostName} · ${meeting.startTime}–${meeting.endTime}${meeting.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
+                      >
+                        <div className="flex items-start gap-1">
+                          <span className="relative shrink-0">
+                            <UserAvatar
+                              name={meeting.hostName}
+                              src={meeting.hostAvatarUrl}
+                              size={18}
+                            />
+                            {meeting.clientResponse === "confirmed" && (
+                              <span
+                                className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                                aria-label="Cliente confirmou presença"
+                              >
+                                <Check className="h-1.5 w-1.5 text-white" strokeWidth={5} />
+                              </span>
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1 leading-tight">
+                            <span className="block truncate font-semibold">{displayName}</span>
+                            <span className="block truncate text-[10px] tabular-nums opacity-70">
+                              {meeting.startTime}–{meeting.endTime}
+                            </span>
+                          </span>
+                          {meeting.isRecurring && <Repeat className="h-3 w-3 shrink-0 opacity-50" />}
+                        </div>
+
+                        {canManage && (
+                          <span className="absolute right-1 top-1 flex items-center opacity-0 transition-opacity group-hover/m:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => onCancelClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded bg-white/70 p-0.5 hover:bg-white"
+                              aria-label="Cancelar reunião"
+                              title="Cancelar reunião"
+                            >
+                              <CalendarX className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteClick(meeting)}
+                              disabled={cancelling || deleting}
+                              className="rounded bg-white/70 p-0.5 text-red-600 hover:bg-white"
+                              aria-label="Excluir reunião"
+                              title="Excluir definitivamente"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type DayCellProps = {
@@ -181,12 +455,7 @@ const DayCell = memo(function DayCell({
             >
               {/* Avatar identifica o cliente de relance — antes o evento era só texto. */}
               <span className="relative shrink-0 self-start">
-                <UserAvatar
-                  name={displayName}
-                  src={m.clientAvatarUrl}
-                  bgColor={m.clientColor}
-                  size={20}
-                />
+                <UserAvatar name={m.hostName} src={m.hostAvatarUrl} size={20} />
                 {m.clientResponse === "confirmed" && (
                   <span
                     className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
@@ -304,9 +573,8 @@ function DayMeetingsDialog({
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
                     <span className="relative shrink-0">
                       <UserAvatar
-                        name={displayName}
-                        src={meeting.clientAvatarUrl}
-                        bgColor={meeting.clientColor}
+                        name={meeting.hostName}
+                        src={meeting.hostAvatarUrl}
                         size={36}
                         ring
                       />
@@ -661,7 +929,20 @@ export function WeekCalendar({
         </div>
       </div>
 
-      {/* Month grid */}
+      {calendarView === "week" ? (
+        <WeekTimeGrid
+          days={displayedDays}
+          todayStr={todayStr}
+          meetingsByDate={meetingsByDate}
+          availableDays={availableDays}
+          userId={userId}
+          canManageAll={canManageAll}
+          cancelling={cancelling}
+          deleting={deleting}
+          onCancelClick={handleCancelClick}
+          onDeleteClick={handleDeleteClick}
+        />
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* Weekday headers */}
         <div className="grid min-w-[1260px] grid-cols-7 border-b border-slate-200 bg-slate-50/70">
@@ -680,11 +961,11 @@ export function WeekCalendar({
           {displayedDays.map((day, idx) => {
             const dateStr = toDateStr(day);
             const isToday = dateStr === todayStr;
-            const isCurrentMonth = calendarView === "week" || day.getUTCMonth() === monthRef.getUTCMonth();
+            const isCurrentMonth = day.getUTCMonth() === monthRef.getUTCMonth();
             const dayMeetings = meetingsByDate.get(dateStr) ?? [];
             const dayOfWeek = day.getUTCDay();
             const isAvailable = availableDays.has(dayOfWeek);
-            const isLastRow = calendarView === "week" || idx >= 35;
+            const isLastRow = idx >= 35;
             const isLastCol = (idx % 7) === 6;
 
             return (
@@ -712,6 +993,7 @@ export function WeekCalendar({
           })}
         </div>
       </div>
+      )}
 
       <DayMeetingsDialog
         dateStr={openDayDate}
