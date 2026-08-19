@@ -129,7 +129,7 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
                     >
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[t.priority] ?? "bg-neutral-300"}`} />
                       <span className="truncate">{t.title}</span>
-                      {t.isBlocked && <TaskBlockedIndicator />}
+                      {t.isBlocked && <TaskBlockedIndicator taskId={t.id} />}
                     </Link>
                   );
                 })}
@@ -155,7 +155,7 @@ export function CalendarView({ tasks }: { tasks: Task[] }) {
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOT[t.priority] ?? "bg-neutral-300"}`} />
                 {t.title}
-                {t.isBlocked && <TaskBlockedIndicator />}
+                {t.isBlocked && <TaskBlockedIndicator taskId={t.id} />}
               </Link>
             ))}
           </div>

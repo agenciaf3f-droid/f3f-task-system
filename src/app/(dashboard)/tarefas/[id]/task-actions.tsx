@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateTaskStatusAction, cancelTaskAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { STATUS_CONFIG } from "@/components/tasks/task-badges";
-import { Trash2, ChevronDown, Loader2, Copy, Archive, Flag, Undo2 } from "lucide-react";
+import { Trash2, ChevronDown, Loader2, Copy, Archive, Flag } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -41,14 +41,6 @@ export function TaskActions({
     }
     startTransition(async () => {
       await updateTaskStatusAction(taskId, status);
-    });
-  }
-
-  function handleUnblockTask() {
-    if (currentStatus !== "blocked") return;
-    startTransition(async () => {
-      await updateTaskStatusAction(taskId, "in_progress");
-      router.refresh();
     });
   }
 
@@ -151,21 +143,6 @@ export function TaskActions({
           </>
         )}
       </div>
-
-      {currentStatus === "blocked" && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-          onClick={handleUnblockTask}
-          disabled={isPending}
-          title="Desbloquear tarefa"
-          aria-label="Desbloquear tarefa"
-        >
-          <Undo2 className="w-3.5 h-3.5 mr-1.5" />
-          Desbloquear
-        </Button>
-      )}
 
       {/* Independent blocking flag — does not change task status. */}
       <Button

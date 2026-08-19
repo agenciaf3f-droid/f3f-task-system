@@ -220,7 +220,7 @@ export default async function ProjetosPage({
                       {task.dueDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{format(task.dueDate, "dd/MM/yyyy")}</span>}
                     </div>
                   </div>
-                  {task.isBlocked && <TaskBlockedIndicator />}
+                  {task.isBlocked && <TaskBlockedIndicator taskId={task.id} />}
                   <StatusBadge status={task.status} />
                 </Link>
               ))}

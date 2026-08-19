@@ -280,7 +280,7 @@ function SubtaskRow({
         isDone={sub.status === "done"}
         size="sm"
       />
-      {sub.isBlocked && <TaskBlockedIndicator />}
+      {sub.isBlocked && <TaskBlockedIndicator taskId={sub.id} />}
       <div className="flex items-center shrink-0">
         <div className="w-32 flex justify-end">
           <TaskInlineAssignee taskId={sub.id} assignee={sub.assignee} users={users} />
@@ -401,7 +401,7 @@ const TaskRow = memo(function TaskRow({
           href={`/tarefas/${task.id}?projectId=${projectId}`}
           isDone={task.status === "done"}
         />
-        {task.isBlocked && <TaskBlockedIndicator />}
+        {task.isBlocked && <TaskBlockedIndicator taskId={task.id} />}
 
         {/* Colunas fixas */}
         <div className="flex items-center shrink-0">

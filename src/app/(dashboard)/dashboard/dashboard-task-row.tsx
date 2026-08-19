@@ -95,7 +95,7 @@ export function DashboardTaskRow({ task, showAssignee }: DashboardTaskRowProps) 
           </span>
         )}
 
-        {task.isBlocked && <TaskBlockedIndicator />}
+        {task.isBlocked && <TaskBlockedIndicator taskId={task.id} />}
 
         <StatusBadge status={task.status} />
 

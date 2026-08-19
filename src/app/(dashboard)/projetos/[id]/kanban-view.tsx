@@ -109,7 +109,7 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
         >
           {task.title}
         </Link>
-        {task.isBlocked && <TaskBlockedIndicator className="mt-0.5" />}
+        {task.isBlocked && <TaskBlockedIndicator taskId={task.id} className="mt-0.5" />}
       </div>
 
       {hasMeta && (
