@@ -7,7 +7,7 @@ import {
   markCalendarMeetingCancelled,
 } from "@/lib/google-calendar";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
-import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
+import { isBeforeEarliestBookable, nowInBrazil } from "@/lib/meeting-recurrence";
 import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 
 function addMinutes(time: string, minutes: number): string {
@@ -44,8 +44,11 @@ export async function PATCH(
   if (!startTime || !/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ ok: false, error: "startTime inválido" }, { status: 400 });
   }
-  if (isPastDate(date)) {
-    return NextResponse.json({ ok: false, error: "Data no passado." }, { status: 400 });
+  if (isBeforeEarliestBookable(date)) {
+    return NextResponse.json(
+      { ok: false, error: "Reuniões só podem ser remarcadas a partir do dia seguinte." },
+      { status: 400 },
+    );
   }
 
   const [session, user] = await Promise.all([

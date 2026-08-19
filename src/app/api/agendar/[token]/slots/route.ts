@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { isPastDate, nowInBrazil } from "@/lib/meeting-recurrence";
+import { isBeforeEarliestBookable, nowInBrazil } from "@/lib/meeting-recurrence";
 import { getClientSession } from "@/lib/client-session";
 import { getMeetingDurationMinutes, MIN_ADVANCE_MINUTES } from "@/lib/meeting-duration";
 import { listCalendarEvents } from "@/lib/google-calendar";
@@ -45,7 +45,8 @@ export async function GET(
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: "date inválida" }, { status: 400 });
   }
-  if (isPastDate(date)) {
+  // Antecedência mínima: o dia corrente inteiro nao entra no calendario.
+  if (isBeforeEarliestBookable(date)) {
     return NextResponse.json({ slots: [] });
   }
 

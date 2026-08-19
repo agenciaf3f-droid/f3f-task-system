@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Check, CalendarDays, Clock, Repeat } from "lucide-react";
 import type { Recurrence } from "@/lib/meeting-duration";
+import { earliestBookableDate } from "@/lib/meeting-recurrence";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -119,6 +120,8 @@ export function BookingForm({
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
   const todayStr = toDateStr(today);
+  // Primeira data agendavel: hoje fica fora, o cliente marca de amanha em diante.
+  const minBookableStr = earliestBookableDate();
 
   if (booked && selectedDate && selectedSlot) {
     const [y, m, d] = selectedDate.split("-").map(Number);
@@ -212,8 +215,8 @@ export function BookingForm({
             const day = i + 1;
             const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const dayOfWeek = new Date(viewYear, viewMonth, day).getDay();
-            const isPast = dateStr < todayStr;
-            const isAvailable = availableSet.has(dayOfWeek) && !isPast;
+            const isTooSoon = dateStr < minBookableStr;
+            const isAvailable = availableSet.has(dayOfWeek) && !isTooSoon;
             const isSelected = selectedDate === dateStr;
             const isToday = dateStr === todayStr;
 

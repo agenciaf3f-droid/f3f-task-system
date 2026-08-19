@@ -155,3 +155,28 @@ export function nowInBrazil(): { date: string; time: string } {
 export function isPastDate(dateStr: string): boolean {
   return dateStr < todayInBrazil();
 }
+
+/**
+ * Antecedência mínima, em dias, entre "hoje" e a data da reunião marcada pelo
+ * cliente. Com 1, o cliente abre o link e navega normalmente, mas o dia corrente
+ * inteiro sai do calendário: a primeira data agendável é amanhã.
+ *
+ * O link de agendamento é o slug fixo do gestor — não existe registro de quando
+ * cada envio aconteceu —, então a contagem parte do dia em que o cliente marca.
+ */
+export const MIN_BOOKING_LEAD_DAYS = 1;
+
+/** Primeira data (YYYY-MM-DD, SP) que o cliente pode agendar. */
+export function earliestBookableDate(): string {
+  const [y, m, d] = todayInBrazil().split("-").map(Number);
+  // Aritmética em UTC: somar dias sobre uma data "pura" não sofre com horário
+  // de verão nem com o fuso de quem está rodando isso.
+  const base = new Date(Date.UTC(y, m - 1, d));
+  base.setUTCDate(base.getUTCDate() + MIN_BOOKING_LEAD_DAYS);
+  return base.toISOString().slice(0, 10);
+}
+
+/** True se dateStr é cedo demais para o cliente agendar (inclui datas passadas). */
+export function isBeforeEarliestBookable(dateStr: string): boolean {
+  return dateStr < earliestBookableDate();
+}

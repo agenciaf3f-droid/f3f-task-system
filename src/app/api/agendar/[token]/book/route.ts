@@ -9,7 +9,7 @@ import {
   generateMonthlyOccurrences,
   generateWeeklyOccurrences,
   getWeekOfMonth,
-  isPastDate,
+  isBeforeEarliestBookable,
   nowInBrazil,
   type RecurrenceRule,
 } from "@/lib/meeting-recurrence";
@@ -70,8 +70,11 @@ export async function POST(
   if (!startTime || !/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ ok: false, error: "startTime inválido" }, { status: 400 });
   }
-  if (isPastDate(date)) {
-    return NextResponse.json({ ok: false, error: "Data no passado." }, { status: 400 });
+  if (isBeforeEarliestBookable(date)) {
+    return NextResponse.json(
+      { ok: false, error: "Reuniões só podem ser marcadas a partir do dia seguinte." },
+      { status: 400 },
+    );
   }
 
   const [user, session] = await Promise.all([

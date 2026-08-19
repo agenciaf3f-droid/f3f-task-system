@@ -3,16 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Repeat, Clock, CalendarDays, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { earliestBookableDate } from "@/lib/meeting-recurrence";
 
 const MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-
-function toDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
@@ -170,7 +164,6 @@ function EditMeetingPanel({
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const today = new Date();
   const [y0, m0] = meeting.date.split("-").map(Number);
   const [viewYear, setViewYear] = useState(y0);
   const [viewMonth, setViewMonth] = useState(m0 - 1);
@@ -184,7 +177,8 @@ function EditMeetingPanel({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const availableSet = new Set(availableDays);
-  const todayStr = toDateStr(today);
+  // Primeira data agendavel: hoje fica fora, o cliente remarca de amanha em diante.
+  const minBookableStr = earliestBookableDate();
 
   // Carrega slots iniciais para a data atual da reunião
   useEffect(() => {
@@ -304,8 +298,8 @@ function EditMeetingPanel({
             const day = i + 1;
             const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
             const dayOfWeek = new Date(viewYear, viewMonth, day).getDay();
-            const isPast = dateStr < todayStr;
-            const isAvailable = availableSet.has(dayOfWeek) && !isPast;
+            const isTooSoon = dateStr < minBookableStr;
+            const isAvailable = availableSet.has(dayOfWeek) && !isTooSoon;
             const isSelected = selectedDate === dateStr;
             return (
               <button
