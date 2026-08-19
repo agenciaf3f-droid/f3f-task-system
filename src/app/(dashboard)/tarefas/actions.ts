@@ -418,17 +418,12 @@ export async function setTaskBlockedAction(
     select: {
       isBlocked: true,
       projectId: true,
-      assigneeId: true,
-      createdById: true,
     },
   });
   if (!task) return { error: "Tarefa não encontrada." };
 
-  const canEdit = user.role === "admin"
-    || user.role === "manager"
-    || task.assigneeId === user.userId
-    || task.createdById === user.userId;
-  if (!canEdit) return { error: "Sem permissão para alterar esta tarefa." };
+  // Bloquear/desbloquear é liberado para qualquer conta: o taskVisibilityFilter
+  // acima já limita cada usuário às tarefas que ele enxerga.
   if (task.isBlocked === isBlocked) return {};
 
   await prisma.task.update({

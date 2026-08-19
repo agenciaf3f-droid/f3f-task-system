@@ -96,12 +96,11 @@ export function TaskActions({
     });
   }
 
-  if (!canEdit) return null;
-
   return (
     <>
     <div className="flex items-center gap-2 shrink-0">
-      {/* Status selector */}
+      {/* Status selector — trocar status continua restrito a quem edita. */}
+      {canEdit && (
       <div className="relative">
         <Button
           variant="outline"
@@ -143,8 +142,9 @@ export function TaskActions({
           </>
         )}
       </div>
+      )}
 
-      {/* Independent blocking flag — does not change task status. */}
+      {/* Bloqueio: liberado para qualquer conta. Nao altera o status da tarefa. */}
       <Button
         variant="outline"
         size="sm"
@@ -160,6 +160,8 @@ export function TaskActions({
         {blocked ? "Desbloquear" : "Bloquear"}
       </Button>
 
+      {canEdit && (
+        <>
       {/* Duplicate */}
       <Button
         variant="ghost"
@@ -195,6 +197,8 @@ export function TaskActions({
       >
         <Trash2 className="w-4 h-4" />
       </Button>
+        </>
+      )}
     </div>
     <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
       <DialogContent className="sm:max-w-md">
