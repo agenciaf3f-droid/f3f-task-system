@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listCampaignMessages, normalizeGroupId } from "@/lib/whatsapp";
+import { reconcileBroadcasts, foldersOf } from "@/lib/broadcast-status";
 import { BroadcastStatusBadge } from "../status-badge";
 import { CancelBroadcastButton } from "./cancel-button";
 import { ArrowLeft, Ban, CheckCircle2, Clock, Copy, XCircle } from "lucide-react";
@@ -30,12 +31,11 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
 
   // Um envio por gestor = uma campanha por gestor na UAZAPI. O relatório soma
   // todas. O folderId solto cobre os disparos anteriores à tabela de envios.
-  const folders = broadcast.dispatches.length > 0
-    ? broadcast.dispatches.map((dispatch) => dispatch.folderId)
-    : broadcast.folderId
-      ? [broadcast.folderId]
-      : [];
-  const delivery = (await Promise.all(folders.map((folder) => listCampaignMessages(folder)))).flat();
+  const folders = foldersOf(broadcast);
+  const [{ statuses, folders: folderStats }, delivery] = await Promise.all([
+    reconcileBroadcasts([broadcast]),
+    Promise.all(folders.map((folder) => listCampaignMessages(folder))).then((lists) => lists.flat()),
+  ]);
 
   // A UAZAPI devolve o destino dela; casamos pelo id normalizado do grupo.
   type Tally = { sent: number; failed: number; queued: number; canceled: number; lastAt: Date | null };
@@ -56,15 +56,21 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
   // Sem cron para fechar o disparo, quem percebe que acabou é esta tela: se a
   // UAZAPI não tem mais nada na fila, o registro para de dizer "Enviando" para
   // sempre — inclusive na listagem, que lê só o banco.
-  let status = broadcast.status;
-  if (
-    (status === "sending" || status === "scheduled") &&
-    delivery.length > 0 &&
-    totals.queued === 0
-  ) {
-    status = totals.sent === 0 && totals.failed > 0 ? "failed" : "completed";
-    await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status } });
-  }
+  const status = statuses.get(broadcast.id) ?? broadcast.status;
+
+  // Os números de cabeçalho saem do contador da UAZAPI quando ele existe: é o
+  // serviço que entrega quem conta, e não depende de eu acertar a leitura do
+  // status de cada mensagem. A soma por mensagem fica de reserva.
+  const folderTotals = folders
+    .map((folder) => folderStats.get(folder))
+    .filter((folder): folder is NonNullable<typeof folder> => Boolean(folder));
+  const headline = folderTotals.length === folders.length && folderTotals.length > 0
+    ? {
+        sent: folderTotals.reduce((sum, f) => sum + f.sent, 0),
+        failed: folderTotals.reduce((sum, f) => sum + f.failed, 0),
+        queued: folderTotals.reduce((sum, f) => sum + Math.max(0, f.total - f.sent - f.failed), 0),
+      }
+    : { sent: totals.sent, failed: totals.failed, queued: totals.queued };
 
   const canCancel =
     (user.role === "admin" || user.role === "manager") &&
@@ -112,9 +118,9 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
       )}
 
       <div className={`grid gap-3 mb-6 ${totals.canceled > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
-        <Stat icon={CheckCircle2} label="Enviadas" value={totals.sent} className="text-emerald-600" />
-        <Stat icon={Clock} label="Na fila" value={totals.queued} className="text-sky-600" />
-        <Stat icon={XCircle} label="Falharam" value={totals.failed} className="text-red-600" />
+        <Stat icon={CheckCircle2} label="Enviadas" value={headline.sent} className="text-emerald-600" />
+        <Stat icon={Clock} label="Na fila" value={headline.queued} className="text-sky-600" />
+        <Stat icon={XCircle} label="Falharam" value={headline.failed} className="text-red-600" />
         {totals.canceled > 0 && (
           <Stat icon={Ban} label="Canceladas" value={totals.canceled} className="text-muted-foreground" />
         )}

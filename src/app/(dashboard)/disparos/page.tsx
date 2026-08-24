@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isUazapiConfigured, isUazapiTestMode } from "@/lib/whatsapp";
+import { reconcileBroadcasts } from "@/lib/broadcast-status";
 import { NewBroadcastDialog, type BroadcastPrefill } from "./new-broadcast-dialog";
 import { BroadcastStatusBadge } from "./status-badge";
 import { Send, AlertTriangle, FlaskConical, Copy } from "lucide-react";
@@ -30,6 +31,8 @@ export default async function DisparosPage({
         totalMessages: true,
         scheduledFor: true,
         createdAt: true,
+        folderId: true,
+        dispatches: { select: { folderId: true } },
         createdBy: { select: { name: true } },
       },
     }),
@@ -43,6 +46,10 @@ export default async function DisparosPage({
 
   const configured = isUazapiConfigured();
   const testMode = isUazapiTestMode();
+
+  // Sem cron nem webhook de fim de campanha, quem fecha o disparo é quem abre a
+  // tela. Antes só o detalhe fazia isso e a listagem ficava presa em "Enviando".
+  const { statuses } = await reconcileBroadcasts(broadcasts);
 
   // Duplicar não cria rascunho: reabre o formulário com o conteúdo do disparo
   // antigo, para o usuário revisar e disparar. Assim nada sai sem confirmação e
@@ -146,7 +153,7 @@ export default async function DisparosPage({
                   </div>
                 </div>
               </Link>
-              <BroadcastStatusBadge status={broadcast.status} />
+              <BroadcastStatusBadge status={statuses.get(broadcast.id) ?? broadcast.status} />
               {canSend && configured && (
                 <Link
                   href={`/disparos?duplicar=${broadcast.id}`}

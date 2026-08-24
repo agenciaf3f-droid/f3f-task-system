@@ -579,3 +579,94 @@ export async function listCampaignMessages(folderId: string): Promise<CampaignMe
 
   return all;
 }
+
+export type CampaignFolder = {
+  folderId: string;
+  status: string;
+  total: number;
+  sent: number;
+  failed: number;
+  /** Já entregues/lidas — subconjunto de `sent`, útil para o relatório. */
+  delivered: number;
+  read: number;
+  /** Nada mais para sair: tudo virou sucesso ou falha. */
+  finished: boolean;
+};
+
+function readNumber(record: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return 0;
+}
+
+/**
+ * Estado das campanhas direto da UAZAPI, pelos contadores que ela mantém.
+ *
+ * É mais confiável que somar o status de cada mensagem: aqui quem conta é o
+ * próprio serviço que entrega. `log_sucess` é escrito assim mesmo do lado de
+ * lá — o nome com um "c" só é da API, não erro de digitação daqui.
+ *
+ * O endpoint devolve todas as campanhas da instância, então filtramos pelos ids
+ * que interessam.
+ */
+export async function listCampaignFolders(folderIds: string[]): Promise<Map<string, CampaignFolder>> {
+  const found = new Map<string, CampaignFolder>();
+  const wanted = new Set(folderIds.filter(Boolean));
+  if (wanted.size === 0) return found;
+
+  const config = getConfiguration();
+  if (!config) return found;
+
+  let payload: unknown;
+  try {
+    const response = await fetch(`${config.serverUrl}/sender/listfolders`, {
+      method: "GET",
+      headers: { token: config.token },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      console.error(`[uazapi] /sender/listfolders falhou com status ${response.status}`);
+      return found;
+    }
+    payload = await response.json();
+  } catch (error) {
+    console.error("[uazapi] /sender/listfolders falhou:", error);
+    return found;
+  }
+
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray((payload as { folders?: unknown })?.folders)
+      ? (payload as { folders: unknown[] }).folders
+      : [];
+
+  for (const row of rows) {
+    if (typeof row !== "object" || row === null) continue;
+    const record = row as Record<string, unknown>;
+    const folderId = readString(record, ["id", "folder_id", "folderId"]);
+    if (!folderId || !wanted.has(folderId)) continue;
+
+    const total = readNumber(record, ["log_total"]);
+    const sent = readNumber(record, ["log_sucess", "log_success"]);
+    const failed = readNumber(record, ["log_failed"]);
+    const status = readString(record, ["status"]);
+
+    found.set(folderId, {
+      folderId,
+      status,
+      total,
+      sent,
+      failed,
+      delivered: readNumber(record, ["log_delivered"]),
+      read: readNumber(record, ["log_read"]),
+      // Sem total não dá para afirmar que acabou; melhor seguir "em andamento"
+      // do que fechar um disparo que ainda tem mensagem para sair.
+      finished: total > 0 && sent + failed >= total,
+    });
+  }
+
+  return found;
+}
