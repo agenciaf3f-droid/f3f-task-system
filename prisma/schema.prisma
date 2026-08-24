@@ -366,6 +366,9 @@ model Client {
   whatsappGroupId   String?   @map("whatsapp_group_id") @db.VarChar(255)
   whatsappGroupName String?   @map("whatsapp_group_name") @db.VarChar(255)
   externalId        String?   @map("external_id") @db.VarChar(50)
+  /// Áreas contratadas, da aba "ÁREA" da planilha de controle. Lista porque a
+  /// maioria dos clientes tem mais de uma (68 têm design + tráfego).
+  areas             String[]  @default([])
   avatarUrl         String?   @map("avatar_url")
   description       String?
   createdAt         DateTime  @default(now()) @map("created_at")

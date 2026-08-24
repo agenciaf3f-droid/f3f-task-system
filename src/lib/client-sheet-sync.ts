@@ -6,6 +6,27 @@ import { listWhatsAppGroups } from "@/lib/whatsapp";
 const COMPANY_SLUG = "agencia-f3f";
 const SHEET_CSV_URL =
   "https://docs.google.com/spreadsheets/d/e/2PACX-1vTK9DhrWACjloFOoAUsC26xHmJLgnpDXnjvN4IzROtUC4WTx-64d4wM661AtlgPJkbt_jOXQsxrCfDk/pub?output=csv";
+// Segunda aba da mesma planilha publicada: uma linha por cliente com quatro
+// caixas de seleção sob o cabeçalho "ÁREA". Fica separada da aba principal
+// porque é mantida por outro fluxo; o vínculo é o nome do grupo.
+const AREA_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vTK9DhrWACjloFOoAUsC26xHmJLgnpDXnjvN4IzROtUC4WTx-64d4wM661AtlgPJkbt_jOXQsxrCfDk/pub?gid=265398140&single=true&output=csv";
+
+/** Rótulo na planilha → código guardado no banco. */
+const AREA_CODES: Record<string, string> = {
+  "gestao de trafego": "trafego",
+  "especialista": "especialista",
+  "design": "design",
+  "edicao de video": "video",
+};
+
+export const CLIENT_AREA_LABELS: Record<string, string> = {
+  trafego: "Gestão de tráfego",
+  especialista: "Especialista",
+  design: "Design",
+  video: "Edição de vídeo",
+};
+
 const GROUP_ID_PATTERN = /^\d+@g\.us$/;
 const MANAGER_ALIASES: Record<string, string> = {
   rafhael: "rafinha",
@@ -42,6 +63,78 @@ export async function fetchPublishedClientSheet(): Promise<{
   const csv = await response.text();
   if (csv.length > 5_000_000) throw new Error("Planilha excede o limite de 5 MB.");
   return parseClientSheet(csv);
+}
+
+/**
+ * Lê as áreas contratadas na aba "ÁREA" e devolve por nome de grupo normalizado.
+ *
+ * O cabeçalho ocupa DUAS linhas: na primeira, "ÁREA" abre um bloco de colunas;
+ * na segunda vêm os nomes de cada área. Por isso a busca dos índices é feita na
+ * linha 1, e os dados começam na linha 2.
+ *
+ * Falha aqui não derruba o sync: as áreas são um complemento, e perder o
+ * cadastro inteiro dos clientes por causa de uma aba secundária seria pior.
+ */
+export async function fetchClientAreas(): Promise<{
+  byGroupName: Map<string, string[]>;
+  issues: string[];
+}> {
+  const issues: string[] = [];
+  const byGroupName = new Map<string, string[]>();
+
+  let csv: string;
+  try {
+    const response = await fetch(`${AREA_SHEET_URL}&_=${Date.now()}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    csv = await response.text();
+  } catch (error) {
+    issues.push(`Aba de áreas não pôde ser lida: ${error instanceof Error ? error.message : "erro"}.`);
+    return { byGroupName, issues };
+  }
+
+  const parsed = parseCsv(csv);
+  if (parsed.length < 3) {
+    issues.push("Aba de áreas veio vazia ou sem as duas linhas de cabeçalho.");
+    return { byGroupName, issues };
+  }
+
+  const topHeader = parsed[0] ?? [];
+  const subHeader = parsed[1] ?? [];
+
+  const groupColumn = topHeader.findIndex((value) => normalize(value) === "grupo whatsapp");
+  if (groupColumn < 0) {
+    issues.push('Aba de áreas sem a coluna "GRUPO WHATSAPP".');
+    return { byGroupName, issues };
+  }
+  const statusColumn = topHeader.findIndex((value) => normalize(value) === "status");
+
+  const areaColumns: { index: number; code: string }[] = [];
+  subHeader.forEach((value, index) => {
+    const code = AREA_CODES[normalize(value)];
+    if (code) areaColumns.push({ index, code });
+  });
+  if (areaColumns.length === 0) {
+    issues.push("Aba de áreas sem nenhuma das colunas de área conhecidas.");
+    return { byGroupName, issues };
+  }
+
+  for (const row of parsed.slice(2)) {
+    const groupName = clean(row[groupColumn] ?? "");
+    if (!groupName) continue;
+    // Linha inativa é ignorada: quem manda no status é a aba principal, e uma
+    // linha antiga aqui não pode sobrescrever as áreas de um cliente ativo.
+    if (statusColumn >= 0 && normalize(row[statusColumn] ?? "") === "inativo") continue;
+
+    const areas = areaColumns
+      .filter(({ index }) => normalize(row[index] ?? "") === "true")
+      .map(({ code }) => code);
+    byGroupName.set(normalize(groupName), areas);
+  }
+
+  return { byGroupName, issues };
 }
 
 export type ClientSheetSyncResult = {
@@ -353,6 +446,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
             whatsappGroupId: true,
             whatsappGroupName: true,
             externalId: true,
+            areas: true,
           },
         },
       },
@@ -583,6 +677,7 @@ export async function syncClientsFromPublishedSheet({
   dryRun = false,
 }: { dryRun?: boolean } = {}): Promise<ClientSheetSyncResult> {
   const parsed = await fetchPublishedClientSheet();
+  const areaSheet = await fetchClientAreas();
   const company = await prisma.company.findFirst({
     where: { slug: COMPANY_SLUG, deletedAt: null },
     select: {
@@ -606,6 +701,7 @@ export async function syncClientsFromPublishedSheet({
           whatsappGroupId: true,
           whatsappGroupName: true,
           externalId: true,
+          areas: true,
           createdAt: true,
           deletedAt: true,
         },
@@ -652,7 +748,9 @@ export async function syncClientsFromPublishedSheet({
     deduplicated: 0,
     unchanged: 0,
     skipped: parsed.issues.length,
-    issues: parsed.issues.slice(0, 50),
+    // Problema na aba de áreas aparece no relatório sem entrar em `skipped`:
+    // nenhuma linha de cliente foi descartada por causa dele.
+    issues: [...parsed.issues, ...areaSheet.issues].slice(0, 50),
   };
 
   const reportedDuplicateSourceGroups = new Set<string>();
@@ -763,6 +861,9 @@ export async function syncClientsFromPublishedSheet({
       // Célula vazia não apaga o que já existe: duas linhas ativas da planilha
       // estão em branco, e perder o id cadastrado seria pior que mantê-lo.
       externalId: row.externalId || existing?.externalId || null,
+      // Grupo ausente na aba de áreas mantém o que já estava: a aba é editada à
+      // parte e pode estar atrasada; zerar por omissão apagaria segmentação boa.
+      areas: areaSheet.byGroupName.get(normalize(row.groupName)) ?? existing?.areas ?? [],
       deletedAt: null,
     };
 
@@ -788,6 +889,7 @@ export async function syncClientsFromPublishedSheet({
             whatsappGroupId: true,
             whatsappGroupName: true,
             externalId: true,
+            areas: true,
             createdAt: true,
             deletedAt: true,
           },
@@ -806,6 +908,7 @@ export async function syncClientsFromPublishedSheet({
       || existing.whatsappGroupId !== data.whatsappGroupId
       || existing.whatsappGroupName !== data.whatsappGroupName
       || existing.externalId !== data.externalId
+      || existing.areas.join("|") !== data.areas.join("|")
       || existing.deletedAt !== null;
     if (!changed) {
       result.unchanged += 1;

@@ -18,8 +18,33 @@ type Client = {
   name: string;
   externalId: string | null;
   meetingPlan: string | null;
+  areas: string[];
   whatsappGroupId: string;
 };
+
+const semAcento = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Atalhos de seleção. Os quatro primeiros vêm das caixas da aba "ÁREA" da
+ * planilha; "Página de vendas" é PLANO, não área — foi como a agência
+ * classificou esse serviço.
+ *
+ * Os segmentos SE SOBREPÕEM de propósito: 83 dos 103 clientes ativos têm mais
+ * de uma área marcada, então somar dois segmentos não dá a soma dos números.
+ */
+const SEGMENTS: { key: string; label: string; match: (client: Client) => boolean }[] = [
+  { key: "todos", label: "Todos os ativos", match: () => true },
+  { key: "trafego", label: "Gestão de tráfego", match: (c) => c.areas.includes("trafego") },
+  { key: "design", label: "Design", match: (c) => c.areas.includes("design") },
+  { key: "especialista", label: "Especialista", match: (c) => c.areas.includes("especialista") },
+  { key: "video", label: "Edição de vídeo", match: (c) => c.areas.includes("video") },
+  {
+    key: "pagina-vendas",
+    label: "Página de vendas",
+    match: (c) => semAcento(c.meetingPlan ?? "").includes("pagina de venda"),
+  },
+];
 
 type MessageType = "text" | "image" | "video" | "audio" | "poll";
 
@@ -187,6 +212,23 @@ export function NewBroadcastDialog({
                     ? "Desmarcar exibidos" : "Selecionar exibidos"}
                 </button>
               </div>
+              <div className="flex flex-wrap gap-1.5">
+                {SEGMENTS.map((segment) => {
+                  const matches = clients.filter(segment.match);
+                  return (
+                    <button
+                      key={segment.key}
+                      type="button"
+                      disabled={isPending || matches.length === 0}
+                      onClick={() => setSelected(new Set(matches.map((c) => c.id)))}
+                      className="text-xs rounded-full border px-2.5 py-1 hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {segment.label} <span className="text-muted-foreground">({matches.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={(e) => setSearch(e.target.value)} disabled={isPending}
