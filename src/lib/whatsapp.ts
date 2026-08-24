@@ -356,15 +356,26 @@ export async function sendWhatsAppBulk({
   delayMax,
   scheduledFor,
   info,
+  tokenOverride,
 }: {
   outbound: BroadcastOutbound[];
   delayMin: number;
   delayMax: number;
   scheduledFor?: Date | null;
   info: string;
+  /**
+   * Token da instância de quem envia. Sem isto, sai pelo número de automação
+   * (UAZAPI_INSTANCE_TOKEN). O modo (test/production) e a URL do servidor
+   * continuam vindo do ambiente: o que muda é de qual número a mensagem sai,
+   * não para onde ela vai — em teste tudo segue indo para o grupo de teste.
+   */
+  tokenOverride?: string | null;
 }): Promise<BulkSendResult> {
-  const config = getConfiguration();
-  if (!config) return { ok: false, reason: "not_configured" };
+  const base = getConfiguration();
+  if (!base) return { ok: false, reason: "not_configured" };
+  const config = tokenOverride?.trim()
+    ? { ...base, token: tokenOverride.trim() }
+    : base;
 
   if (scheduledFor) {
     const when = scheduledFor.getTime();

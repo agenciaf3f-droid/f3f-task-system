@@ -7,6 +7,7 @@ import { ToggleUserButton } from "./toggle-user-button";
 import { DeleteUserButton } from "./delete-user-button";
 import { UnassignTasksButton } from "./unassign-tasks-button";
 import { GoogleCalendarPicker } from "./google-calendar-picker";
+import { UazapiTokenButton } from "./uazapi-token-button";
 import { RoleSelect } from "./role-select";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
@@ -168,6 +169,9 @@ export default async function EquipePage() {
                 <>
                   {u._count.assignedTasks > 0 && (
                     <UnassignTasksButton userId={u.id} userName={u.name} />
+                  )}
+                  {currentUser.role === "admin" && (
+                    <UazapiTokenButton userId={u.id} userName={u.name} hasToken={Boolean(u.uazapiToken)} />
                   )}
                   <ToggleUserButton userId={u.id} isActive={u.isActive} />
                   <DeleteUserButton userId={u.id} userName={u.name} />

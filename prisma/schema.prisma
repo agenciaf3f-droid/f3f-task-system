@@ -61,6 +61,11 @@ enum BroadcastStatus {
   failed
 }
 
+enum BroadcastSenderMode {
+  automation
+  manager
+}
+
 enum BroadcastMessageType {
   text
   image
@@ -113,6 +118,9 @@ model User {
   role               UserRole  @default(member)
   isActive           Boolean   @default(true) @map("is_active")
   mustChangePassword Boolean   @default(false) @map("must_change_password")
+  /// Token da UAZAPI do número pessoal do gestor, cifrado (ver secret-box.ts).
+  /// Só sai do servidor para chamar a API; a tela mostra "configurado", nunca o valor.
+  uazapiToken        String?   @map("uazapi_token")
   lastLoginAt        DateTime? @map("last_login_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
@@ -145,6 +153,7 @@ model User {
   meetingAudience         MeetingAudience[]
   managedBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkManager")
   createdBroadcasts       Broadcast[]            @relation("BroadcastCreatedBy")
+  broadcastDispatches     BroadcastDispatch[]    @relation("BroadcastDispatchManager")
   createdBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkCreator")
 
   @@index([companyId])
@@ -723,26 +732,30 @@ model BookingMagicLink {
 // terminar — o intervalo entre mensagens e responsabilidade da UAZAPI.
 
 model Broadcast {
-  id            String          @id @default(uuid()) @db.Uuid
-  companyId     String          @map("company_id") @db.Uuid
-  createdById   String?         @map("created_by_id") @db.Uuid
-  name          String          @db.VarChar(255)
-  status        BroadcastStatus @default(draft)
-  delayMin      Int             @default(15) @map("delay_min")
-  delayMax      Int             @default(30) @map("delay_max")
-  scheduledFor  DateTime?       @map("scheduled_for")
+  id            String              @id @default(uuid()) @db.Uuid
+  companyId     String              @map("company_id") @db.Uuid
+  createdById   String?             @map("created_by_id") @db.Uuid
+  name          String              @db.VarChar(255)
+  status        BroadcastStatus     @default(draft)
+  delayMin      Int                 @default(15) @map("delay_min")
+  delayMax      Int                 @default(30) @map("delay_max")
+  scheduledFor  DateTime?           @map("scheduled_for")
   // folder_id devolvido pela UAZAPI. Sem ele nao ha como acompanhar nem cancelar.
-  folderId      String?         @map("folder_id") @db.VarChar(255)
-  totalTargets  Int             @default(0) @map("total_targets")
-  totalMessages Int             @default(0) @map("total_messages")
+  senderMode    BroadcastSenderMode @default(automation) @map("sender_mode")
+  /// folder_id quando o envio é único (modo automação). Com envio por gestor
+  /// há um por gestor, e a fonte passa a ser BroadcastDispatch.
+  folderId      String?             @map("folder_id") @db.VarChar(255)
+  totalTargets  Int                 @default(0) @map("total_targets")
+  totalMessages Int                 @default(0) @map("total_messages")
   error         String?
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
 
   company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdBy  User?                @relation("BroadcastCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   messages   BroadcastMessage[]
   recipients BroadcastRecipient[]
+  dispatches BroadcastDispatch[]
 
   @@index([companyId, createdAt])
   @@map("broadcasts")
@@ -784,4 +797,28 @@ model BroadcastRecipient {
   @@unique([broadcastId, groupId])
   @@index([broadcastId])
   @@map("broadcast_recipients")
+}
+
+/// Um envio à UAZAPI dentro de um disparo.
+///
+/// No modo automação existe um só. No modo por gestor, os destinatários são
+/// agrupados pelo gestor responsável e cada grupo vira uma chamada
+/// /sender/advanced com o token daquele gestor — daí vários folder_id por
+/// disparo, e o relatório precisa somar todos.
+model BroadcastDispatch {
+  id          String   @id @default(uuid()) @db.Uuid
+  broadcastId String   @map("broadcast_id") @db.Uuid
+  managerId   String?  @map("manager_id") @db.Uuid
+  /// Snapshot de qual número saiu, para o relatório continuar dizendo isso
+  /// mesmo se o gestor for renomeado ou desativado depois.
+  senderLabel String   @map("sender_label") @db.VarChar(255)
+  folderId    String   @map("folder_id") @db.VarChar(255)
+  queued      Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  manager   User?     @relation("BroadcastDispatchManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  @@index([broadcastId])
+  @@map("broadcast_dispatches")
 }

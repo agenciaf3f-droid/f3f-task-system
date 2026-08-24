@@ -7,6 +7,7 @@ import { requireAuth } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { applyVariables } from "@/lib/broadcast-variables";
+import { openSecret } from "@/lib/secret-box";
 import {
   sendWhatsAppBulk,
   cancelWhatsAppSchedule,
@@ -93,7 +94,16 @@ const createSchema = z.object({
   clientIds: z.array(z.string().uuid()).min(1, "Selecione ao menos um grupo"),
   messages: z.array(messageSchema).min(1, "Adicione ao menos uma mensagem").max(10),
   scheduledFor: z.string().optional().nullable(),
+  senderMode: z.enum(["automation", "manager"]).default("automation"),
 });
+
+const SEND_FAILURE_REASONS: Record<string, string> = {
+  not_configured: "UAZAPI não configurada.",
+  rejected: "A UAZAPI recusou o disparo.",
+  request_failed: "Não foi possível falar com a UAZAPI.",
+  empty: "Nenhuma mensagem válida para enviar.",
+  in_the_past: "O agendamento precisa ser no futuro.",
+};
 
 export async function createBroadcastAction(
   _previous: { error?: string; success?: boolean; broadcastId?: string },
@@ -115,6 +125,7 @@ export async function createBroadcastAction(
       clientIds: JSON.parse(String(formData.get("clientIds") ?? "[]")),
       messages: JSON.parse(String(formData.get("messages") ?? "[]")),
       scheduledFor: formData.get("scheduledFor"),
+      senderMode: formData.get("senderMode") ?? "automation",
     });
   } catch (error) {
     if (error instanceof z.ZodError) return { error: error.issues[0]?.message ?? "Dados inválidos." };
@@ -141,28 +152,71 @@ export async function createBroadcastAction(
       deletedAt: null,
       whatsappGroupId: { not: null },
     },
-    select: { id: true, name: true, externalId: true, whatsappGroupId: true },
+    select: {
+      id: true,
+      name: true,
+      externalId: true,
+      whatsappGroupId: true,
+      managerId: true,
+      manager: { select: { id: true, name: true, uazapiToken: true } },
+    },
   });
 
   if (clients.length === 0) {
     return { error: "Nenhum cliente ativo com grupo de WhatsApp entre os selecionados." };
   }
 
-  // Ordem importa: a UAZAPI respeita a ordem do array, então as mensagens de um
-  // mesmo cliente precisam sair na sequência que foi montada na tela.
-  const outbound: BroadcastOutbound[] = [];
-  for (const client of clients) {
-    const context = { name: client.name, externalId: client.externalId };
-    for (const message of input.messages) {
-      outbound.push({
-        groupId: client.whatsappGroupId!,
-        type: message.type,
-        text: message.text ? applyVariables(message.text, context) : null,
-        fileUrl: message.fileUrl ?? null,
-        choices: message.choices.map((choice) => applyVariables(choice, context)),
-        selectableCount: message.selectableCount ?? 1,
+  // Cada grupo vira uma chamada à UAZAPI. No modo automação é um só, com o
+  // token do ambiente; por gestor, um por gestor, com o token dele.
+  type SendGroup = {
+    managerId: string | null;
+    label: string;
+    token: string | null;
+    clients: typeof clients;
+  };
+
+  const groups: SendGroup[] = [];
+
+  if (input.senderMode === "manager") {
+    // Falta de token bloqueia o disparo inteiro em vez de cair no número de
+    // automação: descobrir depois que parte dos clientes recebeu de outro
+    // número é pior do que não enviar.
+    const semGestor = clients.filter((client) => !client.manager);
+    if (semGestor.length > 0) {
+      const nomes = semGestor.slice(0, 5).map((c) => c.name).join(", ");
+      const resto = semGestor.length > 5 ? ` e mais ${semGestor.length - 5}` : "";
+      return { error: `Sem gestor responsável: ${nomes}${resto}. Defina o gestor ou use o número de automação.` };
+    }
+
+    const porGestor = new Map<string, SendGroup>();
+    const semToken = new Set<string>();
+
+    for (const client of clients) {
+      const manager = client.manager!;
+      const existing = porGestor.get(manager.id);
+      if (existing) {
+        existing.clients.push(client);
+        continue;
+      }
+      const token = openSecret(manager.uazapiToken);
+      if (!token) semToken.add(manager.name);
+      porGestor.set(manager.id, {
+        managerId: manager.id,
+        label: manager.name,
+        token,
+        clients: [client],
       });
     }
+
+    if (semToken.size > 0) {
+      return {
+        error: `Sem token da UAZAPI configurado: ${[...semToken].join(", ")}. Configure em Equipe ou use o número de automação.`,
+      };
+    }
+
+    groups.push(...porGestor.values());
+  } else {
+    groups.push({ managerId: null, label: "Número de automação", token: null, clients });
   }
 
   const broadcast = await prisma.broadcast.create({
@@ -171,11 +225,12 @@ export async function createBroadcastAction(
       createdById: user.userId,
       name: input.name,
       status: "draft",
+      senderMode: input.senderMode,
       delayMin: input.delayMin,
       delayMax: input.delayMax,
       scheduledFor,
       totalTargets: clients.length,
-      totalMessages: outbound.length,
+      totalMessages: clients.length * input.messages.length,
       messages: {
         create: input.messages.map((message, position) => ({
           position,
@@ -199,39 +254,63 @@ export async function createBroadcastAction(
     select: { id: true },
   });
 
-  const result = await sendWhatsAppBulk({
-    outbound,
-    delayMin: input.delayMin,
-    delayMax: input.delayMax,
-    scheduledFor,
-    info: `Disparo F3F: ${input.name}`,
-  });
+  let queuedTotal = 0;
+  const falhas: string[] = [];
 
-  if (!result.ok) {
-    // O disparo fica salvo mesmo quando falha: sem isso o usuário perde o que
-    // escreveu e não sobra registro nenhum da tentativa.
-    const reasons: Record<string, string> = {
-      not_configured: "UAZAPI não configurada.",
-      rejected: "A UAZAPI recusou o disparo.",
-      request_failed: "Não foi possível falar com a UAZAPI.",
-      empty: "Nenhuma mensagem válida para enviar.",
-      in_the_past: "O agendamento precisa ser no futuro.",
-    };
-    const detail = reasons[result.reason] ?? result.reason;
-    await prisma.broadcast.update({
-      where: { id: broadcast.id },
-      data: { status: "failed", error: detail },
+  for (const group of groups) {
+    // Ordem importa: a UAZAPI respeita a ordem do array, então as mensagens de
+    // um mesmo cliente precisam sair na sequência montada na tela.
+    const outbound: BroadcastOutbound[] = [];
+    for (const client of group.clients) {
+      const context = { name: client.name, externalId: client.externalId };
+      for (const message of input.messages) {
+        outbound.push({
+          groupId: client.whatsappGroupId!,
+          type: message.type,
+          text: message.text ? applyVariables(message.text, context) : null,
+          fileUrl: message.fileUrl ?? null,
+          choices: message.choices.map((choice) => applyVariables(choice, context)),
+          selectableCount: message.selectableCount ?? 1,
+        });
+      }
+    }
+
+    const result = await sendWhatsAppBulk({
+      outbound,
+      delayMin: input.delayMin,
+      delayMax: input.delayMax,
+      scheduledFor,
+      info: `Disparo F3F: ${input.name}${group.managerId ? ` (${group.label})` : ""}`,
+      tokenOverride: group.token,
     });
-    revalidatePath("/disparos");
-    return { error: `${detail} O disparo ficou salvo como falho.` };
+
+    if (!result.ok) {
+      falhas.push(`${group.label}: ${SEND_FAILURE_REASONS[result.reason] ?? result.reason}`);
+      continue;
+    }
+
+    queuedTotal += result.queued;
+    await prisma.broadcastDispatch.create({
+      data: {
+        broadcastId: broadcast.id,
+        managerId: group.managerId,
+        senderLabel: group.label,
+        folderId: result.folderId,
+        queued: result.queued,
+      },
+    });
   }
 
+  // Parcial é possível quando cada gestor é uma chamada: o que entrou na fila
+  // já foi, e cancelar o resto é decisão de quem disparou. Por isso o disparo
+  // fica salvo com o aviso, em vez de sumir.
+  const falhou = queuedTotal === 0;
   await prisma.broadcast.update({
     where: { id: broadcast.id },
     data: {
-      status: scheduledFor ? "scheduled" : "sending",
-      folderId: result.folderId,
-      totalMessages: result.queued,
+      status: falhou ? "failed" : scheduledFor ? "scheduled" : "sending",
+      totalMessages: queuedTotal || clients.length * input.messages.length,
+      error: falhas.length > 0 ? falhas.join(" · ") : null,
     },
   });
 
@@ -244,13 +323,22 @@ export async function createBroadcastAction(
     newValue: {
       name: input.name,
       destinatarios: clients.length,
-      mensagens: result.queued,
+      mensagens: queuedTotal,
+      envios: groups.length,
+      modoRemetente: input.senderMode,
       agendadoPara: scheduledFor?.toISOString() ?? null,
       modo: isUazapiTestMode() ? "test" : "production",
     },
   });
 
   revalidatePath("/disparos");
+
+  if (falhou) {
+    return { error: `Nenhuma mensagem entrou na fila. ${falhas.join(" · ")}` };
+  }
+  if (falhas.length > 0) {
+    return { error: `Disparo criado, mas parte falhou — ${falhas.join(" · ")}. Veja o relatório.`, broadcastId: broadcast.id };
+  }
   return { success: true, broadcastId: broadcast.id };
 }
 
@@ -263,16 +351,41 @@ export async function cancelBroadcastAction(broadcastId: string): Promise<{ erro
 
   const broadcast = await prisma.broadcast.findFirst({
     where: { id: broadcastId, companyId: user.companyId },
-    select: { id: true, folderId: true, status: true, name: true },
+    select: {
+      id: true,
+      folderId: true,
+      status: true,
+      name: true,
+      dispatches: { select: { folderId: true, senderLabel: true, managerId: true } },
+    },
   });
   if (!broadcast) return { error: "Disparo não encontrado." };
-  if (!broadcast.folderId) return { error: "Este disparo não chegou a ser enviado." };
   if (broadcast.status === "completed" || broadcast.status === "canceled") {
     return { error: "Este disparo já terminou." };
   }
 
-  const canceled = await cancelWhatsAppSchedule(broadcast.folderId);
-  if (!canceled) return { error: "A UAZAPI não confirmou o cancelamento." };
+  // Um envio por gestor significa uma campanha por gestor na UAZAPI: todas
+  // precisam ser canceladas. O folderId antigo cobre disparos anteriores à
+  // tabela de envios.
+  const folders = broadcast.dispatches.length > 0
+    ? broadcast.dispatches.map((dispatch) => ({ folderId: dispatch.folderId, label: dispatch.senderLabel }))
+    : broadcast.folderId
+      ? [{ folderId: broadcast.folderId, label: "Número de automação" }]
+      : [];
+  if (folders.length === 0) return { error: "Este disparo não chegou a ser enviado." };
+
+  const naoCancelados: string[] = [];
+  for (const folder of folders) {
+    const ok = await cancelWhatsAppSchedule(folder.folderId);
+    if (!ok) naoCancelados.push(folder.label);
+  }
+  if (naoCancelados.length === folders.length) {
+    return { error: "A UAZAPI não confirmou o cancelamento." };
+  }
+  if (naoCancelados.length > 0) {
+    // Parte cancelou: marcar como cancelado seria mentir sobre o resto.
+    return { error: `Não foi possível cancelar o envio de: ${naoCancelados.join(", ")}. O restante foi cancelado.` };
+  }
 
   await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status: "canceled" } });
   await logActivity({

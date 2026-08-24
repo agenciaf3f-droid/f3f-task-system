@@ -10,6 +10,7 @@ import { sendInviteEmail } from "@/lib/email";
 import { listAllCalendarSummaries } from "@/lib/google-calendar";
 import { logActivity } from "@/lib/activity";
 import { centralEnabled, centralProvisionTaskUser } from "@/lib/f3f-central";
+import { sealSecret } from "@/lib/secret-box";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -315,4 +316,61 @@ export async function deleteUserAction(targetUserId: string): Promise<{ error?: 
 
   revalidatePath("/equipe");
   return {};
+}
+
+/**
+ * Guarda (ou apaga) o token da UAZAPI do número pessoal de um gestor.
+ *
+ * Só admin: com este token é possível enviar mensagem em nome do número dele,
+ * então quem pode gravá-lo é quem já administra a conta.
+ *
+ * O valor é cifrado antes de ir ao banco e nunca volta para a tela — a
+ * interface só sabe se existe ou não.
+ */
+export async function setUazapiTokenAction(
+  _previous: { error?: string; success?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+  const currentUser = await requireRole(["admin"]);
+
+  const targetUserId = String(formData.get("userId") ?? "");
+  const raw = String(formData.get("token") ?? "").trim();
+  const clear = formData.get("clear") === "1";
+
+  if (!/^[0-9a-f-]{36}$/i.test(targetUserId)) return { error: "Usuário inválido." };
+
+  const target = await prisma.user.findFirst({
+    where: { id: targetUserId, companyId: currentUser.companyId, deletedAt: null },
+    select: { id: true, name: true },
+  });
+  if (!target) return { error: "Usuário não encontrado." };
+
+  if (!clear && raw.length < 8) {
+    return { error: "Token muito curto — confira se colou o valor inteiro." };
+  }
+  if (raw.length > 500) return { error: "Token acima do tamanho esperado." };
+
+  let sealed: string | null = null;
+  if (!clear) {
+    try {
+      sealed = sealSecret(raw);
+    } catch {
+      return { error: "Não foi possível cifrar o token neste ambiente." };
+    }
+  }
+
+  await prisma.user.update({ where: { id: target.id }, data: { uazapiToken: sealed } });
+
+  await logActivity({
+    companyId: currentUser.companyId!,
+    userId: currentUser.userId!,
+    action: "update",
+    resourceType: "user",
+    resourceId: target.id,
+    // Nunca registrar o token, nem parte dele: o histórico é lido por mais gente.
+    newValue: { uazapiToken: clear ? "removido" : "configurado", nome: target.name },
+  });
+
+  revalidatePath("/equipe");
+  return { success: true };
 }

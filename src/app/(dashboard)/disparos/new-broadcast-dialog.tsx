@@ -103,6 +103,7 @@ export function NewBroadcastDialog({
   const [selected, setSelected] = useState<Set<string>>(() => new Set(prefill?.clientIds ?? []));
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"now" | "scheduled">("now");
+  const [senderMode, setSenderMode] = useState<"automation" | "manager">("automation");
   const formRef = useRef<HTMLFormElement>(null);
 
   // Fechar precisa tirar o ?duplicar= da URL, senão reabrir o formulário do
@@ -131,6 +132,7 @@ export function NewBroadcastDialog({
       ),
     );
     if (mode === "now") formData.set("scheduledFor", "");
+    formData.set("senderMode", senderMode);
     const result = await createBroadcastAction(previous, formData);
     if (result.success) {
       setOpen(false);
@@ -374,6 +376,26 @@ export function NewBroadcastDialog({
                   disabled={isPending} className="w-20 h-9" />
                 <span className="text-muted-foreground">segundos</span>
               </div>
+            </div>
+
+            {/* ─── Remetente ─── */}
+            <div className="flex flex-col gap-2">
+              <Label>Enviar por qual número?</Label>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant={senderMode === "automation" ? "default" : "outline"}
+                  disabled={isPending} onClick={() => setSenderMode("automation")}>
+                  Número de automação
+                </Button>
+                <Button type="button" size="sm" variant={senderMode === "manager" ? "default" : "outline"}
+                  disabled={isPending} onClick={() => setSenderMode("manager")}>
+                  Número de cada gestor
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {senderMode === "manager"
+                  ? "Cada cliente recebe pelo número do gestor responsável. Se algum gestor estiver sem token da UAZAPI, o disparo não sai e a tela diz quem falta."
+                  : "Todos recebem pelo número único de automação."}
+              </p>
             </div>
 
             {/* ─── Quando ─── */}

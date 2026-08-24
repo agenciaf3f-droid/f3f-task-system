@@ -23,11 +23,19 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
       createdBy: { select: { name: true } },
       messages: { orderBy: { position: "asc" } },
       recipients: { orderBy: { clientName: "asc" } },
+      dispatches: { orderBy: { senderLabel: "asc" } },
     },
   });
   if (!broadcast) notFound();
 
-  const delivery = broadcast.folderId ? await listCampaignMessages(broadcast.folderId) : [];
+  // Um envio por gestor = uma campanha por gestor na UAZAPI. O relatório soma
+  // todas. O folderId solto cobre os disparos anteriores à tabela de envios.
+  const folders = broadcast.dispatches.length > 0
+    ? broadcast.dispatches.map((dispatch) => dispatch.folderId)
+    : broadcast.folderId
+      ? [broadcast.folderId]
+      : [];
+  const delivery = (await Promise.all(folders.map((folder) => listCampaignMessages(folder)))).flat();
 
   // A UAZAPI devolve o destino dela; casamos pelo id normalizado do grupo.
   type Tally = { sent: number; failed: number; queued: number; canceled: number; lastAt: Date | null };
@@ -92,6 +100,13 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
         {broadcast.createdBy?.name ? ` · por ${broadcast.createdBy.name}` : ""}
       </p>
 
+      {broadcast.dispatches.length > 0 && (
+        <p className="text-xs text-muted-foreground -mt-4 mb-6">
+          Enviado {broadcast.senderMode === "manager" ? "pelo número de cada gestor" : "pelo número de automação"}:{" "}
+          {broadcast.dispatches.map((d) => `${d.senderLabel} (${d.queued})`).join(" · ")}
+        </p>
+      )}
+
       {broadcast.error && (
         <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 mb-5 text-sm">{broadcast.error}</div>
       )}
@@ -105,7 +120,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
         )}
       </div>
 
-      {!broadcast.folderId && (
+      {folders.length === 0 && (
         <p className="text-sm text-muted-foreground mb-6">
           Este disparo não chegou a entrar na fila da UAZAPI, então não há entrega para acompanhar.
         </p>
