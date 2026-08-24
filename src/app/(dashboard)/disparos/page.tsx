@@ -37,7 +37,7 @@ export default async function DisparosPage({
     prisma.client.findMany({
       where: { companyId: user.companyId, deletedAt: null, whatsappGroupId: { not: null } },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, externalId: true, meetingPlan: true, areas: true, whatsappGroupId: true },
+      select: { id: true, name: true, externalId: true, meetingPlan: true, whatsappGroupId: true },
     }),
   ]);
 

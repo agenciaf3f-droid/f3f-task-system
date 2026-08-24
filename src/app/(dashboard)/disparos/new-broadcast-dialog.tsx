@@ -18,32 +18,44 @@ type Client = {
   name: string;
   externalId: string | null;
   meetingPlan: string | null;
-  areas: string[];
   whatsappGroupId: string;
 };
 
 const semAcento = (value: string) =>
-  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 
 /**
- * Atalhos de seleção. Os quatro primeiros vêm das caixas da aba "ÁREA" da
- * planilha; "Página de vendas" é PLANO, não área — foi como a agência
- * classificou esse serviço.
+ * Segmentos do disparo, tirados da coluna R ("Plano") da planilha de controle —
+ * o mesmo campo que o sync já grava em Client.meetingPlan.
  *
- * Os segmentos SE SOBREPÕEM de propósito: 83 dos 103 clientes ativos têm mais
- * de uma área marcada, então somar dois segmentos não dá a soma dos números.
+ * Só dois planos NÃO são tráfego: "Página de Vendas" e "Edição de Vídeos". Por
+ * isso tráfego é por exclusão, e não uma lista fixa de Low-Ticket / 1 FASE /
+ * 2 FASES / FUNIL / CRM / Estrategista / Meteórico / Premium: a planilha já
+ * traz "3 FASES", "16 FASES" e "FASE 1", que ficaram fora dessa lista, e uma
+ * lista fechada sumiria com esses clientes do segmento sem avisar ninguém.
  */
+function planoDe(client: Client): string {
+  return semAcento(client.meetingPlan ?? "");
+}
+
+const ehPaginaDeVendas = (client: Client) => planoDe(client).startsWith("pagina de venda");
+const ehEdicaoDeVideos = (client: Client) => planoDe(client).startsWith("edicao de video");
+
 const SEGMENTS: { key: string; label: string; match: (client: Client) => boolean }[] = [
   { key: "todos", label: "Todos os ativos", match: () => true },
-  { key: "trafego", label: "Gestão de tráfego", match: (c) => c.areas.includes("trafego") },
-  { key: "design", label: "Design", match: (c) => c.areas.includes("design") },
-  { key: "especialista", label: "Especialista", match: (c) => c.areas.includes("especialista") },
-  { key: "video", label: "Edição de vídeo", match: (c) => c.areas.includes("video") },
   {
-    key: "pagina-vendas",
-    label: "Página de vendas",
-    match: (c) => semAcento(c.meetingPlan ?? "").includes("pagina de venda"),
+    key: "trafego",
+    label: "Tráfego pago",
+    // Precisa ter plano: sem plano nenhum não dá para afirmar que é tráfego.
+    match: (c) => Boolean(planoDe(c)) && !ehPaginaDeVendas(c) && !ehEdicaoDeVideos(c),
   },
+  { key: "pagina-vendas", label: "Página de vendas", match: ehPaginaDeVendas },
+  { key: "edicao-video", label: "Edição de vídeos", match: ehEdicaoDeVideos },
 ];
 
 type MessageType = "text" | "image" | "video" | "audio" | "poll";
