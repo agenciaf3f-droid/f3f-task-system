@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { listCampaignMessages, normalizeGroupId } from "@/lib/whatsapp";
 import { BroadcastStatusBadge } from "../status-badge";
 import { CancelBroadcastButton } from "./cancel-button";
-import { ArrowLeft, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 export const metadata = { title: "Disparo" };
 
@@ -30,31 +30,38 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
   const delivery = broadcast.folderId ? await listCampaignMessages(broadcast.folderId) : [];
 
   // A UAZAPI devolve o destino dela; casamos pelo id normalizado do grupo.
-  const byGroup = new Map<string, { sent: number; failed: number; scheduled: number; lastAt: Date | null }>();
+  type Tally = { sent: number; failed: number; queued: number; canceled: number; lastAt: Date | null };
+  const emptyTally = (): Tally => ({ sent: 0, failed: 0, queued: 0, canceled: 0, lastAt: null });
+
+  const byGroup = new Map<string, Tally>();
+  const totals = emptyTally();
+
   for (const message of delivery) {
     const key = normalizeGroupId(message.number);
-    const entry = byGroup.get(key) ?? { sent: 0, failed: 0, scheduled: 0, lastAt: null };
-    if (message.status === "Sent") entry.sent += 1;
-    else if (message.status === "Failed") entry.failed += 1;
-    else entry.scheduled += 1;
+    const entry = byGroup.get(key) ?? emptyTally();
+    entry[message.outcome] += 1;
+    totals[message.outcome] += 1;
     if (message.sentAt && (!entry.lastAt || message.sentAt > entry.lastAt)) entry.lastAt = message.sentAt;
     byGroup.set(key, entry);
   }
 
-  const totals = delivery.reduce(
-    (acc, message) => {
-      if (message.status === "Sent") acc.sent += 1;
-      else if (message.status === "Failed") acc.failed += 1;
-      else acc.scheduled += 1;
-      return acc;
-    },
-    { sent: 0, failed: 0, scheduled: 0 },
-  );
+  // Sem cron para fechar o disparo, quem percebe que acabou é esta tela: se a
+  // UAZAPI não tem mais nada na fila, o registro para de dizer "Enviando" para
+  // sempre — inclusive na listagem, que lê só o banco.
+  let status = broadcast.status;
+  if (
+    (status === "sending" || status === "scheduled") &&
+    delivery.length > 0 &&
+    totals.queued === 0
+  ) {
+    status = totals.sent === 0 && totals.failed > 0 ? "failed" : "completed";
+    await prisma.broadcast.update({ where: { id: broadcast.id }, data: { status } });
+  }
 
   const canCancel =
     (user.role === "admin" || user.role === "manager") &&
     Boolean(broadcast.folderId) &&
-    (broadcast.status === "scheduled" || broadcast.status === "sending");
+    (status === "scheduled" || status === "sending");
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -65,7 +72,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
       <div className="flex items-start justify-between gap-4 mb-1">
         <h1 className="text-2xl font-semibold">{broadcast.name}</h1>
         <div className="flex items-center gap-2">
-          <BroadcastStatusBadge status={broadcast.status} />
+          <BroadcastStatusBadge status={status} />
           {canCancel && <CancelBroadcastButton broadcastId={broadcast.id} />}
         </div>
       </div>
@@ -80,10 +87,13 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
         <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 mb-5 text-sm">{broadcast.error}</div>
       )}
 
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className={`grid gap-3 mb-6 ${totals.canceled > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <Stat icon={CheckCircle2} label="Enviadas" value={totals.sent} className="text-emerald-600" />
-        <Stat icon={Clock} label="Na fila" value={totals.scheduled} className="text-sky-600" />
+        <Stat icon={Clock} label="Na fila" value={totals.queued} className="text-sky-600" />
         <Stat icon={XCircle} label="Falharam" value={totals.failed} className="text-red-600" />
+        {totals.canceled > 0 && (
+          <Stat icon={Ban} label="Canceladas" value={totals.canceled} className="text-muted-foreground" />
+        )}
       </div>
 
       {!broadcast.folderId && (
@@ -133,7 +143,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
                   <td className="px-4 py-2 truncate max-w-[260px]">{recipient.clientName}</td>
                   <td className="px-4 py-2 text-muted-foreground text-xs">{recipient.externalId ?? "—"}</td>
                   <td className="px-4 py-2 text-center">{stats?.sent ?? 0}</td>
-                  <td className="px-4 py-2 text-center text-muted-foreground">{stats?.scheduled ?? 0}</td>
+                  <td className="px-4 py-2 text-center text-muted-foreground">{stats?.queued ?? 0}</td>
                   <td className={`px-4 py-2 text-center ${stats?.failed ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
                     {stats?.failed ?? 0}
                   </td>

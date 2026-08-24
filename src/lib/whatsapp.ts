@@ -460,12 +460,43 @@ export async function sendWhatsAppBulk({
   }
 }
 
-export type CampaignMessageStatus = "Scheduled" | "Sent" | "Failed";
+/**
+ * Como a UAZAPI classifica uma mensagem: `Queued`, `Sent`, `Delivered`, `Read`,
+ * `Failed`, `Canceled`.
+ *
+ * Reduzimos isso a três baldes porque o relatório responde "saiu, não saiu, ou
+ * ainda vai sair". `Delivered` e `Read` contam como enviada — são estágios
+ * DEPOIS do envio, e tratá-los como pendente fazia o disparo aparecer "na fila"
+ * mesmo com a mensagem já lida no celular do cliente.
+ */
+export type CampaignOutcome = "sent" | "queued" | "failed" | "canceled";
+
+export function classifyCampaignStatus(raw: string): CampaignOutcome {
+  switch (raw.trim().toLowerCase()) {
+    case "sent":
+    case "delivered":
+    case "read":
+    case "played":
+      return "sent";
+    case "failed":
+    case "error":
+      return "failed";
+    case "canceled":
+    case "cancelled":
+      return "canceled";
+    // "Queued" e qualquer status novo caem aqui: é o balde seguro, porque
+    // contar como enviada o que não conhecemos seria mentir no relatório.
+    default:
+      return "queued";
+  }
+}
 
 export type CampaignMessage = {
-  /** Destino como a UAZAPI devolve (ex.: 1203...@g.us). */
+  /** Destino como a UAZAPI devolve — no schema dela é `chatid` (ex.: 1203...@g.us). */
   number: string;
-  status: CampaignMessageStatus | string;
+  /** Status cru, para depurar quando aparecer algo fora da lista conhecida. */
+  status: string;
+  outcome: CampaignOutcome;
   sentAt: Date | null;
   error: string | null;
 };
@@ -511,18 +542,22 @@ export async function listCampaignMessages(folderId: string): Promise<CampaignMe
     for (const row of rows) {
       if (typeof row !== "object" || row === null) continue;
       const record = row as Record<string, unknown>;
-      const number = readString(record, ["number", "chatid", "chatId", "jid", "destination"]);
+      const number = readString(record, ["chatid", "chatId", "number", "jid", "destination"]);
       if (!number) continue;
-      const rawSentAt = record.sentAt ?? record.sent_at ?? record.updated_at ?? null;
+      // O schema da UAZAPI expõe `messageTimestamp` em milissegundos; os nomes
+      // seguintes são tolerância, não promessa.
+      const rawSentAt = record.messageTimestamp ?? record.sentAt ?? record.sent_at ?? null;
       const sentAt =
         typeof rawSentAt === "number"
           ? new Date(rawSentAt > 1e12 ? rawSentAt : rawSentAt * 1000)
           : typeof rawSentAt === "string" && rawSentAt.trim()
             ? new Date(rawSentAt)
             : null;
+      const status = readString(record, ["status", "messageStatus"]) || "Queued";
       all.push({
         number,
-        status: readString(record, ["status", "messageStatus"]) || "Scheduled",
+        status,
+        outcome: classifyCampaignStatus(status),
         sentAt: sentAt && !Number.isNaN(sentAt.getTime()) ? sentAt : null,
         error: readString(record, ["error", "errorMessage", "failReason"]) || null,
       });
