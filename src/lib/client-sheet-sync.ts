@@ -177,10 +177,15 @@ export function extractClientName(groupName: string, plan: string): string {
 
 export function inferPlanFromGroupName(groupName: string): string {
   const cleanedGroup = clean(groupName).replace(/\(\s*fechado\s*\)/gi, "");
-  const match = cleanedGroup.match(/\s+-\s+([^-]+)\s*$/);
-  if (!match) return "";
+  // O separador é " - " (com espaços). Antes isto era uma regex com [^-]+ no
+  // trecho capturado, o que proibia hífen dentro do plano e fazia "Low-Ticket"
+  // nunca ser reconhecido — mesmo com LOW[- ]?TICKET na lista aceita logo
+  // abaixo. A linha da planilha caía inteira em "plano ausente" e o cliente
+  // não era sincronizado. Separar pelos delimitadores evita a contradição.
+  const segments = cleanedGroup.split(/\s+-\s+/);
+  if (segments.length < 2) return "";
 
-  const candidate = clean(match[1]);
+  const candidate = clean(segments[segments.length - 1]);
   return /^(?:\d+\s+FASES?|FUNIL|LOW[- ]?TICKET|PREMIUM)$/i.test(candidate)
     ? candidate
     : "";
