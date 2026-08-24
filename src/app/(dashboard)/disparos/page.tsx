@@ -93,7 +93,11 @@ export default async function DisparosPage({
           </p>
         </div>
         {canSend && configured && (
+          // A key força remontar quando entra ou sai um ?duplicar=. Sem ela o
+          // componente já está montado, os inicializadores de useState não
+          // rodam de novo e o formulário duplicado nunca abre.
           <NewBroadcastDialog
+            key={prefill ? `duplicar-${duplicar}` : "novo"}
             clients={clients.map((c) => ({ ...c, whatsappGroupId: c.whatsappGroupId! }))}
             prefill={prefill}
           />
