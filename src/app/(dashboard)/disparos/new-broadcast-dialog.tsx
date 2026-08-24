@@ -23,6 +23,15 @@ type Client = {
 
 type MessageType = "text" | "image" | "video" | "audio" | "poll";
 
+/** Conteúdo de um disparo existente, para abrir o formulário já preenchido. */
+export type BroadcastPrefill = {
+  name: string;
+  delayMin: number;
+  delayMax: number;
+  clientIds: string[];
+  messages: { type: MessageType; text: string; fileUrl: string | null; fileName: string | null; choices: string[] }[];
+};
+
 type DraftMessage = {
   key: string;
   type: MessageType;
@@ -52,14 +61,31 @@ const newMessage = (type: MessageType): DraftMessage => ({
   choices: type === "poll" ? ["", ""] : [],
 });
 
-export function NewBroadcastDialog({ clients }: { clients: Client[] }) {
+export function NewBroadcastDialog({
+  clients,
+  prefill,
+}: {
+  clients: Client[];
+  /** Vem de /disparos?duplicar=<id>. Presente = abre já preenchido. */
+  prefill?: BroadcastPrefill | null;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<DraftMessage[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Abre sozinho quando chegou por duplicação — o usuário já clicou uma vez.
+  const [open, setOpen] = useState(Boolean(prefill));
+  const [messages, setMessages] = useState<DraftMessage[]>(
+    () => prefill?.messages.map((m) => ({ ...newMessage(m.type), ...m })) ?? [],
+  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(prefill?.clientIds ?? []));
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<"now" | "scheduled">("now");
   const formRef = useRef<HTMLFormElement>(null);
+
+  // Fechar precisa tirar o ?duplicar= da URL, senão reabrir o formulário do
+  // zero traria o conteúdo duplicado de volta.
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next && prefill) router.replace("/disparos");
+  }
 
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean; broadcastId?: string },
@@ -136,7 +162,7 @@ export function NewBroadcastDialog({ clients }: { clients: Client[] }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" />Novo disparo</Button>} />
       <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
@@ -147,7 +173,8 @@ export function NewBroadcastDialog({ clients }: { clients: Client[] }) {
           <div className="flex flex-col gap-5 min-w-0">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="name">Nome do disparo</Label>
-              <Input id="name" name="name" placeholder="Ex: Aviso de reunião" required disabled={isPending} autoFocus />
+              <Input id="name" name="name" placeholder="Ex: Aviso de reunião" required disabled={isPending} autoFocus
+                defaultValue={prefill?.name ?? ""} />
             </div>
 
             {/* ─── Destinatários ─── */}
@@ -298,10 +325,10 @@ export function NewBroadcastDialog({ clients }: { clients: Client[] }) {
                 identificar um padrão de robô.
               </p>
               <div className="flex items-center gap-2 text-sm">
-                <Input name="delayMin" type="number" min={1} max={3600} defaultValue={15}
+                <Input name="delayMin" type="number" min={1} max={3600} defaultValue={prefill?.delayMin ?? 15}
                   disabled={isPending} className="w-20 h-9" />
                 <span className="text-muted-foreground">até</span>
-                <Input name="delayMax" type="number" min={1} max={3600} defaultValue={30}
+                <Input name="delayMax" type="number" min={1} max={3600} defaultValue={prefill?.delayMax ?? 30}
                   disabled={isPending} className="w-20 h-9" />
                 <span className="text-muted-foreground">segundos</span>
               </div>

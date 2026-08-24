@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { listCampaignMessages, normalizeGroupId } from "@/lib/whatsapp";
 import { BroadcastStatusBadge } from "../status-badge";
 import { CancelBroadcastButton } from "./cancel-button";
-import { ArrowLeft, Ban, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle2, Clock, Copy, XCircle } from "lucide-react";
 
 export const metadata = { title: "Disparo" };
 
@@ -73,6 +73,15 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
         <h1 className="text-2xl font-semibold">{broadcast.name}</h1>
         <div className="flex items-center gap-2">
           <BroadcastStatusBadge status={status} />
+          {(user.role === "admin" || user.role === "manager") && (
+            <Link
+              href={`/disparos?duplicar=${broadcast.id}`}
+              title="Duplicar disparo"
+              className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent"
+            >
+              <Copy className="w-3.5 h-3.5" />Duplicar
+            </Link>
+          )}
           {canCancel && <CancelBroadcastButton broadcastId={broadcast.id} />}
         </div>
       </div>

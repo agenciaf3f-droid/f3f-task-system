@@ -2,13 +2,18 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isUazapiConfigured, isUazapiTestMode } from "@/lib/whatsapp";
-import { NewBroadcastDialog } from "./new-broadcast-dialog";
+import { NewBroadcastDialog, type BroadcastPrefill } from "./new-broadcast-dialog";
 import { BroadcastStatusBadge } from "./status-badge";
-import { Send, AlertTriangle, FlaskConical } from "lucide-react";
+import { Send, AlertTriangle, FlaskConical, Copy } from "lucide-react";
 
 export const metadata = { title: "Disparos" };
 
-export default async function DisparosPage() {
+export default async function DisparosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ duplicar?: string }>;
+}) {
+  const { duplicar } = await searchParams;
   const user = await requireAuth();
   const canSend = user.role === "admin" || user.role === "manager";
 
@@ -39,6 +44,42 @@ export default async function DisparosPage() {
   const configured = isUazapiConfigured();
   const testMode = isUazapiTestMode();
 
+  // Duplicar não cria rascunho: reabre o formulário com o conteúdo do disparo
+  // antigo, para o usuário revisar e disparar. Assim nada sai sem confirmação e
+  // todo o caminho de criação continua sendo um só.
+  let prefill: BroadcastPrefill | null = null;
+  if (duplicar) {
+    const source = await prisma.broadcast.findFirst({
+      where: { id: duplicar, companyId: user.companyId },
+      include: {
+        messages: { orderBy: { position: "asc" } },
+        recipients: { select: { clientId: true } },
+      },
+    });
+    if (source) {
+      // Cliente arquivado ou sem grupo desde o disparo original não pode voltar
+      // na seleção; sobra quem ainda está ativo.
+      const stillActive = new Set(clients.map((c) => c.id));
+      prefill = {
+        name: `${source.name} (cópia)`.slice(0, 255),
+        delayMin: source.delayMin,
+        delayMax: source.delayMax,
+        clientIds: source.recipients
+          .map((r) => r.clientId)
+          .filter((id): id is string => Boolean(id) && stillActive.has(id!)),
+        messages: source.messages.map((message) => ({
+          type: message.type,
+          text: message.text ?? "",
+          // A mídia é reaproveitada pela mesma URL pública: duplicar não
+          // obriga a subir o arquivo de novo.
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          choices: message.choices,
+        })),
+      };
+    }
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-start justify-between gap-4 mb-6">
@@ -52,7 +93,10 @@ export default async function DisparosPage() {
           </p>
         </div>
         {canSend && configured && (
-          <NewBroadcastDialog clients={clients.map((c) => ({ ...c, whatsappGroupId: c.whatsappGroupId! }))} />
+          <NewBroadcastDialog
+            clients={clients.map((c) => ({ ...c, whatsappGroupId: c.whatsappGroupId! }))}
+            prefill={prefill}
+          />
         )}
       </div>
 
@@ -84,24 +128,32 @@ export default async function DisparosPage() {
       ) : (
         <div className="border rounded-lg divide-y">
           {broadcasts.map((broadcast) => (
-            <Link
-              key={broadcast.id}
-              href={`/disparos/${broadcast.id}`}
-              className="flex items-center gap-4 px-4 py-3 hover:bg-accent/50 transition-colors"
-            >
-              <Send className="w-4 h-4 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium truncate">{broadcast.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {broadcast.totalTargets} grupo(s) · {broadcast.totalMessages} mensagem(ns)
-                  {broadcast.scheduledFor
-                    ? ` · agendado para ${broadcast.scheduledFor.toLocaleString("pt-BR")}`
-                    : ` · criado em ${broadcast.createdAt.toLocaleString("pt-BR")}`}
-                  {broadcast.createdBy?.name ? ` · por ${broadcast.createdBy.name}` : ""}
+            <div key={broadcast.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors">
+              <Link href={`/disparos/${broadcast.id}`} className="flex items-center gap-4 min-w-0 flex-1">
+                <Send className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium truncate">{broadcast.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {broadcast.totalTargets} grupo(s) · {broadcast.totalMessages} mensagem(ns)
+                    {broadcast.scheduledFor
+                      ? ` · agendado para ${broadcast.scheduledFor.toLocaleString("pt-BR")}`
+                      : ` · criado em ${broadcast.createdAt.toLocaleString("pt-BR")}`}
+                    {broadcast.createdBy?.name ? ` · por ${broadcast.createdBy.name}` : ""}
+                  </div>
                 </div>
-              </div>
+              </Link>
               <BroadcastStatusBadge status={broadcast.status} />
-            </Link>
+              {canSend && configured && (
+                <Link
+                  href={`/disparos?duplicar=${broadcast.id}`}
+                  title="Duplicar disparo"
+                  aria-label={`Duplicar ${broadcast.name}`}
+                  className="shrink-0 rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent"
+                >
+                  <Copy className="w-4 h-4" />
+                </Link>
+              )}
+            </div>
           ))}
         </div>
       )}
