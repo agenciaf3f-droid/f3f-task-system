@@ -23,6 +23,8 @@ export type SheetClient = {
   sourceGroupId: string;
   whatsappGroupId: string;
   plan: string;
+  /** Coluna "ID Cliente" da planilha. Vazio em algumas linhas, então é opcional. */
+  externalId: string;
   rowNumber: number;
 };
 
@@ -254,6 +256,9 @@ export function parseClientSheet(csv: string): {
     const sourceGroupId = valueAt(sourceRow, "id do grupo");
     const whatsappGroupId = valueAt(sourceRow, "id grupo (uazapi)");
     const managerName = valueAt(sourceRow, "gestor responsavel");
+    // Fora de `required` de propósito: se o cabeçalho sumir, a sync inteira não
+    // pode parar por causa de um campo que nem todas as linhas preenchem.
+    const externalId = indexes.has("id cliente") ? valueAt(sourceRow, "id cliente") : "";
     const status = rawStatus === "ativo" ? "active" : "inactive";
     const clientName = extractClientName(groupName, plan);
 
@@ -277,6 +282,7 @@ export function parseClientSheet(csv: string): {
       sourceGroupId,
       whatsappGroupId,
       plan,
+      externalId: externalId.slice(0, 50),
       rowNumber,
     });
   });
@@ -341,6 +347,7 @@ export async function auditBookingDestinations(): Promise<BookingDestinationAudi
             meetingPlan: true,
             whatsappGroupId: true,
             whatsappGroupName: true,
+            externalId: true,
           },
         },
       },
@@ -593,6 +600,7 @@ export async function syncClientsFromPublishedSheet({
           sourceGroupId: true,
           whatsappGroupId: true,
           whatsappGroupName: true,
+          externalId: true,
           createdAt: true,
           deletedAt: true,
         },
@@ -747,6 +755,9 @@ export async function syncClientsFromPublishedSheet({
       sourceGroupId: row.sourceGroupId || null,
       whatsappGroupId: GROUP_ID_PATTERN.test(row.whatsappGroupId) ? row.whatsappGroupId : null,
       whatsappGroupName: row.groupName,
+      // Célula vazia não apaga o que já existe: duas linhas ativas da planilha
+      // estão em branco, e perder o id cadastrado seria pior que mantê-lo.
+      externalId: row.externalId || existing?.externalId || null,
       deletedAt: null,
     };
 
@@ -771,6 +782,7 @@ export async function syncClientsFromPublishedSheet({
             sourceGroupId: true,
             whatsappGroupId: true,
             whatsappGroupName: true,
+            externalId: true,
             createdAt: true,
             deletedAt: true,
           },
@@ -788,6 +800,7 @@ export async function syncClientsFromPublishedSheet({
       || existing.sourceGroupId !== data.sourceGroupId
       || existing.whatsappGroupId !== data.whatsappGroupId
       || existing.whatsappGroupName !== data.whatsappGroupName
+      || existing.externalId !== data.externalId
       || existing.deletedAt !== null;
     if (!changed) {
       result.unchanged += 1;

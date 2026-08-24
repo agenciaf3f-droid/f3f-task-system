@@ -16,6 +16,7 @@ import {
   FolderKanban,
   CalendarDays,
   Briefcase,
+  Send,
   PanelLeftClose,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -41,6 +42,7 @@ const MANAGE_NAV: NavItem[] = [
   { label: "Setores",        href: "/setores",       icon: Building2  },
   { label: "Equipe",         href: "/equipe",        icon: Users,      roles: ["admin", "manager"] },
   { label: "Relatórios",     href: "/relatorios",    icon: BarChart3,  roles: ["admin", "manager"] },
+  { label: "Disparos",       href: "/disparos",      icon: Send,       roles: ["admin", "manager"] },
   { label: "Histórico",      href: "/historico",     icon: History,    roles: ["admin", "manager"] },
 ];
 

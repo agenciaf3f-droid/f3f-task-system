@@ -52,6 +52,23 @@ enum ProjectStatus {
   cancelled
 }
 
+enum BroadcastStatus {
+  draft
+  scheduled
+  sending
+  completed
+  canceled
+  failed
+}
+
+enum BroadcastMessageType {
+  text
+  image
+  video
+  audio
+  poll
+}
+
 // ============================================================
 // CORE TENANT
 // ============================================================
@@ -77,6 +94,7 @@ model Company {
   projects          Project[]
   webhookConfig     WebhookConfig?
   bookingMagicLinks BookingMagicLink[]
+  broadcasts        Broadcast[]
 
   @@map("companies")
 }
@@ -126,6 +144,7 @@ model User {
   meetings                Meeting[]
   meetingAudience         MeetingAudience[]
   managedBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkManager")
+  createdBroadcasts       Broadcast[]            @relation("BroadcastCreatedBy")
   createdBookingLinks     BookingMagicLink[]     @relation("BookingMagicLinkCreator")
 
   @@index([companyId])
@@ -148,11 +167,11 @@ model Sector {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  manager   User?          @relation("SectorManager", fields: [managerId], references: [id], onDelete: SetNull)
-  members   SectorMember[]
-  tasks     Task[]
-  templates Template[]
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager         User?            @relation("SectorManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members         SectorMember[]
+  tasks           Task[]
+  templates       Template[]
   templateTargets TemplateSector[]
 
   @@index([companyId])
@@ -343,25 +362,28 @@ model Client {
   email             String?   @db.VarChar(255)
   phone             String?   @db.VarChar(50)
   meetingPlan       String?   @map("meeting_plan") @db.VarChar(100)
-  sourceGroupId      String?   @map("source_group_id") @db.VarChar(255)
+  sourceGroupId     String?   @map("source_group_id") @db.VarChar(255)
   whatsappGroupId   String?   @map("whatsapp_group_id") @db.VarChar(255)
   whatsappGroupName String?   @map("whatsapp_group_name") @db.VarChar(255)
+  externalId        String?   @map("external_id") @db.VarChar(50)
   avatarUrl         String?   @map("avatar_url")
   description       String?
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
   deletedAt         DateTime? @map("deleted_at")
 
-  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  manager           User?              @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
-  projects          Project[]
-  tasks             Task[]
-  bookingMagicLinks BookingMagicLink[]
+  company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager             User?                @relation("ClientManager", fields: [managerId], references: [id], onDelete: SetNull)
+  projects            Project[]
+  tasks               Task[]
+  bookingMagicLinks   BookingMagicLink[]
+  broadcastRecipients BroadcastRecipient[]
 
-  @@index([companyId])
-  @@index([managerId])
   @@unique([companyId, whatsappGroupId])
   @@unique([companyId, sourceGroupId])
+  @@index([companyId])
+  @@index([managerId])
+  @@index([companyId, externalId])
   @@map("clients")
 }
 
@@ -409,9 +431,9 @@ model Template {
   updatedAt   DateTime  @updatedAt @map("updated_at")
   deletedAt   DateTime? @map("deleted_at")
 
-  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sector        Sector?        @relation(fields: [sectorId], references: [id], onDelete: SetNull)
-  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sector        Sector?          @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  createdBy     User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
   templateTasks TemplateTask[]
   targetSectors TemplateSector[]
   targetUsers   TemplateUser[]
@@ -606,9 +628,9 @@ model Meeting {
   clientResponse    String?   @map("client_response") @db.VarChar(20) // "confirmed" | "declined"
   clientRespondedAt DateTime? @map("client_responded_at")
 
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recurrenceParent   Meeting?  @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
-  recurrenceChildren Meeting[] @relation("MeetingRecurrence")
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recurrenceParent   Meeting?          @relation("MeetingRecurrence", fields: [recurrenceParentId], references: [id], onDelete: Cascade)
+  recurrenceChildren Meeting[]         @relation("MeetingRecurrence")
   visibleTo          MeetingAudience[]
   reminders          MeetingReminder[]
 
@@ -687,4 +709,76 @@ model BookingMagicLink {
   @@index([managerId])
   @@index([expiresAt, revokedAt])
   @@map("booking_magic_links")
+}
+
+// ─── Disparos (broadcast para grupos de WhatsApp) ──────────────────────
+//
+// O envio em si vive na fila da UAZAPI, nao aqui: uma chamada /sender/advanced
+// registra todas as mensagens de uma vez e devolve um folder_id. Guardamos esse
+// id para consultar o andamento (/sender/listmessages) e para cancelar
+// (/sender/edit). Assim nenhuma funcao da Vercel fica viva esperando o disparo
+// terminar — o intervalo entre mensagens e responsabilidade da UAZAPI.
+
+model Broadcast {
+  id            String          @id @default(uuid()) @db.Uuid
+  companyId     String          @map("company_id") @db.Uuid
+  createdById   String?         @map("created_by_id") @db.Uuid
+  name          String          @db.VarChar(255)
+  status        BroadcastStatus @default(draft)
+  delayMin      Int             @default(15) @map("delay_min")
+  delayMax      Int             @default(30) @map("delay_max")
+  scheduledFor  DateTime?       @map("scheduled_for")
+  // folder_id devolvido pela UAZAPI. Sem ele nao ha como acompanhar nem cancelar.
+  folderId      String?         @map("folder_id") @db.VarChar(255)
+  totalTargets  Int             @default(0) @map("total_targets")
+  totalMessages Int             @default(0) @map("total_messages")
+  error         String?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy  User?                @relation("BroadcastCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  messages   BroadcastMessage[]
+  recipients BroadcastRecipient[]
+
+  @@index([companyId, createdAt])
+  @@map("broadcasts")
+}
+
+model BroadcastMessage {
+  id              String               @id @default(uuid()) @db.Uuid
+  broadcastId     String               @map("broadcast_id") @db.Uuid
+  position        Int
+  type            BroadcastMessageType
+  // Texto da mensagem ou legenda da midia. Guardado com as variaveis ainda
+  // cruas ({{nome}}), para o relatorio mostrar o que foi escrito, nao o
+  // resultado de um destinatario especifico.
+  text            String?
+  fileUrl         String?              @map("file_url")
+  fileName        String?              @map("file_name") @db.VarChar(255)
+  choices         String[]             @default([])
+  selectableCount Int?                 @map("selectable_count")
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId, position])
+  @@map("broadcast_messages")
+}
+
+model BroadcastRecipient {
+  id          String  @id @default(uuid()) @db.Uuid
+  broadcastId String  @map("broadcast_id") @db.Uuid
+  clientId    String? @map("client_id") @db.Uuid
+  // Snapshot: o cliente pode ser renomeado ou arquivado depois do disparo, e o
+  // relatorio precisa continuar dizendo para quem foi na epoca.
+  clientName  String  @map("client_name") @db.VarChar(255)
+  groupId     String  @map("group_id") @db.VarChar(255)
+  externalId  String? @map("external_id") @db.VarChar(50)
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  client    Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([broadcastId, groupId])
+  @@index([broadcastId])
+  @@map("broadcast_recipients")
 }

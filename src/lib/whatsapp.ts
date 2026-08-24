@@ -314,3 +314,222 @@ export async function cancelWhatsAppSchedule(folderId: string): Promise<boolean>
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   DISPAROS EM MASSA
+   ══════════════════════════════════════════════════════════════════════ */
+
+export type BroadcastOutboundType = "text" | "image" | "video" | "audio" | "poll";
+
+export type BroadcastOutbound = {
+  groupId: string;
+  type: BroadcastOutboundType;
+  /** Texto da mensagem, ou legenda quando for mídia. Já com as variáveis resolvidas. */
+  text?: string | null;
+  fileUrl?: string | null;
+  choices?: string[];
+  selectableCount?: number | null;
+};
+
+export type BulkSendResult =
+  | { ok: true; folderId: string; mode: UazapiMode; queued: number }
+  | {
+      ok: false;
+      reason: "not_configured" | "rejected" | "request_failed" | "empty" | "in_the_past";
+      status?: number;
+    };
+
+/**
+ * Entrega um disparo inteiro à fila da UAZAPI numa única chamada.
+ *
+ * Cada item de `outbound` já vai com o texto do seu destinatário — é assim que
+ * as variáveis ({{nome}} e companhia) funcionam sem precisar de uma chamada por
+ * cliente. O intervalo entre mensagens é `delayMin`/`delayMax`, sorteado lá, o
+ * que evita o padrão de robô sem manter nenhuma função da Vercel viva esperando.
+ *
+ * O `folder_id` devolvido é o que permite acompanhar (listCampaignMessages) e
+ * cancelar (cancelWhatsAppSchedule) depois.
+ */
+export async function sendWhatsAppBulk({
+  outbound,
+  delayMin,
+  delayMax,
+  scheduledFor,
+  info,
+}: {
+  outbound: BroadcastOutbound[];
+  delayMin: number;
+  delayMax: number;
+  scheduledFor?: Date | null;
+  info: string;
+}): Promise<BulkSendResult> {
+  const config = getConfiguration();
+  if (!config) return { ok: false, reason: "not_configured" };
+
+  if (scheduledFor) {
+    const when = scheduledFor.getTime();
+    if (!Number.isFinite(when) || when <= Date.now()) {
+      return { ok: false, reason: "in_the_past" };
+    }
+  }
+
+  // Em modo de teste todo destino vira o mesmo grupo autorizado. Mandar a lista
+  // inteira encheria esse grupo com uma cópia por cliente, então passa só a
+  // sequência do primeiro cliente — o suficiente para conferir o conteúdo.
+  const firstGroupId = outbound[0]?.groupId ?? null;
+
+  const messages: Record<string, unknown>[] = [];
+  for (const item of outbound) {
+    if (config.mode === "test" && item.groupId !== firstGroupId) continue;
+
+    const resolved = resolveDestination(item.groupId, config.mode);
+    if (!resolved.ok) {
+      // Um grupo inválido não pode derrubar o disparo inteiro: ele é pulado e o
+      // chamador percebe pela diferença entre o que pediu e o `queued`.
+      console.error(`[uazapi] destino recusado no disparo: ${item.groupId} (${resolved.reason})`);
+      continue;
+    }
+
+    const base: Record<string, unknown> = {
+      number: resolved.destination,
+      type: item.type,
+    };
+
+    if (item.type === "poll") {
+      const choices = (item.choices ?? []).map((c) => c.trim()).filter(Boolean);
+      if (!item.text?.trim() || choices.length < 2) {
+        console.error("[uazapi] enquete sem pergunta ou com menos de 2 opções — item ignorado");
+        continue;
+      }
+      base.text = item.text.trim();
+      base.choices = choices;
+      base.selectableCount = Math.min(Math.max(item.selectableCount ?? 1, 1), choices.length);
+    } else if (item.type === "text") {
+      if (!item.text?.trim()) continue;
+      base.text = item.text;
+      base.linkPreview = false;
+    } else {
+      if (!item.fileUrl) {
+        console.error(`[uazapi] mídia sem arquivo (${item.type}) — item ignorado`);
+        continue;
+      }
+      base.file = item.fileUrl;
+      // Legenda é opcional em mídia; texto vazio não vai, para não mandar
+      // uma linha em branco embaixo da imagem.
+      if (item.text?.trim()) base.text = item.text;
+    }
+
+    messages.push(base);
+  }
+
+  if (messages.length === 0) return { ok: false, reason: "empty" };
+
+  try {
+    const response = await fetch(`${config.serverUrl}/sender/advanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", token: config.token },
+      body: JSON.stringify({
+        messages,
+        delayMin,
+        delayMax,
+        info,
+        ...(scheduledFor ? { scheduled_for: scheduledFor.getTime() } : {}),
+      }),
+      // A lista pode ter centenas de itens; o padrão de 10s é curto demais.
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      console.error(`[uazapi] /sender/advanced falhou com status ${response.status}`);
+      return { ok: false, reason: "rejected", status: response.status };
+    }
+
+    const payload = (await response.json()) as { folder_id?: unknown };
+    const folderId = typeof payload.folder_id === "string" ? payload.folder_id : null;
+    if (!folderId) {
+      // Sem o id o disparo vira uma campanha órfã: entregue, mas impossível de
+      // acompanhar ou cancelar. Tratar como falha é mais honesto.
+      console.error("[uazapi] /sender/advanced não devolveu folder_id");
+      return { ok: false, reason: "rejected" };
+    }
+
+    return { ok: true, folderId, mode: config.mode, queued: messages.length };
+  } catch (error) {
+    console.error("[uazapi] /sender/advanced falhou:", error);
+    return { ok: false, reason: "request_failed" };
+  }
+}
+
+export type CampaignMessageStatus = "Scheduled" | "Sent" | "Failed";
+
+export type CampaignMessage = {
+  /** Destino como a UAZAPI devolve (ex.: 1203...@g.us). */
+  number: string;
+  status: CampaignMessageStatus | string;
+  sentAt: Date | null;
+  error: string | null;
+};
+
+/**
+ * Lê o andamento de um disparo direto da UAZAPI.
+ *
+ * A fonte da verdade sobre entrega é ela, não o nosso banco — aqui só ficou
+ * registrado para quem o disparo foi criado. Paginado porque um disparo para
+ * todos os clientes passa de 100 mensagens.
+ */
+export async function listCampaignMessages(folderId: string): Promise<CampaignMessage[]> {
+  const config = getConfiguration();
+  if (!config) return [];
+
+  const all: CampaignMessage[] = [];
+  const pageSize = 500;
+
+  for (let offset = 0; offset < 10_000; offset += pageSize) {
+    let page: unknown;
+    try {
+      const response = await fetch(`${config.serverUrl}/sender/listmessages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", token: config.token },
+        body: JSON.stringify({ folder_id: folderId, limit: pageSize, offset }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!response.ok) {
+        console.error(`[uazapi] /sender/listmessages falhou com status ${response.status}`);
+        break;
+      }
+      page = await response.json();
+    } catch (error) {
+      console.error("[uazapi] /sender/listmessages falhou:", error);
+      break;
+    }
+
+    const rows = Array.isArray((page as { messages?: unknown })?.messages)
+      ? ((page as { messages: unknown[] }).messages)
+      : [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      if (typeof row !== "object" || row === null) continue;
+      const record = row as Record<string, unknown>;
+      const number = readString(record, ["number", "chatid", "chatId", "jid", "destination"]);
+      if (!number) continue;
+      const rawSentAt = record.sentAt ?? record.sent_at ?? record.updated_at ?? null;
+      const sentAt =
+        typeof rawSentAt === "number"
+          ? new Date(rawSentAt > 1e12 ? rawSentAt : rawSentAt * 1000)
+          : typeof rawSentAt === "string" && rawSentAt.trim()
+            ? new Date(rawSentAt)
+            : null;
+      all.push({
+        number,
+        status: readString(record, ["status", "messageStatus"]) || "Scheduled",
+        sentAt: sentAt && !Number.isNaN(sentAt.getTime()) ? sentAt : null,
+        error: readString(record, ["error", "errorMessage", "failReason"]) || null,
+      });
+    }
+
+    if (rows.length < pageSize) break;
+  }
+
+  return all;
+}
