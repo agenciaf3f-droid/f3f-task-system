@@ -10,7 +10,8 @@ import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2, Save } from 
 import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
 import { ClientPicker } from "@/components/tasks/client-picker";
 import { TaskTemplatePicker, type TaskTemplateOption } from "@/components/tasks/task-template-picker";
-import { DEFAULT_PRIORITY, PRIORITY_OPTIONS } from "@/components/tasks/task-priority";
+import { DEFAULT_PRIORITY } from "@/components/tasks/task-priority";
+import { PriorityPicker } from "@/components/tasks/priority-picker";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string; sectorId: string | null }
@@ -79,6 +80,7 @@ export function NewTaskForm({
   const [preserveForNext, setPreserveForNext] = useState(true);
   const [templateId, setTemplateId] = useState("");
   const [assigneeId, setAssigneeId] = useState(defaultAssigneeId ?? "");
+  const [priority, setPriority] = useState<string>(DEFAULT_PRIORITY);
   const [sectorId, setSectorId] = useState(
     users.find((item) => item.id === defaultAssigneeId)?.sectorId ?? "",
   );
@@ -96,7 +98,7 @@ export function NewTaskForm({
       assigneeId: String(data.get("assigneeId") ?? ""),
       dueDate: String(data.get("dueDate") ?? ""),
       deliveryDate: String(data.get("deliveryDate") ?? ""),
-      priority: String(data.get("priority") || DEFAULT_PRIORITY),
+      priority,
       recurrenceRule,
       templateId,
       ...overrides,
@@ -126,11 +128,11 @@ export function NewTaskForm({
       const automaticSectorId = users.find((item) => item.id === restoredAssigneeId)?.sectorId ?? "";
       setFormValue(form, "dueDate", draft.dueDate ?? "");
       setFormValue(form, "deliveryDate", draft.deliveryDate ?? "");
-      setFormValue(form, "priority", draft.priority ?? DEFAULT_PRIORITY);
       const animationFrameId = window.requestAnimationFrame(() => {
         setAssigneeId(restoredAssigneeId);
         setSectorId(canChooseSector ? (draft.sectorId ?? automaticSectorId) : automaticSectorId);
         setClientId(defaultClientId ?? draft.clientId ?? "");
+        setPriority(draft.priority ?? DEFAULT_PRIORITY);
         setRecurrenceRule(draft.recurrenceRule ?? null);
         setTemplateId(draft.templateId ?? "");
       });
@@ -170,8 +172,8 @@ export function NewTaskForm({
         );
         setFormValue(form, "dueDate", nextDraft.dueDate);
         setFormValue(form, "deliveryDate", nextDraft.deliveryDate);
-        setFormValue(form, "priority", nextDraft.priority);
         setClientId(nextDraft.clientId);
+        setPriority(nextDraft.priority);
         setRecurrenceRule(nextDraft.recurrenceRule);
         setTemplateId(nextDraft.templateId);
         storeDraft(nextDraft);
@@ -180,6 +182,7 @@ export function NewTaskForm({
         setAssigneeId(nextAssigneeId);
         setSectorId(users.find((item) => item.id === nextAssigneeId)?.sectorId ?? "");
         setClientId(defaultClientId ?? "");
+        setPriority(DEFAULT_PRIORITY);
         setRecurrenceRule(null);
         setTemplateId("");
         localStorage.removeItem(draftStorageKey);
@@ -352,17 +355,16 @@ export function NewTaskForm({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="priority">Prioridade</Label>
-            <select
+            <PriorityPicker
               id="priority"
               name="priority"
-              defaultValue={DEFAULT_PRIORITY}
+              value={priority}
+              onValueChange={(next) => {
+                setPriority(next);
+                storeDraft(collectDraft({ priority: next }));
+              }}
               disabled={isPending}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            >
-              {PRIORITY_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+            />
           </div>
         </div>
 

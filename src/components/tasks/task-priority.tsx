@@ -29,6 +29,11 @@ function signalOf(priority: string) {
   return PRIORITY_SIGNAL[priority as TaskPriority] ?? PRIORITY_SIGNAL.medium;
 }
 
+/** Rótulo de qualquer prioridade, inclusive as que não estão nas opções (urgent). */
+export function priorityLabelOf(priority: string) {
+  return signalOf(priority).label;
+}
+
 /** Só o sinal — é o que aparece no card do board, onde não sobra espaço. */
 export function PriorityIcon({ priority, className }: { priority: string; className?: string }) {
   const signal = signalOf(priority);
