@@ -29,6 +29,7 @@ interface Task {
   projectId: string | null;
   project: { clientId: string } | null;
   dueDate: Date | null;
+  deliveryDate: Date | null;
   recurrenceRule: unknown;
 }
 
@@ -54,6 +55,10 @@ export function EditTaskForm({
 
   const dueDateValue = task.dueDate
     ? format(new Date(task.dueDate), "yyyy-MM-dd")
+    : "";
+
+  const deliveryDateValue = task.deliveryDate
+    ? format(new Date(task.deliveryDate), "yyyy-MM-dd")
     : "";
 
   const backHref = returnTo ?? `/tarefas/${task.id}`;
@@ -154,16 +159,27 @@ export function EditTaskForm({
           </div>
         </div>
 
-        {/* Row: Due date + Priority */}
+        {/* Row: prazos + prioridade */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+            <Label htmlFor="dueDate">Prazo de conclusão <span className="text-red-500">*</span></Label>
             <Input
               id="dueDate"
               name="dueDate"
               type="date"
               defaultValue={dueDateValue}
               required
+              disabled={isPending}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
+            <Input
+              id="deliveryDate"
+              name="deliveryDate"
+              type="date"
+              defaultValue={deliveryDateValue}
               disabled={isPending}
             />
           </div>

@@ -48,9 +48,16 @@ function UnblockButton({
   const [unblocked, setUnblocked] = useState(false);
   const router = useRouter();
 
+  // Bloquear passou a exigir motivo escrito. Aqui só existe o caminho de volta:
+  // desbloquear com um clique e, se foi sem querer, restaurar pelo "Desfazer" —
+  // e a restauração diz exatamente isso, em vez de inventar uma justificativa.
   function apply(isBlocked: boolean) {
     startTransition(async () => {
-      const result = await setTaskBlockedAction(taskId, isBlocked);
+      const result = await setTaskBlockedAction(
+        taskId,
+        isBlocked,
+        isBlocked ? "Bloqueio restaurado logo após um desbloqueio acidental." : undefined,
+      );
       if (result?.error) {
         setUnblocked(isBlocked);
         toast.error(result.error);

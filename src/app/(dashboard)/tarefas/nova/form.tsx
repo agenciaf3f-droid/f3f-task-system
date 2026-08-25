@@ -24,6 +24,7 @@ interface TaskDraft {
   sectorId: string;
   assigneeId: string;
   dueDate: string;
+  deliveryDate: string;
   priority: string;
   recurrenceRule: RecurrenceRule | null;
   templateId: string;
@@ -94,6 +95,7 @@ export function NewTaskForm({
       sectorId: String(data.get("sectorId") ?? ""),
       assigneeId: String(data.get("assigneeId") ?? ""),
       dueDate: String(data.get("dueDate") ?? ""),
+      deliveryDate: String(data.get("deliveryDate") ?? ""),
       priority: String(data.get("priority") || DEFAULT_PRIORITY),
       recurrenceRule,
       templateId,
@@ -123,6 +125,7 @@ export function NewTaskForm({
       const restoredAssigneeId = defaultAssigneeId ?? draft.assigneeId ?? "";
       const automaticSectorId = users.find((item) => item.id === restoredAssigneeId)?.sectorId ?? "";
       setFormValue(form, "dueDate", draft.dueDate ?? "");
+      setFormValue(form, "deliveryDate", draft.deliveryDate ?? "");
       setFormValue(form, "priority", draft.priority ?? DEFAULT_PRIORITY);
       const animationFrameId = window.requestAnimationFrame(() => {
         setAssigneeId(restoredAssigneeId);
@@ -166,6 +169,7 @@ export function NewTaskForm({
             : (users.find((item) => item.id === nextDraft.assigneeId)?.sectorId ?? ""),
         );
         setFormValue(form, "dueDate", nextDraft.dueDate);
+        setFormValue(form, "deliveryDate", nextDraft.deliveryDate);
         setFormValue(form, "priority", nextDraft.priority);
         setClientId(nextDraft.clientId);
         setRecurrenceRule(nextDraft.recurrenceRule);
@@ -334,11 +338,16 @@ export function NewTaskForm({
           </select>
         </div>
 
-        {/* Row: Due date + Priority */}
+        {/* Row: prazos + prioridade */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+            <Label htmlFor="dueDate">Prazo de conclusão <span className="text-red-500">*</span></Label>
             <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
+            <Input id="deliveryDate" name="deliveryDate" type="date" disabled={isPending} />
           </div>
 
           <div className="flex flex-col gap-1.5">

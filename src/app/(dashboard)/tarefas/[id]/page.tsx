@@ -130,7 +130,8 @@ export default async function TaskDetailPage({
                 <span>{task.assignee.name}</span>
               </div>
             )}
-            <TaskDueDateEditor taskId={task.id} dueDate={task.dueDate} canEdit={canEdit} />
+            <TaskDueDateEditor taskId={task.id} value={task.dueDate} canEdit={canEdit} />
+            <TaskDueDateEditor taskId={task.id} value={task.deliveryDate} canEdit={canEdit} field="deliveryDate" />
             <div className="flex items-center gap-2 text-neutral-500">
               <Pencil className="w-4 h-4 text-neutral-400 shrink-0" />
               <span>por {task.createdBy.name.split(" ")[0]}</span>

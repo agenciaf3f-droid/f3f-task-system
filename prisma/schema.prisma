@@ -222,6 +222,7 @@ model Task {
   assigneeId         String?      @map("assignee_id") @db.Uuid
   createdById        String       @map("created_by") @db.Uuid
   dueDate            DateTime?    @map("due_date")
+  deliveryDate       DateTime?    @map("delivery_date")
   completedAt        DateTime?    @map("completed_at")
   tags               String[]     @default([])
   metadata           Json         @default("{}")

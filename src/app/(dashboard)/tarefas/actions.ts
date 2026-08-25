@@ -53,9 +53,18 @@ const optUuid = z.preprocess(
   z.string().uuid().or(z.literal("")),
 );
 
-const requiredDueDate = z.string().min(1, "Prazo obrigatório").refine(
+const requiredDueDate = z.string().min(1, "Prazo de conclusão obrigatório").refine(
   (value) => Boolean(parseDateInput(value)),
-  "Prazo inválido",
+  "Prazo de conclusão inválido",
+);
+
+// Prazo de entrega: opcional, então string vazia é um valor válido (= sem data).
+const optionalDate = z.preprocess(
+  (v) => (v == null ? "" : v),
+  z.string().refine(
+    (value) => value === "" || Boolean(parseDateInput(value)),
+    "Prazo de entrega inválido",
+  ),
 );
 
 const taskSchema = z.object({
@@ -67,6 +76,7 @@ const taskSchema = z.object({
   projectId: optUuid,
   priority: optPriority,
   dueDate: requiredDueDate,
+  deliveryDate: optionalDate,
   templateId: optUuid,
 });
 
@@ -130,6 +140,7 @@ export async function createTaskAction(
     clientId: formData.get("clientId"),
     projectId: formData.get("projectId"),
     priority: formData.get("priority"),
+    deliveryDate: formData.get("deliveryDate"),
     dueDate: formData.get("dueDate"),
     templateId: formData.get("templateId"),
   });
@@ -138,7 +149,7 @@ export async function createTaskAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate, templateId } = parsed.data;
+  const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate, deliveryDate, templateId } = parsed.data;
   const safePriority: TaskPriority = priority ?? "medium";
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   if (!validAssigneeId) return { error: "Responsável inválido." };
@@ -209,6 +220,7 @@ export async function createTaskAction(
         templateId: template?.id ?? null,
         createdById: user.userId,
         dueDate: parsedDueDate,
+        deliveryDate: parseDateInput(deliveryDate),
         recurrenceRule: recurrenceRule ?? undefined,
         assignees: {
           create: {
@@ -416,9 +428,19 @@ export async function cancelTaskAction(taskId: string, reason: string) {
 export async function setTaskBlockedAction(
   taskId: string,
   isBlocked: boolean,
+  reason?: string,
 ): Promise<{ error?: string }> {
   const user = await requireAuth();
   if (typeof isBlocked !== "boolean") return { error: "Estado de bloqueio inválido." };
+
+  // Bloquear exige motivo escrito, igual ao cancelamento. Desbloquear não:
+  // tirar o impedimento é o caminho de volta e não precisa de justificativa.
+  const trimmedReason = (reason ?? "").trim();
+  if (isBlocked) {
+    if (trimmedReason.length < 3) return { error: "Explique por que a tarefa está sendo bloqueada." };
+    if (trimmedReason.length > 2000) return { error: "O motivo deve ter no máximo 2.000 caracteres." };
+  }
+
   const task = await prisma.task.findFirst({
     where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: {
@@ -432,10 +454,23 @@ export async function setTaskBlockedAction(
   // acima já limita cada usuário às tarefas que ele enxerga.
   if (task.isBlocked === isBlocked) return {};
 
-  await prisma.task.update({
-    where: { id: taskId, companyId: user.companyId },
-    data: { isBlocked },
-  });
+  // O motivo vira comentário na tarefa — mesmo caminho do cancelamento. Fica
+  // visível na conversa e no histórico sem precisar de uma coluna só para isso.
+  await prisma.$transaction([
+    prisma.task.update({
+      where: { id: taskId, companyId: user.companyId },
+      data: { isBlocked },
+    }),
+    ...(isBlocked
+      ? [prisma.taskComment.create({
+          data: {
+            taskId,
+            userId: user.userId,
+            content: `Motivo do bloqueio: ${trimmedReason}`,
+          },
+        })]
+      : []),
+  ]);
 
   await logActivity({
     companyId: user.companyId,
@@ -444,7 +479,7 @@ export async function setTaskBlockedAction(
     resourceType: "task",
     resourceId: taskId,
     oldValue: { isBlocked: task.isBlocked },
-    newValue: { isBlocked },
+    newValue: isBlocked ? { isBlocked, reason: trimmedReason } : { isBlocked },
   });
 
   revalidatePath(`/tarefas/${taskId}`);
@@ -511,6 +546,7 @@ export async function updateTaskAction(
     sectorId: formData.get("sectorId"),
     clientId: formData.get("clientId"),
     priority: formData.get("priority"),
+    deliveryDate: formData.get("deliveryDate"),
     dueDate: formData.get("dueDate"),
   });
 
@@ -518,7 +554,7 @@ export async function updateTaskAction(
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
 
-  const { title, description, priority, assigneeId, sectorId, clientId, dueDate } = parsed.data;
+  const { title, description, priority, assigneeId, sectorId, clientId, dueDate, deliveryDate } = parsed.data;
   const safePriority: TaskPriority = priority ?? "medium";
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
 
@@ -542,6 +578,7 @@ export async function updateTaskAction(
       sectorId: sectorId || null,
       clientId: validClientId,
       dueDate: parseDateInput(dueDate),
+      deliveryDate: parseDateInput(deliveryDate),
       recurrenceRule: recurrenceRule ?? undefined,
     },
   });
@@ -634,6 +671,27 @@ export async function updateTaskDueDateAction(taskId: string, dueDate: string | 
   await prisma.task.update({
     where: { id: taskId, companyId: user.companyId },
     data: { dueDate: parsedDueDate },
+  });
+
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
+}
+
+export async function updateTaskDeliveryDateAction(taskId: string, deliveryDate: string | null) {
+  const user = await requireAuth();
+  const trimmed = (deliveryDate ?? "").trim();
+  // Campo opcional: vazio limpa a data em vez de virar erro.
+  const parsed = trimmed ? parseDateInput(trimmed) : null;
+  if (trimmed && !parsed) return { error: "Prazo de entrega inválido." };
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, AND: taskVisibilityFilter(user) },
+    select: { projectId: true },
+  });
+  if (!task) return { error: "Tarefa não encontrada." };
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { deliveryDate: parsed },
   });
 
   revalidatePath(`/tarefas/${taskId}`);
@@ -936,11 +994,11 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
     where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
     select: {
       title: true, description: true, priority: true, assigneeId: true,
-      sectorId: true, clientId: true, projectId: true, dueDate: true,
+      sectorId: true, clientId: true, projectId: true, dueDate: true, deliveryDate: true,
       checklistItems: { select: { title: true, position: true } },
       subtasks: {
         where: { deletedAt: null },
-        select: { title: true, description: true, priority: true, assigneeId: true, dueDate: true, sectorId: true },
+        select: { title: true, description: true, priority: true, assigneeId: true, dueDate: true, deliveryDate: true, sectorId: true },
       },
     },
   });
@@ -957,6 +1015,7 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
       clientId: task.clientId,
       projectId: task.projectId,
       dueDate: task.dueDate,
+      deliveryDate: task.deliveryDate,
       createdById: user.userId,
       checklistItems: {
         create: task.checklistItems.map((ci) => ({ title: ci.title, position: ci.position })),
@@ -975,6 +1034,7 @@ export async function duplicateTaskAction(taskId: string): Promise<{ error?: str
           priority: sub.priority,
           assigneeId: sub.assigneeId,
           dueDate: sub.dueDate,
+          deliveryDate: sub.deliveryDate,
           projectId: task.projectId,
           clientId: task.clientId,
           sectorId: task.sectorId,

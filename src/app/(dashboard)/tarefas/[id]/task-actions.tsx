@@ -29,6 +29,9 @@ export function TaskActions({
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelError, setCancelError] = useState("");
+  const [showBlockDialog, setShowBlockDialog] = useState(false);
+  const [blockReason, setBlockReason] = useState("");
+  const [blockError, setBlockError] = useState("");
   const [blocked, setBlocked] = useOptimistic(isBlocked);
   const router = useRouter();
 
@@ -73,11 +76,36 @@ export function TaskActions({
   }
 
   function handleBlockedToggle() {
-    const nextBlocked = !blocked;
+    // Bloquear pede o motivo antes, igual ao cancelamento. Desbloquear é direto.
+    if (!blocked) {
+      setBlockError("");
+      setShowBlockDialog(true);
+      return;
+    }
     startTransition(async () => {
-      setBlocked(nextBlocked);
-      const result = await setTaskBlockedAction(taskId, nextBlocked);
+      setBlocked(false);
+      const result = await setTaskBlockedAction(taskId, false);
       if (!result.error) router.refresh();
+    });
+  }
+
+  function confirmBlock() {
+    const reason = blockReason.trim();
+    if (!reason) {
+      setBlockError("Explique por que a tarefa está sendo bloqueada.");
+      return;
+    }
+    startTransition(async () => {
+      setBlocked(true);
+      const result = await setTaskBlockedAction(taskId, true, reason);
+      if (result.error) {
+        setBlockError(result.error);
+        return;
+      }
+      setShowBlockDialog(false);
+      setBlockReason("");
+      setBlockError("");
+      router.refresh();
     });
   }
 
@@ -200,6 +228,36 @@ export function TaskActions({
         </>
       )}
     </div>
+    <Dialog open={showBlockDialog} onOpenChange={setShowBlockDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Por que essa tarefa está sendo bloqueada?</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <textarea
+            value={blockReason}
+            onChange={(event) => {
+              setBlockReason(event.target.value);
+              if (blockError) setBlockError("");
+            }}
+            rows={4}
+            maxLength={2000}
+            autoFocus
+            disabled={isPending}
+            placeholder="Escreva o que está impedindo a tarefa..."
+            className="w-full resize-none rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-200"
+          />
+          {blockError && <p className="text-sm text-red-600">{blockError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowBlockDialog(false)} disabled={isPending}>Voltar</Button>
+            <Button onClick={confirmBlock} disabled={isPending || !blockReason.trim()} className="bg-red-600 hover:bg-red-700">
+              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Bloquear tarefa
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
     <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
