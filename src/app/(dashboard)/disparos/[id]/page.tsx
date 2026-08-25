@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listCampaignMessages, normalizeGroupId } from "@/lib/whatsapp";
 import { reconcileBroadcasts, foldersOf } from "@/lib/broadcast-status";
+import { formatBrazilDateTime } from "@/lib/format-brazil";
 import { BroadcastStatusBadge } from "../status-badge";
 import { CancelBroadcastButton } from "./cancel-button";
 import { ArrowLeft, Ban, CheckCircle2, Clock, Copy, XCircle } from "lucide-react";
@@ -102,7 +103,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
       <p className="text-sm text-muted-foreground mb-6">
         {broadcast.totalTargets} grupo(s) · {broadcast.messages.length} mensagem(ns) por grupo ·
         intervalo {broadcast.delayMin}–{broadcast.delayMax}s
-        {broadcast.scheduledFor ? ` · agendado para ${broadcast.scheduledFor.toLocaleString("pt-BR")}` : ""}
+        {broadcast.scheduledFor ? ` · agendado para ${formatBrazilDateTime(broadcast.scheduledFor)}` : ""}
         {broadcast.createdBy?.name ? ` · por ${broadcast.createdBy.name}` : ""}
       </p>
 
@@ -178,7 +179,7 @@ export default async function BroadcastDetailPage({ params }: { params: Promise<
                     {stats?.failed ?? 0}
                   </td>
                   <td className="px-4 py-2 text-xs text-muted-foreground">
-                    {stats?.lastAt ? stats.lastAt.toLocaleString("pt-BR") : "—"}
+                    {formatBrazilDateTime(stats?.lastAt)}
                   </td>
                 </tr>
               );

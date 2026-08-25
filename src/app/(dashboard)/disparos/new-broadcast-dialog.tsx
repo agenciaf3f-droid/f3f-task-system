@@ -101,10 +101,13 @@ const newMessage = (type: MessageType): DraftMessage => ({
 export function NewBroadcastDialog({
   clients,
   prefill,
+  minScheduledAt,
 }: {
   clients: Client[];
   /** Vem de /disparos?duplicar=<id>. Presente = abre já preenchido. */
   prefill?: BroadcastPrefill | null;
+  /** "agora" em Brasília, calculado no servidor — o relógio do navegador pode estar em outro fuso. */
+  minScheduledAt: string;
 }) {
   const router = useRouter();
   // Abre sozinho quando chegou por duplicação — o usuário já clicou uma vez.
@@ -420,7 +423,11 @@ export function NewBroadcastDialog({
                   disabled={isPending} onClick={() => setMode("scheduled")}>Agendar</Button>
               </div>
               {mode === "scheduled" && (
-                <Input name="scheduledFor" type="datetime-local" required disabled={isPending} className="h-9" />
+                <>
+                  <Input name="scheduledFor" type="datetime-local" required disabled={isPending}
+                    min={minScheduledAt} className="h-9" />
+                  <p className="text-xs text-muted-foreground">Horário de Brasília.</p>
+                </>
               )}
             </div>
 

@@ -8,6 +8,7 @@ import { logActivity } from "@/lib/activity";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { applyVariables } from "@/lib/broadcast-variables";
 import { openSecret } from "@/lib/secret-box";
+import { brazilWallClockToInstant } from "@/lib/meeting-reminders";
 import {
   sendWhatsAppBulk,
   cancelWhatsAppSchedule,
@@ -138,7 +139,15 @@ export async function createBroadcastAction(
 
   let scheduledFor: Date | null = null;
   if (input.scheduledFor) {
-    scheduledFor = new Date(input.scheduledFor);
+    // O <input type="datetime-local"> manda "YYYY-MM-DDTHH:MM" sem fuso, e o
+    // que o usuário digitou é horário de Brasília. new Date() nessa string usa
+    // o fuso de quem executa — UTC na Vercel —, então 14:30 virava 11:30 e a
+    // mensagem saía três horas antes. A conversão é a mesma dos lembretes.
+    const [datePart, timePart] = input.scheduledFor.split("T");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart ?? "") || !/^\d{2}:\d{2}/.test(timePart ?? "")) {
+      return { error: "Data de agendamento inválida." };
+    }
+    scheduledFor = brazilWallClockToInstant(datePart, timePart.slice(0, 5));
     if (Number.isNaN(scheduledFor.getTime())) return { error: "Data de agendamento inválida." };
     if (scheduledFor.getTime() <= Date.now()) return { error: "O agendamento precisa ser no futuro." };
   }

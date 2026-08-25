@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isUazapiConfigured, isUazapiTestMode } from "@/lib/whatsapp";
 import { reconcileBroadcasts } from "@/lib/broadcast-status";
+import { formatBrazilDateTime, brazilLocalInputNow } from "@/lib/format-brazil";
 import { NewBroadcastDialog, type BroadcastPrefill } from "./new-broadcast-dialog";
 import { BroadcastStatusBadge } from "./status-badge";
 import { Send, AlertTriangle, FlaskConical, Copy } from "lucide-react";
@@ -107,6 +108,7 @@ export default async function DisparosPage({
             key={prefill ? `duplicar-${duplicar}` : "novo"}
             clients={clients.map((c) => ({ ...c, whatsappGroupId: c.whatsappGroupId! }))}
             prefill={prefill}
+            minScheduledAt={brazilLocalInputNow()}
           />
         )}
       </div>
@@ -147,8 +149,8 @@ export default async function DisparosPage({
                   <div className="text-xs text-muted-foreground">
                     {broadcast.totalTargets} grupo(s) · {broadcast.totalMessages} mensagem(ns)
                     {broadcast.scheduledFor
-                      ? ` · agendado para ${broadcast.scheduledFor.toLocaleString("pt-BR")}`
-                      : ` · criado em ${broadcast.createdAt.toLocaleString("pt-BR")}`}
+                      ? ` · agendado para ${formatBrazilDateTime(broadcast.scheduledFor)}`
+                      : ` · criado em ${formatBrazilDateTime(broadcast.createdAt)}`}
                     {broadcast.createdBy?.name ? ` · por ${broadcast.createdBy.name}` : ""}
                   </div>
                 </div>
