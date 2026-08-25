@@ -17,6 +17,8 @@ import { isBefore, isToday, format } from "date-fns";
 import { BriefcaseBusiness, Calendar, User, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { cancelTaskAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
+import { PriorityIcon } from "@/components/tasks/task-priority";
+import { sortKanbanTasks } from "@/lib/kanban-order";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -47,13 +49,6 @@ const COLUMNS: Column[] = [
   { id: "blocked",     label: "Ajustes",       color: "text-rose-600",    bg: "bg-rose-50"     },
   { id: "done",        label: "Concluído",     color: "text-emerald-600", bg: "bg-emerald-50"  },
 ];
-
-const PRIORITY_DOT: Record<string, string> = {
-  urgent: "bg-red-500",
-  high:   "bg-orange-400",
-  medium: "bg-yellow-400",
-  low:    "bg-neutral-300",
-};
 
 // Cor por status: dot + label + tint sutil da coluna. Como as colunas têm altura
 // natural (items-start) o tint claro vira color-coding elegante, não bloco cheio.
@@ -101,7 +96,7 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
         : "border-neutral-200/80 hover:border-neutral-300 hover:shadow-sm hover:-translate-y-0.5"
     }`}>
       <div className="flex items-start gap-2">
-        <span className={`w-1.5 h-1.5 rounded-full shrink-0 mt-[7px] ${PRIORITY_DOT[task.priority] ?? "bg-neutral-300"}`} />
+        <PriorityIcon priority={task.priority} className="mt-[3px]" />
         <Link
           href={`/tarefas/${task.id}`}
           onClick={(e) => e.stopPropagation()}
@@ -113,7 +108,7 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
       </div>
 
       {hasMeta && (
-        <div className="flex items-center gap-2.5 flex-wrap mt-2 pl-3.5">
+        <div className="flex items-center gap-2.5 flex-wrap mt-2 pl-[22px]">
           {clientName && (
             <span className="flex items-center gap-1 text-[11px] text-neutral-500 max-w-full">
               <BriefcaseBusiness className="w-3 h-3 shrink-0" />
@@ -256,6 +251,9 @@ export function KanbanView({
       // status errado. Default (projeto, 5 colunas): mantém legacy (órfão → 1ª coluna).
       else if (columns === COLUMNS) groups[columns[0].id].push(t);
     }
+    // Prazo primeiro, prioridade como desempate — vale para o board do projeto
+    // e para o do dashboard, que reaproveitam este mesmo componente.
+    for (const colId of Object.keys(groups)) groups[colId] = sortKanbanTasks(groups[colId]);
     return groups;
   }
 

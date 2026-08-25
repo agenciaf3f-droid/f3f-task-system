@@ -36,11 +36,17 @@ function parseRecurrenceRuleFromForm(raw: FormDataEntryValue | null): unknown {
   }
 }
 
-// Campos removidos da UI (sectorId, priority) podem vir como null no FormData.
+// Campos ausentes na UI (ex.: sectorId) podem vir como null no FormData.
 // Pré-processa null → "" pra casar com .or(z.literal("")).
 const optStr = z.preprocess(
   (v) => (v == null ? "" : v),
   z.string(),
+);
+// A prioridade voltou para os formulários: validar contra o enum faz um valor
+// desconhecido virar erro de formulário em vez de estourar no Prisma.
+const optPriority = z.preprocess(
+  (v) => (v == null || v === "" ? undefined : v),
+  z.enum(["low", "medium", "high", "urgent"]).optional(),
 );
 const optUuid = z.preprocess(
   (v) => (v == null ? "" : v),
@@ -59,7 +65,7 @@ const taskSchema = z.object({
   sectorId: optUuid,
   clientId: optUuid,
   projectId: optUuid,
-  priority: optStr,
+  priority: optPriority,
   dueDate: requiredDueDate,
   templateId: optUuid,
 });
@@ -133,7 +139,7 @@ export async function createTaskAction(
   }
 
   const { title, description, priority, assigneeId, sectorId, clientId, projectId, dueDate, templateId } = parsed.data;
-  const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
+  const safePriority: TaskPriority = priority ?? "medium";
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
   if (!validAssigneeId) return { error: "Responsável inválido." };
   const assigneeMembership = await prisma.sectorMember.findFirst({
@@ -237,7 +243,7 @@ export async function createTaskAction(
     action: "task.created",
     resourceType: "task",
     resourceId: task.id,
-    newValue: { title, priority, assigneeId: validAssigneeId },
+    newValue: { title, priority: safePriority, assigneeId: validAssigneeId },
   });
 
   if (validAssigneeId && validAssigneeId !== user.userId) {
@@ -248,7 +254,7 @@ export async function createTaskAction(
     const webhookPayload = {
       taskId: task.id,
       taskTitle: title,
-      priority,
+      priority: safePriority,
       assigneeName: assignee?.name,
       assigneeEmail: assignee?.email,
       projectName: project?.name ?? null,
@@ -513,7 +519,7 @@ export async function updateTaskAction(
   }
 
   const { title, description, priority, assigneeId, sectorId, clientId, dueDate } = parsed.data;
-  const safePriority: TaskPriority = (priority || "medium") as TaskPriority;
+  const safePriority: TaskPriority = priority ?? "medium";
   const validAssigneeId = await resolveCompanyAssignee(assigneeId, user.companyId);
 
   const old = await prisma.task.findFirst({
@@ -546,7 +552,7 @@ export async function updateTaskAction(
     action: "task.updated",
     resourceType: "task",
     resourceId: taskId,
-    newValue: { title, priority, assigneeId: validAssigneeId, clientId: validClientId },
+    newValue: { title, priority: safePriority, assigneeId: validAssigneeId, clientId: validClientId },
   });
 
   if (validAssigneeId && validAssigneeId !== old.assigneeId && validAssigneeId !== user.userId) {
@@ -557,7 +563,7 @@ export async function updateTaskAction(
     dispatchWebhook(user.companyId, "task.assigned", {
       taskId,
       taskTitle: title,
-      priority,
+      priority: safePriority,
       assigneeName: assignee?.name,
       assigneeEmail: assignee?.email,
       dueDate: dueDate || null,

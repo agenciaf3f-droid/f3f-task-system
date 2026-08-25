@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import type { TaskPriority } from "@prisma/client";
 import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
 import { ClientPicker } from "@/components/tasks/client-picker";
+import { PRIORITY_OPTIONS } from "@/components/tasks/task-priority";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string }
@@ -153,17 +154,37 @@ export function EditTaskForm({
           </div>
         </div>
 
-        {/* Row: Due date */}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
-          <Input
-            id="dueDate"
-            name="dueDate"
-            type="date"
-            defaultValue={dueDateValue}
-            required
-            disabled={isPending}
-          />
+        {/* Row: Due date + Priority */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+            <Input
+              id="dueDate"
+              name="dueDate"
+              type="date"
+              defaultValue={dueDateValue}
+              required
+              disabled={isPending}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="priority">Prioridade</Label>
+            <select
+              id="priority"
+              name="priority"
+              defaultValue={task.priority}
+              disabled={isPending}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {PRIORITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+              {/* Só aparece se a tarefa já estiver assim: sem esta opção o select
+                  cairia na primeira e rebaixaria a prioridade ao salvar. */}
+              {task.priority === "urgent" && <option value="urgent">Urgente</option>}
+            </select>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

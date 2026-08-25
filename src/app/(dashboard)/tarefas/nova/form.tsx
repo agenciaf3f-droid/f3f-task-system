@@ -10,6 +10,7 @@ import { ArrowLeft, Loader2, AlertCircle, FolderOpen, CheckCircle2, Save } from 
 import { RecurrencePicker, type RecurrenceRule } from "@/components/tasks/recurrence-picker";
 import { ClientPicker } from "@/components/tasks/client-picker";
 import { TaskTemplatePicker, type TaskTemplateOption } from "@/components/tasks/task-template-picker";
+import { DEFAULT_PRIORITY, PRIORITY_OPTIONS } from "@/components/tasks/task-priority";
 
 interface Sector { id: string; name: string }
 interface User { id: string; name: string; sectorId: string | null }
@@ -23,6 +24,7 @@ interface TaskDraft {
   sectorId: string;
   assigneeId: string;
   dueDate: string;
+  priority: string;
   recurrenceRule: RecurrenceRule | null;
   templateId: string;
 }
@@ -92,6 +94,7 @@ export function NewTaskForm({
       sectorId: String(data.get("sectorId") ?? ""),
       assigneeId: String(data.get("assigneeId") ?? ""),
       dueDate: String(data.get("dueDate") ?? ""),
+      priority: String(data.get("priority") || DEFAULT_PRIORITY),
       recurrenceRule,
       templateId,
       ...overrides,
@@ -120,6 +123,7 @@ export function NewTaskForm({
       const restoredAssigneeId = defaultAssigneeId ?? draft.assigneeId ?? "";
       const automaticSectorId = users.find((item) => item.id === restoredAssigneeId)?.sectorId ?? "";
       setFormValue(form, "dueDate", draft.dueDate ?? "");
+      setFormValue(form, "priority", draft.priority ?? DEFAULT_PRIORITY);
       const animationFrameId = window.requestAnimationFrame(() => {
         setAssigneeId(restoredAssigneeId);
         setSectorId(canChooseSector ? (draft.sectorId ?? automaticSectorId) : automaticSectorId);
@@ -162,6 +166,7 @@ export function NewTaskForm({
             : (users.find((item) => item.id === nextDraft.assigneeId)?.sectorId ?? ""),
         );
         setFormValue(form, "dueDate", nextDraft.dueDate);
+        setFormValue(form, "priority", nextDraft.priority);
         setClientId(nextDraft.clientId);
         setRecurrenceRule(nextDraft.recurrenceRule);
         setTemplateId(nextDraft.templateId);
@@ -329,10 +334,27 @@ export function NewTaskForm({
           </select>
         </div>
 
-        {/* Row: Due date */}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
-          <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
+        {/* Row: Due date + Priority */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="dueDate">Prazo <span className="text-red-500">*</span></Label>
+            <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="priority">Prioridade</Label>
+            <select
+              id="priority"
+              name="priority"
+              defaultValue={DEFAULT_PRIORITY}
+              disabled={isPending}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              {PRIORITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

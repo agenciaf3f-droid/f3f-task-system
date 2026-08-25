@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { ArrowLeft, User, Pencil, FolderKanban } from "lucide-react";
 import { StatusBadge } from "@/components/tasks/task-badges";
+import { PriorityLabel } from "@/components/tasks/task-priority";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "./task-actions";
 import { ChecklistSection } from "./checklist-section";
@@ -101,6 +102,7 @@ export default async function TaskDetailPage({
           {/* Badges */}
           <div className="flex items-center gap-2 flex-wrap mb-5">
             <StatusBadge status={task.status} />
+            <PriorityLabel priority={task.priority} />
             {task.isBlocked && <TaskBlockedIndicator showLabel />}
           </div>
 
