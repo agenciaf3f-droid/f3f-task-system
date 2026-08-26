@@ -88,6 +88,24 @@ const PLAN_EVENT_STYLES: Record<string, string> = {
 /** Reunião interna (sem cliente) fica neutra e não disputa atenção. */
 const INTERNAL_EVENT_STYLE = "border-slate-400 bg-slate-100 text-slate-800 hover:bg-slate-200";
 
+/**
+ * Cliente confirmou presença: a reunião inteira fica verde.
+ *
+ * É verde PREENCHIDO, e não mais um tom pastel como os planos, por dois
+ * motivos. O plano "1 FASE" já é emerald-50, então um verde claro se
+ * confundiria com ele. E confirmação é o estado que o gestor procura ao bater
+ * o olho na agenda — precisa saltar, não se misturar à paleta dos planos.
+ *
+ * Sobrepõe a cor do plano: quando o cliente confirmou, essa informação vale
+ * mais que a natureza do atendimento, que continua no tooltip e no detalhe.
+ */
+const CONFIRMED_EVENT_STYLE =
+  "border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700";
+
+function styleForMeeting(plan: string | null, clientResponse: string | null): string {
+  return clientResponse === "confirmed" ? CONFIRMED_EVENT_STYLE : styleForPlan(plan);
+}
+
 function normalizePlan(plan: string | null): string {
   return (plan ?? "")
     .normalize("NFD")
@@ -393,7 +411,7 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${styleForPlan(meeting.clientPlan)}`}
+                        className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
                         onMouseEnter={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
                           setHover({ meeting, dateStr, x: rect.right, y: rect.top });
@@ -494,7 +512,7 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForPlan(meeting.clientPlan)}`}
+                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
                         style={{
                           top: topoDe(inicio),
                           height: altura,
@@ -520,10 +538,10 @@ function WeekTimeGrid({
                               />
                               {meeting.clientResponse === "confirmed" && (
                                 <span
-                                  className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                                  className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-2 ring-emerald-700"
                                   aria-label="Cliente confirmou presença"
                                 >
-                                  <Check className="h-1.5 w-1.5 text-white" strokeWidth={5} />
+                                  <Check className="h-1.5 w-1.5 text-emerald-700" strokeWidth={5} />
                                 </span>
                               )}
                             </span>
@@ -694,7 +712,7 @@ const DayCell = memo(function DayCell({
       {/* Eventos compactos com overflow no padrão do Google Calendar. */}
       <div className="flex min-h-0 flex-col gap-1">
         {visible.map((m) => {
-          const eventStyle = styleForPlan(m.clientPlan);
+          const eventStyle = styleForMeeting(m.clientPlan, m.clientResponse);
           const canManage = canManageAll || m.responsibleIds.includes(userId);
           const displayName = m.clientName || m.hostName;
           const tooltipPrefix = m.clientName
@@ -712,10 +730,10 @@ const DayCell = memo(function DayCell({
                 <UserAvatar name={m.hostName} src={m.hostAvatarUrl} size={20} />
                 {m.clientResponse === "confirmed" && (
                   <span
-                    className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                    className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-white ring-2 ring-emerald-700"
                     aria-label="Cliente confirmou presença"
                   >
-                    <Check className="h-2 w-2 text-white" strokeWidth={4} />
+                    <Check className="h-2 w-2 text-emerald-700" strokeWidth={4} />
                   </span>
                 )}
               </span>
@@ -829,7 +847,7 @@ function DayMeetingsDialog({
           <div className="flex flex-col gap-2">
             {meetings.map((meeting) => {
               const displayName = meeting.clientName || meeting.hostName;
-              const eventStyle = styleForPlan(meeting.clientPlan);
+              const eventStyle = styleForMeeting(meeting.clientPlan, meeting.clientResponse);
               const canManage = canManageAll || meeting.responsibleIds.includes(userId);
               const timeLabel = meetingTimeLabel(meeting, dateStr ?? meeting.date);
               return (
@@ -847,10 +865,10 @@ function DayMeetingsDialog({
                       />
                       {meeting.clientResponse === "confirmed" && (
                         <span
-                          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white"
+                          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white ring-2 ring-emerald-700"
                           aria-label="Cliente confirmou presença"
                         >
-                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={4} />
+                          <Check className="h-2.5 w-2.5 text-emerald-700" strokeWidth={4} />
                         </span>
                       )}
                     </span>
