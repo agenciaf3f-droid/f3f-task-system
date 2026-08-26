@@ -65,6 +65,35 @@ export async function renameSectorAction(
   return { success: true };
 }
 
+export async function updateSectorColorAction(
+  sectorId: string,
+  color: string,
+): Promise<{ error?: string; success?: boolean }> {
+  // Mesma permissão de renomear: mexer no rótulo do setor, não na estrutura.
+  const user = await requireRole(["admin", "manager", "supervisor"]);
+  const parsed = sectorSchema.shape.color.safeParse(color);
+  if (!parsed.success || !parsed.data) return { error: "Cor inválida." };
+
+  const sector = await prisma.sector.findFirst({
+    where: { id: sectorId, companyId: user.companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!sector) return { error: "Setor não encontrado." };
+
+  // Grava em minúsculas: há setor antigo com hex em maiúsculas e a comparação
+  // com a paleta na tela é literal.
+  await prisma.sector.update({
+    where: { id: sectorId, companyId: user.companyId },
+    data: { color: parsed.data.toLowerCase() },
+  });
+
+  // A cor do setor aparece como etiqueta no card de tarefa, não só aqui.
+  revalidatePath("/setores");
+  revalidatePath("/dashboard");
+  revalidatePath("/projetos");
+  return { success: true };
+}
+
 export async function deleteSectorAction(sectorId: string) {
   const user = await requireRole(["admin"]);
   await prisma.sector.update({

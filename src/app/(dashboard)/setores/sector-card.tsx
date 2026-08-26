@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
-import { ListTodo, Crown, Trash2, Pencil, Loader2 } from "lucide-react";
+import { ListTodo, Crown, Trash2, Pencil, Loader2, Palette } from "lucide-react";
 import { MembersDialog } from "./[id]/members-dialog";
-import { deleteSectorAction, renameSectorAction } from "./actions";
+import { deleteSectorAction, renameSectorAction, updateSectorColorAction } from "./actions";
+import { DEFAULT_SECTOR_COLOR, SECTOR_COLORS, isSameColor } from "@/lib/sector-colors";
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 interface Member {
@@ -42,10 +43,15 @@ export function SectorCard({ sector, allUsers, canManage, canDelete = false, can
   const [isRenaming, startRename] = useTransition();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(sector.name);
+  const [isRecoloring, startRecolor] = useTransition();
+  const [palette, setPalette] = useState(false);
+  // Guarda a cor localmente para o card trocar na hora do clique, sem esperar
+  // o revalidate. Se o servidor recusar, volta para a que estava.
+  const [chosenColor, setChosenColor] = useState(sector.color);
   const inputRef = useRef<HTMLInputElement>(null);
   const visibleMembers = sector.members.slice(0, 4);
   const extraCount = Math.max(0, sector.members.length - 4);
-  const color = sector.color ?? "#6366f1";
+  const color = chosenColor ?? DEFAULT_SECTOR_COLOR;
 
   useEffect(() => {
     if (editing) {
@@ -58,6 +64,21 @@ export function SectorCard({ sector, allUsers, canManage, canDelete = false, can
     e.stopPropagation();
     if (!confirm(`Excluir o setor "${sector.name}"? As tarefas associadas continuarão existindo.`)) return;
     startDelete(() => deleteSectorAction(sector.id));
+  }
+
+  function chooseColor(e: React.MouseEvent, nextColor: string) {
+    e.stopPropagation();
+    setPalette(false);
+    if (isSameColor(chosenColor, nextColor)) return;
+    const previous = chosenColor;
+    setChosenColor(nextColor);
+    startRecolor(async () => {
+      const res = await updateSectorColorAction(sector.id, nextColor);
+      if (res?.error) {
+        setChosenColor(previous);
+        alert(res.error);
+      }
+    });
   }
 
   function handleRenameStart(e: React.MouseEvent) {
@@ -93,6 +114,54 @@ export function SectorCard({ sector, allUsers, canManage, canDelete = false, can
         <div className="h-1.5 w-full" style={{ backgroundColor: color }} />
 
         <div className="absolute top-3 right-3 z-10 flex items-center gap-1">
+          {canRename && !editing && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setPalette((v) => !v); }}
+                disabled={isRecoloring}
+                title="Mudar a cor do setor"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
+              >
+                {isRecoloring
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Palette className="w-3.5 h-3.5" />}
+              </button>
+              {palette && (
+                <>
+                  {/* Fecha ao clicar fora sem deixar o clique chegar no card,
+                      que abriria o diálogo de membros. */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={(e) => { e.stopPropagation(); setPalette(false); }}
+                  />
+                  <div
+                    className="absolute right-0 top-full mt-1 z-20 rounded-xl border border-neutral-200 bg-white p-2 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {SECTOR_COLORS.map((preset) => (
+                        <button
+                          key={preset.value}
+                          type="button"
+                          onClick={(e) => chooseColor(e, preset.value)}
+                          title={preset.label}
+                          aria-label={preset.label}
+                          aria-pressed={isSameColor(chosenColor, preset.value)}
+                          className={`w-6 h-6 rounded-full transition-transform ${
+                            isSameColor(chosenColor, preset.value)
+                              ? "ring-2 ring-offset-2 ring-neutral-900 scale-110"
+                              : "hover:scale-110"
+                          }`}
+                          style={{ backgroundColor: preset.value }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {canRename && !editing && (
             <button
               type="button"

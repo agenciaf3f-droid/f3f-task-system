@@ -7,17 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Loader2, AlertCircle } from "lucide-react";
+import { DEFAULT_SECTOR_COLOR, SECTOR_COLORS } from "@/lib/sector-colors";
 
 interface Manager { id: string; name: string }
 
-const PRESET_COLORS = [
-  "#6366f1","#f59e0b","#10b981","#ec4899","#3b82f6",
-  "#ef4444","#8b5cf6","#06b6d4","#84cc16","#f97316",
-];
-
 export function NewSectorDialog({ managers }: { managers: Manager[] }) {
   const [open, setOpen] = useState(false);
-  const [color, setColor] = useState("#6366f1");
+  const [color, setColor] = useState(DEFAULT_SECTOR_COLOR);
   const [state, action, isPending] = useActionState<
     { error?: string; success?: boolean },
     FormData
@@ -50,13 +46,16 @@ export function NewSectorDialog({ managers }: { managers: Manager[] }) {
           <div className="flex flex-col gap-2">
             <Label>Cor do setor</Label>
             <div className="flex gap-2 flex-wrap">
-              {PRESET_COLORS.map((c) => (
+              {SECTOR_COLORS.map((preset) => (
                 <button
-                  key={c}
+                  key={preset.value}
                   type="button"
-                  onClick={() => setColor(c)}
-                  className={`w-7 h-7 rounded-full transition-all ${color === c ? "ring-2 ring-offset-2 ring-neutral-900 scale-110" : "hover:scale-105"}`}
-                  style={{ backgroundColor: c }}
+                  onClick={() => setColor(preset.value)}
+                  title={preset.label}
+                  aria-label={preset.label}
+                  aria-pressed={color === preset.value}
+                  className={`w-7 h-7 rounded-full transition-all ${color === preset.value ? "ring-2 ring-offset-2 ring-neutral-900 scale-110" : "hover:scale-105"}`}
+                  style={{ backgroundColor: preset.value }}
                 />
               ))}
             </div>
