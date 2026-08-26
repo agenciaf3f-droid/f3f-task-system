@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { CalendarDays, CalendarX, Check, ChevronLeft, ChevronRight, Clock, Link2, Pencil, Repeat, Trash2 } from "lucide-react";
-import { useState, useTransition, useMemo, useCallback, useEffect, memo } from "react";
+import { useState, useTransition, useMemo, useCallback, useEffect, useSyncExternalStore, memo } from "react";
+import { brazilNowParts } from "@/lib/format-brazil";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
@@ -160,6 +161,55 @@ function formatDayTitle(dateStr: string): string {
 // ─────────────────── visão de semana em grade de horários ───────────────────
 
 const HOUR_HEIGHT = 60;
+
+type MinutoAtual = { date: string; minutes: number };
+
+/**
+ * Relógio compartilhado, com uma virada por minuto.
+ *
+ * useSyncExternalStore em vez de useState+useEffect por dois motivos: o
+ * snapshot do servidor é null, então não há divergência de hidratação (o
+ * servidor renderizaria um horário e o navegador outro); e não é preciso
+ * chamar setState de dentro de um efeito.
+ *
+ * O snapshot precisa ser referencialmente estável enquanto o minuto não vira,
+ * senão o React entende que a fonte mudou e re-renderiza sem parar.
+ */
+let snapshotAtual: MinutoAtual | null = null;
+
+function lerMinutoAtual(): MinutoAtual {
+  const lido = brazilNowParts();
+  if (!snapshotAtual || snapshotAtual.date !== lido.date || snapshotAtual.minutes !== lido.minutes) {
+    snapshotAtual = lido;
+  }
+  return snapshotAtual;
+}
+
+/** No servidor não há linha: ela depende de "agora" no navegador de quem olha. */
+function semMinutoNoServidor(): MinutoAtual | null {
+  return null;
+}
+
+/**
+ * Alinhado com a virada do minuto: um intervalo de 60s cravado na montagem
+ * faria a linha andar com até 59 segundos de atraso.
+ */
+function assinarMinuto(aoMudar: () => void): () => void {
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+  const timeoutId = setTimeout(() => {
+    aoMudar();
+    intervalId = setInterval(aoMudar, 60_000);
+  }, 60_000 - (Date.now() % 60_000));
+
+  return () => {
+    clearTimeout(timeoutId);
+    if (intervalId) clearInterval(intervalId);
+  };
+}
+
+function useAgoraEmBrasilia(): MinutoAtual | null {
+  return useSyncExternalStore(assinarMinuto, lerMinutoAtual, semMinutoNoServidor);
+}
 const GRID_MIN_HOUR = 6;
 const GRID_MAX_HOUR = 22;
 
@@ -366,6 +416,19 @@ function WeekTimeGrid({
   const alturaTotal = horas.length * HOUR_HEIGHT;
   const topoDe = (minutos: number) => ((minutos - primeiraHora * 60) / 60) * HOUR_HEIGHT;
 
+  // Linha do horário atual, no estilo do Google Agenda. A faixa de horas do
+  // grid é recortada pelas reuniões do período, então em muitos dias o "agora"
+  // simplesmente não está à vista — daí a checagem de intervalo.
+  const agora = useAgoraEmBrasilia();
+  const agoraVisivel =
+    agora !== null &&
+    agora.minutes >= primeiraHora * 60 &&
+    agora.minutes <= ultimaHora * 60;
+  const topoAgora = agora ? topoDe(agora.minutes) : 0;
+  const rotuloAgora = agora
+    ? `${String(Math.floor(agora.minutes / 60)).padStart(2, "0")}:${String(agora.minutes % 60).padStart(2, "0")}`
+    : "";
+
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className={days.length > 1 ? "min-w-[1100px]" : ""}>
@@ -476,6 +539,15 @@ function WeekTimeGrid({
                   {i === 0 ? "" : `${String(h).padStart(2, "0")}:00`}
                 </div>
               ))}
+
+              {agoraVisivel && days.some((day) => toDateStr(day) === agora!.date) && (
+                <div
+                  className="absolute right-1 -translate-y-1/2 rounded bg-rose-600 px-1 py-px text-[10px] font-semibold tabular-nums text-white"
+                  style={{ top: topoAgora }}
+                >
+                  {rotuloAgora}
+                </div>
+              )}
             </div>
 
             {days.map((day) => {
@@ -499,6 +571,20 @@ function WeekTimeGrid({
                       style={{ top: i * HOUR_HEIGHT }}
                     />
                   ))}
+
+                  {/* Linha do horário atual — só na coluna de hoje. z-10 para
+                      passar por cima das reuniões, e pointer-events-none para
+                      não roubar o clique de quem está embaixo dela. */}
+                  {agoraVisivel && dateStr === agora!.date && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 z-10 flex items-center"
+                      style={{ top: topoAgora }}
+                      aria-hidden
+                    >
+                      <span className="-ml-[5px] h-2.5 w-2.5 shrink-0 rounded-full bg-rose-600" />
+                      <span className="h-px flex-1 bg-rose-600" />
+                    </div>
+                  )}
 
                   {posicionadas.map(({ meeting, column, columns }) => {
                     const inicio = timeToMinutes(meeting.startTime);
