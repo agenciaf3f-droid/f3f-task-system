@@ -11,7 +11,7 @@ import { isPastDate, nowInBrazil, todayInBrazil } from "@/lib/meeting-recurrence
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { isElevated } from "@/lib/task-visibility";
 import { logActivity } from "@/lib/activity";
-import { cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
+import { applyClientResponse, cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 
 export type AvailabilityInput = {
   dayOfWeek: number;
@@ -625,4 +625,82 @@ export async function getOrCreateCalendarToken(): Promise<string> {
   });
 
   return token;
+}
+
+/**
+ * Marca (ou desmarca) a confirmação do cliente pela tela, sem depender de ele
+ * apertar o botão do WhatsApp.
+ *
+ * Na prática o cliente muitas vezes responde por áudio, por telefone ou na
+ * própria reunião anterior — e nesses casos a agenda continuava dizendo
+ * "aguardando confirmação". Aqui o gestor registra o que já sabe.
+ *
+ * Passa pelo MESMO caminho do botão (applyClientResponse), então tem os mesmos
+ * efeitos: os lembretes que ainda não saíram são remarcados sem os botões, e
+ * "não vai conseguir" cancela a reunião e libera o horário no Google.
+ */
+export async function setMeetingClientResponseAction(
+  meetingId: string,
+  response: "confirmed" | "declined" | "clear",
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await requireAuth();
+  if (!user.companyId || !user.userId) return { error: "Sessão inválida." };
+
+  // Mesma regra de visibilidade das outras ações da agenda: dono da reunião,
+  // quem enxerga ela, ou gestão. Filtrar na consulta evita revelar por
+  // diferença de mensagem que a reunião existe.
+  const meeting = await prisma.meeting.findFirst({
+    where: {
+      id: meetingId,
+      user: { companyId: user.companyId },
+      ...(isElevated(user.role)
+        ? {}
+        : { OR: [{ userId: user.userId }, { visibleTo: { some: { userId: user.userId } } }] }),
+    },
+    select: { id: true, clientResponse: true },
+  });
+  if (!meeting) return { error: "Reunião não encontrada." };
+
+  if (response === "clear") {
+    if (!meeting.clientResponse) return { success: true };
+    await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: { clientResponse: null, clientRespondedAt: null },
+    });
+    // Volta a perguntar: os lembretes que ainda não saíram precisam levar os
+    // botões de novo, senão o cliente perde a chance de responder.
+    await cancelMeetingReminders([meeting.id]);
+    await scheduleMeetingReminders(meeting.id);
+    await logActivity({
+      companyId: user.companyId,
+      userId: user.userId,
+      action: "update",
+      resourceType: "meeting",
+      resourceId: meeting.id,
+      newValue: { clientResponse: null, origem: "manual" },
+    });
+    revalidatePath("/calendario");
+    return { success: true };
+  }
+
+  const resultado = await applyClientResponse(meeting.id, response);
+  if (!resultado.ok) {
+    const motivos: Record<string, string> = {
+      not_found: "Reunião não encontrada.",
+      already_cancelled: "Esta reunião já está cancelada.",
+    };
+    return { error: motivos[resultado.reason] ?? "Não foi possível registrar a resposta." };
+  }
+
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: "update",
+    resourceType: "meeting",
+    resourceId: meeting.id,
+    newValue: { clientResponse: response, origem: "manual" },
+  });
+
+  revalidatePath("/calendario");
+  return { success: true };
 }

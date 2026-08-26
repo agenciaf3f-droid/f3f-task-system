@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Pencil } from "lucide-react";
+import { Check, Loader2, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { updateManualMeetingAction } from "./actions";
+import { setMeetingClientResponseAction, updateManualMeetingAction } from "./actions";
 
 type Option = { id: string; name: string };
 
@@ -27,6 +27,8 @@ export type EditableMeeting = {
   endTime: string;
   isAllDay: boolean;
   isRecurring: boolean;
+  clientName: string | null;
+  clientResponse: string | null;
 };
 
 export function EditMeetingDialog({
@@ -80,6 +82,16 @@ export function EditMeetingDialog({
             As alterações serão aplicadas no Task e no Google Calendar.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Confirmação do cliente: fica fora do formulário porque é uma ação
+            imediata, não um campo que espera o "Salvar". */}
+        {meeting.clientName && (
+          <ClientResponseControl
+            meetingId={meeting.id}
+            clientName={meeting.clientName}
+            current={meeting.clientResponse}
+          />
+        )}
 
         <form action={submit} className="mt-2 grid gap-4">
           <input type="hidden" name="meetingId" value={meeting.id} />
@@ -250,5 +262,81 @@ export function EditMeetingDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Registra a confirmação do cliente na mão.
+ *
+ * O cliente costuma responder por áudio, telefone ou na reunião anterior — e
+ * nesses casos a agenda ficava presa em "aguardando confirmação" mesmo o gestor
+ * já sabendo a resposta.
+ *
+ * Passa pelo mesmo caminho do botão do WhatsApp, então os lembretes que ainda
+ * não saíram são remarcados sem os botões. "Não vai conseguir" cancela a
+ * reunião de verdade, por isso pede confirmação antes.
+ */
+function ClientResponseControl({
+  meetingId,
+  clientName,
+  current,
+}: {
+  meetingId: string;
+  clientName: string;
+  current: string | null;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
+
+  function aplicar(response: "confirmed" | "declined" | "clear") {
+    if (response === "declined" && !confirm(`Marcar que ${clientName} NÃO vai participar? A reunião será cancelada e o horário liberado.`)) return;
+    setErro(null);
+    startTransition(async () => {
+      const r = await setMeetingClientResponseAction(meetingId, response);
+      if (r.error) setErro(r.error);
+      else router.refresh();
+    });
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-600">Confirmação do cliente</span>
+        {current === "confirmed" ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+            <Check className="h-3 w-3" strokeWidth={3} /> Confirmou
+          </span>
+        ) : current === "declined" ? (
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Não vai participar</span>
+        ) : (
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">Aguardando</span>
+        )}
+        {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {current !== "confirmed" && (
+          <button type="button" disabled={pending} onClick={() => aplicar("confirmed")}
+            className="rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+            Marcar como confirmada
+          </button>
+        )}
+        {current !== "declined" && (
+          <button type="button" disabled={pending} onClick={() => aplicar("declined")}
+            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">
+            Não vai participar
+          </button>
+        )}
+        {current && (
+          <button type="button" disabled={pending} onClick={() => aplicar("clear")}
+            className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-white disabled:opacity-50">
+            Desfazer
+          </button>
+        )}
+      </div>
+
+      {erro && <p className="mt-1.5 text-xs text-red-600">{erro}</p>}
+    </div>
   );
 }

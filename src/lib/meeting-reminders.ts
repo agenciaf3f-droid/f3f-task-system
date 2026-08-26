@@ -100,7 +100,16 @@ export function computeReminderTimes(
 
 // ──────────────────────────── mensagens ────────────────────────────
 
-type MessageContext = { clientName: string; meetingDate: string; startTime: string };
+type MessageContext = {
+  clientName: string;
+  meetingDate: string;
+  startTime: string;
+  /** Cliente ainda não respondeu: a mensagem leva os botões e precisa perguntar. */
+  askConfirmation: boolean;
+};
+
+/** Convite à resposta, usado nos lembretes que não perguntam nada por padrão. */
+const CONFIRM_QUESTION = "Está tudo certo para você participar?👇";
 
 export function buildReminderMessage(kind: ReminderKind, ctx: MessageContext): string {
   switch (kind) {
@@ -118,6 +127,7 @@ export function buildReminderMessage(kind: ReminderKind, ctx: MessageContext): s
         `🤖 Passando para te lembrar o seguinte ${ctx.clientName}👇`,
         "",
         `🗓️ Sua reunião com a F3F é hoje às ${ctx.startTime}`,
+        ...(ctx.askConfirmation ? ["", CONFIRM_QUESTION] : []),
       ].join("\n");
 
     case "hour_before":
@@ -125,6 +135,7 @@ export function buildReminderMessage(kind: ReminderKind, ctx: MessageContext): s
         `🤖 ${ctx.clientName}, tudo bem?`,
         "",
         "*Em menos de 1 hora* iremos te enviar o link da nossa reunião!",
+        ...(ctx.askConfirmation ? ["", CONFIRM_QUESTION] : []),
       ].join("\n");
 
     case "minutes_before":
@@ -132,6 +143,7 @@ export function buildReminderMessage(kind: ReminderKind, ctx: MessageContext): s
         "🤖 Faltam alguns minutos para nossa reunião!",
         "",
         "Iremos te enviar o link aqui mesmo!",
+        ...(ctx.askConfirmation ? ["", CONFIRM_QUESTION] : []),
       ].join("\n");
   }
 }
@@ -179,6 +191,7 @@ const MEETING_FIELDS = {
   status: true,
   clientName: true,
   clientGroupId: true,
+  clientResponse: true,
 } as const;
 
 type SchedulableMeeting = {
@@ -188,6 +201,7 @@ type SchedulableMeeting = {
   status: string;
   clientName: string | null;
   clientGroupId: string | null;
+  clientResponse: string | null;
 };
 
 /**
@@ -277,10 +291,17 @@ export async function scheduleMeetingReminders(
       continue;
     }
 
+    // Enquanto o cliente não responde, todo lembrete leva os botões — antes só
+    // o primeiro levava, e quem não visse aquela mensagem não tinha outra
+    // chance de confirmar. Depois que ele responde, os seguintes saem limpos:
+    // é applyClientResponse que remarca a fila sem os botões.
+    const pedirConfirmacao = !meeting.clientResponse;
+
     const message = buildReminderMessage(kind, {
       clientName,
       meetingDate: meeting.date,
       startTime: meeting.startTime,
+      askConfirmation: pedirConfirmacao,
     });
 
     const result = await scheduleWhatsAppMessage({
@@ -288,7 +309,7 @@ export async function scheduleMeetingReminders(
       message,
       sendAt,
       info: `f3f-lembrete:${kind}:${meeting.id}`,
-      buttons: kind === "day_before"
+      buttons: pedirConfirmacao
         ? [
             { label: "Sim, tudo certo!", id: `${CONFIRM_BUTTON_PREFIX}${meeting.id}` },
             { label: "Não vou conseguir!", id: `${DECLINE_BUTTON_PREFIX}${meeting.id}` },
@@ -606,6 +627,18 @@ export async function applyClientResponse(
       where: { id: meeting.id },
       data: { clientResponse: "confirmed", clientRespondedAt: new Date() },
     });
+
+    // Os lembretes que ainda não saíram já estão na fila da UAZAPI COM os
+    // botões, porque foram marcados quando ainda não havia resposta. Cancelar e
+    // remarcar é o que tira os botões deles: agora o agendador lê
+    // clientResponse preenchido e monta a mensagem limpa.
+    //
+    // Lembrete cuja hora já passou não volta: ao remarcar ele cai em
+    // "horario_passado" e é registrado como skipped. E se o remarque falhar, o
+    // reconciliador diário recria — nenhum lembrete some por causa disto.
+    await cancelMeetingReminders([meeting.id]);
+    await scheduleMeetingReminders(meeting.id);
+
     return { ok: true, response, alreadyHandled: false };
   }
 

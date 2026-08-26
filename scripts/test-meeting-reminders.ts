@@ -25,25 +25,44 @@ globalThis.fetch = (async (input, init) => {
 }) as typeof fetch;
 
 function testMessages({ buildReminderMessage }: RemindersModule) {
-  const ctx = { clientName: "Rayanne", meetingDate: "2026-08-20", startTime: "14:00" };
+  const base = { clientName: "Rayanne", meetingDate: "2026-08-20", startTime: "14:00" };
+  // Cliente já respondeu: nenhum lembrete pergunta nada.
+  const respondido = { ...base, askConfirmation: false };
+  // Ainda sem resposta: todos perguntam, porque todos levam os botões.
+  const pendente = { ...base, askConfirmation: true };
 
   // 2026-08-20 é quinta-feira.
   assert.equal(
-    buildReminderMessage("day_before", ctx),
+    buildReminderMessage("day_before", respondido),
     "🤖 Opa Rayanne!\n\nEstou passando para confirmar sua reunião com nossa equipe amanhã quinta-feira às 14:00\n\nEstá tudo certo para você participar?👇",
   );
   assert.equal(
-    buildReminderMessage("morning", ctx),
+    buildReminderMessage("morning", respondido),
     "🤖 Passando para te lembrar o seguinte Rayanne👇\n\n🗓️ Sua reunião com a F3F é hoje às 14:00",
   );
   assert.equal(
-    buildReminderMessage("hour_before", ctx),
+    buildReminderMessage("hour_before", respondido),
     "🤖 Rayanne, tudo bem?\n\n*Em menos de 1 hora* iremos te enviar o link da nossa reunião!",
   );
   assert.equal(
-    buildReminderMessage("minutes_before", ctx),
+    buildReminderMessage("minutes_before", respondido),
     "🤖 Faltam alguns minutos para nossa reunião!\n\nIremos te enviar o link aqui mesmo!",
   );
+
+  // Sem resposta, os três que não perguntavam nada ganham o convite. O
+  // day_before já perguntava, e não pode ganhar a linha duas vezes.
+  assert.equal(
+    buildReminderMessage("day_before", pendente),
+    buildReminderMessage("day_before", respondido),
+  );
+  for (const kind of ["morning", "hour_before", "minutes_before"] as const) {
+    const comBotao = buildReminderMessage(kind, pendente);
+    assert.equal(comBotao.endsWith("\n\nEstá tudo certo para você participar?👇"), true);
+    assert.equal(
+      comBotao.replace("\n\nEstá tudo certo para você participar?👇", ""),
+      buildReminderMessage(kind, respondido),
+    );
+  }
 }
 
 function testClientMatching({ pickClientByName }: RemindersModule) {
