@@ -5,7 +5,14 @@ import type { SessionData } from "@/lib/session";
 // "/api/webhooks": chamado por serviço externo, que não tem sessão. A própria
 // rota exige o segredo compartilhado (UAZAPI_WEBHOOK_TOKEN) — sem esta entrada
 // aqui o middleware redireciona para /login e o webhook nunca chega no handler.
-const PUBLIC_PATHS = ["/login", "/criar-conta", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/agendar", "/favicon.ico", "/_next", "/api/auth", "/api/agendar", "/api/test-email", "/api/cron", "/api/webhooks"];
+//
+// "/logo.png" e "/apple-touch-icon.png": arquivos de marca exibidos nas telas
+// públicas. O <Image> do Next busca a origem por uma requisição interna que
+// passa por aqui, e essa requisição não tem sessão — então sem estas entradas o
+// otimizador recebia um 307 para /login e a logo simplesmente não aparecia em
+// login, criar-conta, esqueci-senha e redefinir-senha. Na sidebar funcionava
+// porque ali o usuário já está logado, o que escondia o problema.
+const PUBLIC_PATHS = ["/login", "/criar-conta", "/esqueci-senha", "/redefinir-senha", "/auth/callback", "/agendar", "/favicon.ico", "/logo.png", "/apple-touch-icon.png", "/_next", "/api/auth", "/api/agendar", "/api/test-email", "/api/cron", "/api/webhooks"];
 
 const sessionSecret = process.env.SESSION_SECRET!;
 const COOKIE_NAME = "f3f_session";
