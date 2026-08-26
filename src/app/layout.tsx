@@ -16,7 +16,9 @@ export const metadata: Metadata = {
   title: { default: "F3F Task System", template: "%s | F3F Task System" },
   description: "Sistema de gestão de tarefas e processos internos",
   robots: { index: false, follow: false },
-  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/favicon.ico" },
+  // O apple-touch-icon aponta para um PNG próprio: o iOS não lida bem com .ico
+  // e pinta preto atrás de transparência, então esse arquivo já vai com fundo.
+  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/apple-touch-icon.png" },
 };
 
 export default function RootLayout({
