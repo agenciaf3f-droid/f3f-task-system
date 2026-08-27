@@ -3,7 +3,14 @@ import { markCalendarMeetingCancelled } from "@/lib/google-calendar";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { cancelWhatsAppSchedule, scheduleWhatsAppMessage } from "@/lib/whatsapp";
 
-export const REMINDER_KINDS = ["day_before", "morning", "hour_before", "minutes_before"] as const;
+export /**
+ * Só refaz um lembrete que já está na fila se ainda faltar isto para a hora.
+ * Refazer é cancelar e marcar de novo; perto do disparo, uma falha no meio
+ * deixaria o cliente sem mensagem nenhuma.
+ */
+const REWRITE_SAFETY_WINDOW_MS = 30 * 60 * 1000;
+
+const REMINDER_KINDS = ["day_before", "morning", "hour_before", "minutes_before"] as const;
 export type ReminderKind = (typeof REMINDER_KINDS)[number];
 
 /** Prefixos dos ids de botão que voltam no webhook da UAZAPI. */
@@ -266,15 +273,41 @@ export async function scheduleMeetingReminders(
   const times = computeReminderTimes(meeting.date, meeting.startTime);
   const existing = await prisma.meetingReminder.findMany({
     where: { meetingId: meeting.id },
-    select: { kind: true, status: true, folderId: true },
+    select: { kind: true, status: true, folderId: true, withButtons: true },
   });
   const byKind = new Map(existing.map((row) => [row.kind, row]));
 
+  // Enquanto o cliente não responde, todo lembrete leva os botões.
+  const pedirConfirmacao = !meeting.clientResponse;
+
   for (const kind of REMINDER_KINDS) {
     const already = byKind.get(kind);
-    if (already?.status === "scheduled" && already.folderId) continue;
-
     const sendAt = times[kind];
+
+    if (already?.status === "scheduled" && already.folderId) {
+      // Já está na fila com a forma certa: nada a fazer.
+      if (already.withButtons === pedirConfirmacao) continue;
+
+      // Forma errada — foi marcado antes de o cliente responder, ou antes de os
+      // botões passarem a ir em todos. Refazer é a única maneira de corrigir:
+      // a mensagem já está na fila da UAZAPI do jeito antigo.
+      //
+      // Perto demais da hora não se mexe: se o cancelamento passar e a remarca
+      // falhar, o lembrete simplesmente não sai. Com a fila antiga o cliente ao
+      // menos recebe a mensagem, mesmo sem o botão.
+      if (sendAt.getTime() - Date.now() < REWRITE_SAFETY_WINDOW_MS) {
+        conta("perto_demais_para_refazer");
+        continue;
+      }
+
+      const cancelou = await cancelWhatsAppSchedule(already.folderId);
+      if (!cancelou) {
+        // Sem confirmação do cancelamento, remarcar duplicaria a mensagem.
+        conta("cancelamento_para_refazer_falhou");
+        continue;
+      }
+    }
+
     if (sendAt.getTime() <= Date.now()) {
       await upsertReminder(meeting.id, kind, sendAt, { status: "skipped", detail: "horario_passado" });
       summary.skipped += 1;
@@ -290,12 +323,6 @@ export async function scheduleMeetingReminders(
       conta("fora_do_horizonte");
       continue;
     }
-
-    // Enquanto o cliente não responde, todo lembrete leva os botões — antes só
-    // o primeiro levava, e quem não visse aquela mensagem não tinha outra
-    // chance de confirmar. Depois que ele responde, os seguintes saem limpos:
-    // é applyClientResponse que remarca a fila sem os botões.
-    const pedirConfirmacao = !meeting.clientResponse;
 
     const message = buildReminderMessage(kind, {
       clientName,
@@ -323,6 +350,7 @@ export async function scheduleMeetingReminders(
         folderId: result.folderId,
         destination: result.destination,
         detail: result.mode,
+        withButtons: pedirConfirmacao,
       });
       summary.scheduled += 1;
     } else {
@@ -475,7 +503,7 @@ async function upsertReminder(
   meetingId: string,
   kind: ReminderKind,
   scheduledFor: Date,
-  data: { status: string; folderId?: string; destination?: string; detail?: string },
+  data: { status: string; folderId?: string; destination?: string; detail?: string; withButtons?: boolean },
 ) {
   await prisma.meetingReminder.upsert({
     where: { meetingId_kind: { meetingId, kind } },

@@ -675,6 +675,10 @@ model MeetingReminder {
   status       String   @default("pending") @db.VarChar(20) // pending | scheduled | failed | skipped
   destination  String?  @db.VarChar(255)
   detail       String?  @db.VarChar(255)
+  /// Se este lembrete foi para a fila COM os botões de confirmar. Sem guardar
+  /// isso não dá para saber se o que já está agendado casa com o estado atual
+  /// da resposta do cliente — e o agendador nunca corrigiria a fila.
+  withButtons  Boolean  @default(false) @map("with_buttons")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
