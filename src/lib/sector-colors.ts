@@ -24,3 +24,14 @@ export const DEFAULT_SECTOR_COLOR = "#6366f1";
 export function isSameColor(left: string | null, right: string) {
   return (left ?? "").toLowerCase() === right.toLowerCase();
 }
+
+const TASK_SECTOR_COLORS: Record<string, string> = {
+  "criação": "#38bdf8",
+  "edicao de video": "#ef4444",
+  "edição de vídeo": "#ef4444",
+};
+
+/** Mantém as cores operacionais consistentes mesmo para setores criados antes da paleta atual. */
+export function getTaskSectorColor(name: string, storedColor: string | null) {
+  return TASK_SECTOR_COLORS[name.trim().toLocaleLowerCase("pt-BR")] ?? storedColor ?? DEFAULT_SECTOR_COLOR;
+}

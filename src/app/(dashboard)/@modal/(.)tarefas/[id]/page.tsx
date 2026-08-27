@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { taskVisibilityFilter } from "@/lib/task-visibility";
 import { Pencil, FolderKanban } from "lucide-react";
 import { StatusBadge } from "@/components/tasks/task-badges";
-import { PriorityLabel } from "@/components/tasks/task-priority";
+import { TaskPriorityEditor } from "@/components/tasks/task-priority-editor";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { TaskActions } from "@/app/(dashboard)/tarefas/[id]/task-actions";
 import { ChecklistSection } from "@/app/(dashboard)/tarefas/[id]/checklist-section";
@@ -145,6 +145,7 @@ export default async function TaskModalPage({
               currentStatus={task.status}
               isBlocked={task.isBlocked}
               canEdit={canEdit}
+              canDelete={user.role === "admin"}
             />
           </div>
         </div>
@@ -152,7 +153,7 @@ export default async function TaskModalPage({
         {/* Badges */}
         <div className="flex items-center gap-2 flex-wrap mb-5">
           <StatusBadge status={task.status} />
-          <PriorityLabel priority={task.priority} />
+          <TaskPriorityEditor taskId={task.id} priority={task.priority} canEdit={canEdit} />
           {task.isBlocked && <TaskBlockedIndicator showLabel />}
         </div>
 
@@ -183,8 +184,8 @@ export default async function TaskModalPage({
               primaryAssigneeId={task.assigneeId}
             />
           </div>
-          <TaskDueDateEditor taskId={task.id} value={task.dueDate} canEdit={canEdit} />
           <TaskDueDateEditor taskId={task.id} value={task.deliveryDate} canEdit={canEdit} field="deliveryDate" />
+          <TaskDueDateEditor taskId={task.id} value={task.dueDate} canEdit={canEdit} />
           <div className="flex items-center gap-2 text-neutral-500">
             <Pencil className="w-4 h-4 text-neutral-400 shrink-0" />
             <span>por {task.createdBy.name.split(" ")[0]}</span>

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Calendar, Loader2, Pencil } from "lucide-react";
+import { Calendar, Check, Clock3, Loader2, Pencil } from "lucide-react";
 import { updateTaskDeliveryDateAction, updateTaskDueDateAction } from "@/app/(dashboard)/tarefas/actions";
 
 // A tarefa tem duas datas. A de conclusão é obrigatória e é a que manda no
@@ -14,6 +14,16 @@ const FIELDS = {
   dueDate:      { label: "Conclusão", empty: "Sem prazo",   required: true  },
   deliveryDate: { label: "Entrega",   empty: "Sem data",    required: false },
 } as const;
+
+function DateIcon({ field }: { field: keyof typeof FIELDS }) {
+  if (field === "dueDate") return <Calendar className="w-4 h-4 shrink-0 text-neutral-400" />;
+  return (
+    <span className="relative flex h-4 w-4 shrink-0 items-center justify-center text-neutral-400">
+      <Clock3 className="h-4 w-4" />
+      <Check className="absolute -right-1 -bottom-0.5 h-2.5 w-2.5 bg-white" strokeWidth={3} />
+    </span>
+  );
+}
 
 export function TaskDueDateEditor({
   taskId,
@@ -48,7 +58,7 @@ export function TaskDueDateEditor({
   if (editing) {
     return (
       <div className="flex items-center gap-2 text-neutral-600">
-        <Calendar className="w-4 h-4 text-neutral-400 shrink-0" />
+        <DateIcon field={field} />
         <input
           type="date"
           required={config.required}
@@ -74,11 +84,11 @@ export function TaskDueDateEditor({
       onClick={() => setEditing(true)}
       disabled={!canEdit || isPending}
       title={canEdit ? `Alterar prazo de ${config.label.toLowerCase()}` : undefined}
-      className="group flex items-center gap-2 text-neutral-600 transition-colors enabled:hover:text-blue-600 disabled:cursor-default"
+      className="group flex items-center gap-2 text-neutral-600 transition-colors disabled:cursor-default"
     >
       {isPending
         ? <Loader2 className="w-4 h-4 shrink-0 animate-spin text-neutral-400" />
-        : <Calendar className="w-4 h-4 shrink-0 text-neutral-400" />}
+        : <DateIcon field={field} />}
       <span className="text-neutral-400">{config.label}</span>
       <span className={value ? "" : "text-neutral-400"}>{label}</span>
       {canEdit && !isPending && (

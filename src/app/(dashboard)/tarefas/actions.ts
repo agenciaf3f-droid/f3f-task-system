@@ -504,6 +504,7 @@ export async function updateTaskProgressAction(taskId: string, progress: number)
 
 export async function deleteTaskAction(taskId: string): Promise<{ projectId: string | null }> {
   const user = await requireAuth();
+  if (user.role !== "admin") return { projectId: null };
 
   const task = await prisma.task.findFirst({
     where: { id: taskId, AND: taskVisibilityFilter(user) },
@@ -654,6 +655,34 @@ export async function updateTaskTitleAction(
     data: { title: trimmed },
   });
 
+  revalidatePath(`/tarefas/${taskId}`);
+  if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
+  return {};
+}
+
+export async function updateTaskPriorityAction(taskId: string, priority: TaskPriority): Promise<{ error?: string }> {
+  const user = await requireAuth();
+  if (!['low', 'medium', 'high', 'urgent'].includes(priority)) return { error: 'Prioridade inválida.' };
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, deletedAt: null, AND: taskVisibilityFilter(user) },
+    select: { projectId: true, priority: true },
+  });
+  if (!task) return { error: 'Tarefa não encontrada.' };
+  if (task.priority === priority) return {};
+
+  await prisma.task.update({
+    where: { id: taskId, companyId: user.companyId },
+    data: { priority },
+  });
+  await logActivity({
+    companyId: user.companyId,
+    userId: user.userId,
+    action: 'task.priority_changed',
+    resourceType: 'task',
+    resourceId: taskId,
+    oldValue: { priority: task.priority },
+    newValue: { priority },
+  });
   revalidatePath(`/tarefas/${taskId}`);
   if (task.projectId) revalidatePath(`/projetos/${task.projectId}`);
   return {};

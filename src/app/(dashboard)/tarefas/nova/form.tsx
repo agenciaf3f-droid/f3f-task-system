@@ -344,13 +344,13 @@ export function NewTaskForm({
         {/* Row: prazos + prioridade */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="dueDate">Prazo de conclusão <span className="text-red-500">*</span></Label>
-            <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
+            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
+            <Input id="deliveryDate" name="deliveryDate" type="date" disabled={isPending} />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
-            <Input id="deliveryDate" name="deliveryDate" type="date" disabled={isPending} />
+            <Label htmlFor="dueDate">Prazo de conclusão <span className="text-red-500">*</span></Label>
+            <Input id="dueDate" name="dueDate" type="date" required disabled={isPending} />
           </div>
 
           <div className="flex flex-col gap-1.5">

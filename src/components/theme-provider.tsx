@@ -2,35 +2,38 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+export type Theme = "light" | "f3f-dark" | "dark";
 
-const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
+const ThemeContext = createContext<{ theme: Theme; setTheme: (theme: Theme) => void }>({
   theme: "light",
-  toggle: () => {},
+  setTheme: () => {},
 });
 
+function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme !== "light");
+  root.classList.toggle("theme-f3f", theme === "f3f-dark");
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
     const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    const initial = stored ?? preferred;
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
+    const initial = stored === "light" || stored === "f3f-dark" || stored === "dark" ? stored : preferred;
+    setThemeState(initial);
+    applyTheme(initial);
   }, []);
 
-  function toggle() {
-    setTheme((t) => {
-      const next: Theme = t === "dark" ? "light" : "dark";
-      localStorage.setItem("theme", next);
-      document.documentElement.classList.toggle("dark", next === "dark");
-      return next;
-    });
+  function setTheme(next: Theme) {
+    setThemeState(next);
+    localStorage.setItem("theme", next);
+    applyTheme(next);
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

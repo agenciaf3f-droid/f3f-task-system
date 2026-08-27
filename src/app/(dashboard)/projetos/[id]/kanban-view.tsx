@@ -14,11 +14,12 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import Link from "next/link";
 import { isBefore, isToday, format } from "date-fns";
-import { BriefcaseBusiness, Calendar, User, AlertCircle, Ban, Loader2 } from "lucide-react";
+import { BriefcaseBusiness, Calendar, Check, Clock3, User, AlertCircle, Ban, Loader2 } from "lucide-react";
 import { cancelTaskAction, updateTaskStatusAction } from "@/app/(dashboard)/tarefas/actions";
 import { TaskBlockedIndicator } from "@/components/tasks/task-blocked-indicator";
 import { PriorityIcon } from "@/components/tasks/task-priority";
-import { sortKanbanTasks } from "@/lib/kanban-order";
+import { sortCompletedKanbanTasks, sortKanbanTasks } from "@/lib/kanban-order";
+import { getTaskSectorColor } from "@/lib/sector-colors";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +32,7 @@ type Task = {
   isBlocked: boolean;
   priority: string;
   dueDate: Date | null;
+  deliveryDate: Date | null;
   client?: { name: string } | null;
   project?: { name: string; client: { name: string } } | null;
   assignee: Assignee;
@@ -82,70 +84,71 @@ const KanbanCard = memo(function KanbanCard({ task, isDragging, overlay }: { tas
     && isBefore(task.dueDate, new Date())
     && task.status !== "done"
     && task.status !== "cancelled";
+  const deliveryOverdue = task.deliveryDate
+    && !isToday(task.deliveryDate)
+    && isBefore(task.deliveryDate, new Date())
+    && task.status !== "done"
+    && task.status !== "cancelled";
   const clientName = task.client?.name ?? task.project?.client.name;
 
-  const doneItems = task.subtasks.filter((s) => s.status === "done").length;
-  const hasMeta = clientName || task.assignee || task.dueDate || task.sector || task._count.checklistItems > 0;
-
   return (
-    <div className={`bg-white border rounded-lg p-2.5 select-none cursor-grab active:cursor-grabbing transition-all ${
+    <div className={`bg-white border rounded-xl p-3.5 select-none cursor-grab active:cursor-grabbing transition-all ${
       overlay
         ? "shadow-xl ring-1 ring-blue-300 animate-card-wiggle"
         : isDragging
         ? "opacity-40 border-dashed border-neutral-300"
         : "border-neutral-200/80 hover:border-neutral-300 hover:shadow-sm hover:-translate-y-0.5"
     }`}>
-      <div className="flex items-start gap-2">
-        <PriorityIcon priority={task.priority} className="mt-[3px]" />
-        <Link
-          href={`/tarefas/${task.id}`}
-          onClick={(e) => e.stopPropagation()}
-          className="text-[13px] font-medium text-neutral-800 leading-snug hover:text-blue-600 transition-colors line-clamp-2"
-        >
-          {task.title}
-        </Link>
-        {task.isBlocked && <TaskBlockedIndicator taskId={task.id} className="mt-0.5" />}
+      <div className="relative">
+        <div className="flex min-w-0 items-start gap-2 pr-7">
+          <PriorityIcon priority={task.priority} className="mt-[3px]" />
+          <Link
+            href={`/tarefas/${task.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="min-w-0 flex-1 text-[15px] font-medium text-neutral-800 leading-snug hover:text-blue-600 transition-colors line-clamp-2"
+          >
+            {task.title}
+          </Link>
+        </div>
+        {task.isBlocked && <TaskBlockedIndicator taskId={task.id} className="absolute right-0 top-0" />}
       </div>
 
-      {hasMeta && (
-        <div className="flex items-center gap-2.5 flex-wrap mt-2 pl-[22px]">
-          {clientName && (
-            <span className="flex items-center gap-1 text-[11px] text-neutral-500 max-w-full">
-              <BriefcaseBusiness className="w-3 h-3 shrink-0" />
-              <span className="truncate">{clientName}</span>
-            </span>
-          )}
-          {task.assignee && (
-            <span className="flex items-center gap-1 text-[11px] text-neutral-500">
-              <User className="w-3 h-3" />
-              {task.assignee.name.split(" ")[0]}
-            </span>
-          )}
-          {task.dueDate && (
-            <span className={`flex items-center gap-1 text-[11px] ${overdue ? "text-red-600 font-semibold" : "text-neutral-400"}`}>
-              {overdue ? <AlertCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-              {format(task.dueDate, "dd/MM")}
-            </span>
-          )}
-          {task.sector && (
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full border font-medium"
-              style={{
-                color: task.sector.color ?? "#6b7280",
-                borderColor: task.sector.color ? `${task.sector.color}40` : "#e5e7eb",
-                backgroundColor: task.sector.color ? `${task.sector.color}12` : "#f9fafb",
-              }}
-            >
-              {task.sector.name}
-            </span>
-          )}
-          {task._count.checklistItems > 0 && (
-            <span className="text-[11px] text-neutral-400 tabular-nums">
-              ✓ {doneItems}/{task._count.checklistItems}
-            </span>
-          )}
+      {clientName && (
+        <div className="mt-2 flex items-center gap-1.5 text-[13px] text-neutral-500">
+          <BriefcaseBusiness className="h-3 w-3 shrink-0" />
+          <span className="truncate">{clientName}</span>
         </div>
       )}
+
+      {(task.assignee || task.sector) && (
+        <div className="mt-3 grid grid-cols-2 items-center gap-2">
+          <span className="flex min-w-0 items-center gap-1 text-[13px] text-neutral-500">
+            {task.assignee && <><User className="h-3 w-3 shrink-0" /><span className="truncate">{task.assignee.name.split(" ")[0]}</span></>}
+          </span>
+          {task.sector ? (() => {
+            const color = getTaskSectorColor(task.sector.name, task.sector.color);
+            return <span className="w-fit max-w-full justify-self-end truncate rounded-full border px-2 py-0.5 text-right text-[12px] font-medium" style={{ color, borderColor: `${color}40`, backgroundColor: `${color}12` }}>{task.sector.name}</span>;
+          })() : <span />}
+        </div>
+      )}
+
+      {(task.deliveryDate || task.dueDate) && (
+        <div className={`mt-3 items-center gap-2 ${task.deliveryDate ? "grid grid-cols-2" : "flex"}`}>
+          {task.deliveryDate && (
+            <span className={`flex h-4 min-w-0 w-full items-center justify-self-start gap-1.5 text-[13px] leading-none ${deliveryOverdue ? "font-semibold text-red-600" : "text-neutral-400"}`} aria-label="Prazo de entrega">
+              <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center"><Clock3 className="h-3.5 w-3.5" /><Check className="absolute -right-1 -bottom-0.5 h-2 w-2 bg-white" strokeWidth={3} /></span>
+              <span className="truncate tabular-nums">{format(task.deliveryDate, "dd/MM")}</span>
+            </span>
+          )}
+          {task.dueDate ? (
+            <span className={`flex h-4 min-w-0 w-full items-center ${task.deliveryDate ? "justify-end justify-self-end" : "justify-start justify-self-start"} gap-1.5 text-[13px] leading-none ${overdue ? "font-semibold text-red-600" : "text-neutral-400"}`} aria-label="Prazo de conclusão">
+              <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">{overdue ? <AlertCircle className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}</span>
+              <span className="truncate tabular-nums">{format(task.dueDate, "dd/MM")}</span>
+            </span>
+          ) : <span />}
+        </div>
+      )}
+
     </div>
   );
 });
@@ -253,7 +256,11 @@ export function KanbanView({
     }
     // Prazo primeiro, prioridade como desempate — vale para o board do projeto
     // e para o do dashboard, que reaproveitam este mesmo componente.
-    for (const colId of Object.keys(groups)) groups[colId] = sortKanbanTasks(groups[colId]);
+    for (const colId of Object.keys(groups)) {
+      groups[colId] = colId === "done"
+        ? sortCompletedKanbanTasks(groups[colId])
+        : sortKanbanTasks(groups[colId]);
+    }
     return groups;
   }
 

@@ -13,7 +13,7 @@ import { isElevated } from "@/lib/task-visibility";
 
 // Shape rico que o KanbanView espera (assignee, sector, contadores, subtasks).
 const boardTaskSelect = {
-  id: true, title: true, status: true, isBlocked: true, priority: true, dueDate: true,
+  id: true, title: true, status: true, isBlocked: true, priority: true, dueDate: true, deliveryDate: true,
   assignee: { select: { id: true, name: true, avatarUrl: true } },
   sector: { select: { name: true, color: true } },
   client: { select: { name: true } },

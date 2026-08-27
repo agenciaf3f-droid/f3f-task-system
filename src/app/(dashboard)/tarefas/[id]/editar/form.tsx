@@ -163,6 +163,17 @@ export function EditTaskForm({
         {/* Row: prazos + prioridade */}
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
+            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
+            <Input
+              id="deliveryDate"
+              name="deliveryDate"
+              type="date"
+              defaultValue={deliveryDateValue}
+              disabled={isPending}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="dueDate">Prazo de conclusão <span className="text-red-500">*</span></Label>
             <Input
               id="dueDate"
@@ -170,17 +181,6 @@ export function EditTaskForm({
               type="date"
               defaultValue={dueDateValue}
               required
-              disabled={isPending}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="deliveryDate">Prazo de entrega</Label>
-            <Input
-              id="deliveryDate"
-              name="deliveryDate"
-              type="date"
-              defaultValue={deliveryDateValue}
               disabled={isPending}
             />
           </div>

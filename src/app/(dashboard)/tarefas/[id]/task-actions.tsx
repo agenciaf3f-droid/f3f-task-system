@@ -2,10 +2,10 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateTaskStatusAction, cancelTaskAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction, archiveTaskAction } from "../actions";
+import { updateTaskStatusAction, cancelTaskAction, setTaskBlockedAction, deleteTaskAction, duplicateTaskAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { STATUS_CONFIG } from "@/components/tasks/task-badges";
-import { Trash2, ChevronDown, Loader2, Copy, Archive, Flag } from "lucide-react";
+import { Trash2, ChevronDown, Loader2, Copy, Flag } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -18,11 +18,13 @@ export function TaskActions({
   currentStatus,
   isBlocked,
   canEdit,
+  canDelete,
 }: {
   taskId: string;
   currentStatus: TaskStatus;
   isBlocked: boolean;
   canEdit: boolean;
+  canDelete: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -67,7 +69,7 @@ export function TaskActions({
   }
 
   function handleDelete() {
-    if (!confirm("Tem certeza? A tarefa será arquivada.")) return;
+    if (!confirm("Tem certeza? A tarefa será excluída.")) return;
     startTransition(async () => {
       await deleteTaskAction(taskId);
       // router.back() funciona em modal interceptado (fecha) e em página standalone (volta).
@@ -113,14 +115,6 @@ export function TaskActions({
     startTransition(async () => {
       const res = await duplicateTaskAction(taskId);
       if (res.newTaskId) router.push(`/tarefas/${res.newTaskId}`);
-    });
-  }
-
-  function handleArchive() {
-    if (!confirm("Arquivar tarefa? Ela será ocultada das views padrão.")) return;
-    startTransition(async () => {
-      await archiveTaskAction(taskId);
-      router.back();
     });
   }
 
@@ -202,29 +196,19 @@ export function TaskActions({
         <Copy className="w-4 h-4" />
       </Button>
 
-      {/* Archive */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="w-8 h-8 text-neutral-400 hover:text-amber-600 hover:bg-amber-50"
-        onClick={handleArchive}
-        disabled={isPending}
-        title="Arquivar tarefa"
-      >
-        <Archive className="w-4 h-4" />
-      </Button>
-
       {/* Delete */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="w-8 h-8 text-neutral-400 hover:text-red-600 hover:bg-red-50"
-        onClick={handleDelete}
-        disabled={isPending}
-        title="Excluir tarefa"
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
+      {canDelete && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-8 h-8 text-neutral-400 hover:text-red-600 hover:bg-red-50"
+          onClick={handleDelete}
+          disabled={isPending}
+          title="Excluir tarefa"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      )}
         </>
       )}
     </div>
