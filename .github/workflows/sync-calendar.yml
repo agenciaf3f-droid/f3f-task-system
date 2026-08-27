@@ -1,0 +1,45 @@
+name: Sincronizar calendário
+
+# O Vercel Cron já roda esta rotina às 04:00 UTC. Este workflow existe para o
+# gatilho manual: sem ele, uma mudança que dependa do sync (como o vínculo de
+# série do Google) só apareceria no dia seguinte.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-calendar.yml"
+      - "src/app/api/cron/sync-calendar/route.ts"
+      - "src/lib/calendar-sync.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sync-calendar
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Gerar identidade assinada do GitHub
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('f3f-task-calendar-sync')
+            core.setSecret(token)
+            core.setOutput('token', token)
+
+      - name: Sincronizar Google Calendar com o Task
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --retry 2 \
+            --header "Authorization: Bearer ${OIDC_TOKEN}" \
+            "https://task.agenciaf3f.com.br/api/cron/sync-calendar"

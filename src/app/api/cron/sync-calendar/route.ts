@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { syncCalendarToSystem } from "@/lib/calendar-sync";
+import { isAuthorizedCronRequest } from "@/lib/github-oidc";
 
 /**
  * Cron handler — sincroniza Google Calendar → Meeting.
@@ -8,13 +9,15 @@ import { syncCalendarToSystem } from "@/lib/calendar-sync";
  * Também aceita POST com mesma autenticação para trigger manual.
  */
 async function handle(request: Request): Promise<NextResponse> {
-  const authHeader = request.headers.get("authorization");
+  // Chamada interna do Vercel Cron continua valendo. Além dela, aceita a
+  // identidade assinada do GitHub Actions — mesmo caminho já usado pelos
+  // lembretes —, que é o que dá um gatilho manual sem espalhar o CRON_SECRET.
   const isVercelCron = request.headers.get("x-vercel-cron") === "1";
-  const expected = process.env.CRON_SECRET;
-
-  // Aceita: (a) chamada interna do Vercel Cron OU (b) Bearer token correto
-  const okBearer = expected && authHeader === `Bearer ${expected}`;
-  if (!isVercelCron && !okBearer) {
+  const authorized = isVercelCron || await isAuthorizedCronRequest(request, {
+    audience: "f3f-task-calendar-sync",
+    workflowFile: "sync-calendar.yml",
+  });
+  if (!authorized) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 

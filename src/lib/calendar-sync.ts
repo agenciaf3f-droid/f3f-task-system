@@ -122,6 +122,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
           clientGroupId: true,
           userId: true,
           googleEventId: true,
+          googleRecurringEventId: true,
         },
       })
     : [];
@@ -175,6 +176,10 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
           existing.clientName !== parsed.clientName ||
           existing.clientGroupId !== parsed.clientGroupId ||
           existing.userId !== targetUserId ||
+          // Sem isto, reunião que não mudou no Google cairia em "skipped" e
+          // nunca receberia o vínculo da série — as já importadas ficariam sem
+          // ele para sempre, e a agenda nunca ofereceria "esta e as seguintes".
+          existing.googleRecurringEventId !== (ev.recurringEventId ?? null) ||
           existing.status !== "confirmed";
 
         if (changed) {
