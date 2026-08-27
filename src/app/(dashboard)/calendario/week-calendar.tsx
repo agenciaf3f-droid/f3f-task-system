@@ -8,7 +8,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { AvailabilityDialog } from "./availability-dialog";
 import { NewMeetingDialog } from "./new-meeting-dialog";
 import { EditMeetingDialog } from "./edit-meeting-dialog";
-import { cancelMeetingAction, deleteMeetingForeverAction, type CancelScope } from "./actions";
+import { cancelMeetingAction, deleteMeetingForeverAction, type CancelScope, type DeleteScope } from "./actions";
 import { todayInBrazil } from "@/lib/meeting-recurrence";
 import {
   Dialog,
@@ -1050,6 +1050,7 @@ export function WeekCalendar({
   const [cancelling, startCancel] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [cancelTarget, setCancelTarget] = useState<Meeting | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Meeting | null>(null);
   const [editTarget, setEditTarget] = useState<Meeting | null>(null);
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
   const [calendarView, setCalendarView] = useState<"day" | "week" | "month">(initialCalendarView);
@@ -1190,10 +1191,16 @@ export function WeekCalendar({
 
   const handleDeleteClick = useCallback(
     (meeting: Meeting) => {
-      if (!confirm("Excluir permanentemente esta reunião? Esta ação não pode ser desfeita.")) return;
       setOpenDayDate(null);
+      // Série recorrente: a escolha é do usuário, igual ao Google. Reunião
+      // avulsa não tem escopo nenhum a decidir, então segue com uma pergunta só.
+      if (meeting.isRecurring) {
+        setDeleteTarget(meeting);
+        return;
+      }
+      if (!confirm("Excluir permanentemente esta reunião? Esta ação não pode ser desfeita.")) return;
       startDelete(async () => {
-        const result = await deleteMeetingForeverAction(meeting.id);
+        const result = await deleteMeetingForeverAction(meeting.id, "single");
         if (result.error) {
           alert(result.error);
           return;
@@ -1202,6 +1209,23 @@ export function WeekCalendar({
       });
     },
     [router]
+  );
+
+  const confirmDelete = useCallback(
+    (scope: DeleteScope) => {
+      if (!deleteTarget) return;
+      const id = deleteTarget.id;
+      setDeleteTarget(null);
+      startDelete(async () => {
+        const result = await deleteMeetingForeverAction(id, scope);
+        if (result.error) {
+          alert(result.error);
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [deleteTarget, router]
   );
 
   const confirmCancel = useCallback(
@@ -1476,6 +1500,47 @@ export function WeekCalendar({
               <button
                 onClick={() => setCancelTarget(null)}
                 disabled={cancelling}
+                className="mt-2 px-4 py-2 text-sm text-slate-500 hover:text-slate-700"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {deleteTarget && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setDeleteTarget(null)} />
+          <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-2 flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-red-600" />
+              <h3 className="text-base font-semibold text-slate-900">Excluir reunião recorrente</h3>
+            </div>
+            <p className="mb-5 text-sm text-slate-500">
+              Esta reunião faz parte de uma série mensal. O que você quer excluir?
+              Diferente de cancelar, isto não pode ser desfeito.
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => confirmDelete("single")}
+                disabled={deleting}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:border-slate-300 disabled:opacity-50"
+              >
+                Apenas esta reunião
+                <span className="mt-0.5 block text-xs text-slate-400">As próximas continuam agendadas.</span>
+              </button>
+              <button
+                onClick={() => confirmDelete("series")}
+                disabled={deleting}
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-left text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                Esta e as seguintes
+                <span className="mt-0.5 block text-xs text-red-500/80">Apaga desta data em diante. Não tem volta.</span>
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
                 className="mt-2 px-4 py-2 text-sm text-slate-500 hover:text-slate-700"
               >
                 Fechar

@@ -59,6 +59,9 @@ export async function saveAvailabilityAction(
 
 export type CancelScope = "single" | "series";
 
+/** Mesma escolha do Google: só esta ocorrência, ou esta e as seguintes. */
+export type DeleteScope = "single" | "series";
+
 const timeSchema = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/, "Horário inválido.");
 const dateSchema = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida.")
@@ -516,6 +519,7 @@ export async function cancelMeetingAction(
 
 export async function deleteMeetingForeverAction(
   meetingId: string,
+  scope: DeleteScope = "single",
 ): Promise<{ success?: true; error?: string }> {
   const user = await requireAuth();
   const meeting = await prisma.meeting.findFirst({
@@ -528,6 +532,8 @@ export async function deleteMeetingForeverAction(
     },
     select: {
       id: true,
+      userId: true,
+      date: true,
       googleEventId: true,
       clientPlan: true,
       recurrenceParentId: true,
@@ -539,6 +545,61 @@ export async function deleteMeetingForeverAction(
     },
   });
   if (!meeting) return { error: "Reunião não encontrada ou sem permissão." };
+
+  if (scope === "series") {
+    // "Esta e as seguintes", como no Google: apaga a partir da data desta
+    // ocorrência, não do dia de hoje. Quem abre uma reunião passada de uma série
+    // e manda apagar a série espera que ela suma dali para a frente.
+    const parentId = meeting.recurrenceParentId ?? meeting.id;
+    const alvos = await prisma.meeting.findMany({
+      where: {
+        userId: meeting.userId,
+        user: { companyId: user.companyId },
+        date: { gte: meeting.date },
+        OR: [{ id: parentId }, { recurrenceParentId: parentId }],
+      },
+      select: {
+        id: true,
+        googleEventId: true,
+        clientPlan: true,
+        user: { select: { googleCalendarId: true } },
+      },
+    });
+
+    // Antes do delete: a linha do lembrete sai por cascata e levaria o
+    // folder_id junto, deixando a campanha viva e órfã na UAZAPI.
+    await cancelMeetingReminders(alvos.map((alvo) => alvo.id));
+
+    const falhasNoGoogle = await Promise.allSettled(
+      alvos
+        .filter((alvo) => alvo.googleEventId)
+        .map(async (alvo) => {
+          const calendarId = await resolvePlanCalendarId(alvo.clientPlan)
+            ?? alvo.user.googleCalendarId
+            ?? undefined;
+          const ok = await deleteCalendarMeeting(alvo.googleEventId!, calendarId);
+          if (!ok) throw new Error(alvo.id);
+        }),
+    );
+    // Falha no Google não impede apagar aqui: o evento lá vira um resíduo
+    // visível, enquanto uma reunião que não some do Task confunde mais.
+    const naoApagados = falhasNoGoogle.filter((r) => r.status === "rejected").length;
+
+    await prisma.meeting.deleteMany({ where: { id: { in: alvos.map((alvo) => alvo.id) } } });
+
+    await logActivity({
+      companyId: user.companyId,
+      userId: user.userId,
+      action: "meeting.deleted",
+      resourceType: "meeting",
+      resourceId: meeting.id,
+      newValue: { escopo: "series", apagadas: alvos.length, aPartirDe: meeting.date },
+    });
+    revalidatePath("/calendario");
+    return naoApagados > 0
+      ? { error: `${alvos.length} reunião(ões) apagada(s), mas ${naoApagados} evento(s) continuam no Google Calendar.` }
+      : { success: true };
+  }
 
   if (meeting.googleEventId) {
     const calendarId = await resolvePlanCalendarId(meeting.clientPlan)
