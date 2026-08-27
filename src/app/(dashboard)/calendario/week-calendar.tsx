@@ -1055,6 +1055,26 @@ export function WeekCalendar({
   const [viewMode, setViewMode] = useState<"mine" | "all">("all");
   const [calendarView, setCalendarView] = useState<"day" | "week" | "month">(initialCalendarView);
   const [weekAnchorDate, setWeekAnchorDate] = useState(focusDate ?? defaultDate);
+
+  // A navegação por semana empurra ?view= e ?date= na URL, e o servidor devolve
+  // esses valores como props. Mas o inicializador do useState só roda na
+  // primeira montagem: sem reagir à troca da prop, o estado ficava com a data
+  // antiga e a grade não saía do lugar. Quando a semana nova caía no mesmo mês,
+  // o cabeçalho também não mudava e o clique parecia não fazer nada.
+  //
+  // Este é o padrão do React para ajustar estado quando uma prop muda: comparar
+  // com o último valor visto durante a renderização, em vez de um efeito — que
+  // renderizaria uma vez com o dado errado antes de corrigir.
+  const [ultimoFocus, setUltimoFocus] = useState(focusDate);
+  const [ultimaView, setUltimaView] = useState(initialCalendarView);
+  if (focusDate !== ultimoFocus) {
+    setUltimoFocus(focusDate);
+    if (focusDate) setWeekAnchorDate(focusDate);
+  }
+  if (initialCalendarView !== ultimaView) {
+    setUltimaView(initialCalendarView);
+    setCalendarView(initialCalendarView);
+  }
   const [selectedHostId, setSelectedHostId] = useState("all");
   const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
@@ -1072,7 +1092,12 @@ export function WeekCalendar({
   }, [canFilterByUser, meetings, selectedHostId, userId, viewMode]);
 
   const gridStart = new Date(gridStartISO);
-  const monthRef = new Date(monthRefIso);
+  // O título segue o que está na tela, não a prop do servidor. Na visão de dia
+  // as setas só mexem em estado local, então ao virar o mês o cabeçalho ficava
+  // preso no mês anterior — dizendo "Agosto" com setembro na grade.
+  const monthRef = calendarView === "month"
+    ? new Date(monthRefIso)
+    : new Date(`${weekAnchorDate}T00:00:00Z`);
   const monthName = MONTHS[monthRef.getUTCMonth()];
   const year = monthRef.getUTCFullYear();
   const todayStr = todayInBrazil();
