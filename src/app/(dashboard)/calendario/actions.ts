@@ -7,7 +7,16 @@ import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createCalendarMeeting, deleteCalendarMeeting, updateCalendarMeeting } from "@/lib/google-calendar";
-import { isPastDate, nowInBrazil, todayInBrazil } from "@/lib/meeting-recurrence";
+import {
+  generateMonthlyOccurrences,
+  generateWeeklyOccurrences,
+  getWeekOfMonth,
+  isPastDate,
+  nowInBrazil,
+  todayInBrazil,
+  type RecurrenceRule,
+} from "@/lib/meeting-recurrence";
+import { RECURRING_INSTANCES_AHEAD } from "@/lib/meeting-duration";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { isElevated } from "@/lib/task-visibility";
 import { logActivity } from "@/lib/activity";
@@ -100,6 +109,7 @@ const manualMeetingSchema = z.object({
   isAllDay: z.boolean(),
   participantUserIds: z.array(z.string().uuid()).max(100),
   guestEmails: z.string().max(5000),
+  recurrence: z.enum(["none", "weekly", "monthly"]).default("none"),
 });
 
 function parseGuestEmails(raw: string): { emails?: string[]; error?: string } {
@@ -125,10 +135,11 @@ export async function createManualMeetingAction(
     isAllDay: formData.get("isAllDay") === "on",
     participantUserIds: formData.getAll("participantUserIds"),
     guestEmails: formData.get("guestEmails") ?? "",
+    recurrence: formData.get("recurrence") ?? "none",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
 
-  const { title, startDate, endDate, clientId, isAllDay } = parsed.data;
+  const { title, startDate, endDate, clientId, isAllDay, recurrence } = parsed.data;
   const startTime = isAllDay ? "00:00" : parsed.data.startTime;
   const endTime = isAllDay ? "23:59" : parsed.data.endTime;
   if (!startTime || !endTime) return { error: "Informe os horários de início e término." };
@@ -174,25 +185,82 @@ export async function createManualMeetingAction(
   }
   const displayName = client ? `${title} · ${client.name}` : title;
 
+  // Recorrência só faz sentido em reunião de um dia com horário: repetir um
+  // bloco de vários dias ou de dia inteiro não tem leitura óbvia, e o modelo de
+  // regra existente ("toda Nª quinta do mês") pressupõe uma data só.
+  if (recurrence !== "none" && (isAllDay || startDate !== endDate)) {
+    return { error: "Reunião recorrente precisa ser de um único dia e com horário definido." };
+  }
+
+  const [ano, mes, dia] = startDate.split("-").map(Number);
+  const diaDaSemana = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  const rule: RecurrenceRule | null =
+    recurrence === "weekly"
+      ? { type: "weekly", dayOfWeek: diaDaSemana }
+      : recurrence === "monthly"
+        ? {
+            type: "monthly_nth_weekday",
+            weekOfMonth: getWeekOfMonth(new Date(Date.UTC(ano, mes - 1, dia))),
+            dayOfWeek: diaDaSemana,
+          }
+        : null;
+
+  const datas = !rule
+    ? [startDate]
+    : rule.type === "weekly"
+      ? generateWeeklyOccurrences(startDate, rule, RECURRING_INSTANCES_AHEAD)
+      : generateMonthlyOccurrences(startDate, rule, RECURRING_INSTANCES_AHEAD);
+
+  const dadosBase = {
+    userId: host.id,
+    startTime,
+    endTime,
+    isAllDay,
+    guestEmails,
+    status: "confirmed",
+    clientName: displayName,
+    clientGroupId: client?.whatsappGroupId ?? null,
+    clientPlan: client?.meetingPlan ?? null,
+  };
+
   const meeting = await prisma.meeting.create({
     data: {
-      userId: host.id,
-      date: startDate,
+      ...dadosBase,
+      date: datas[0],
       endDate,
-      startTime,
-      endTime,
-      isAllDay,
-      guestEmails,
-      status: "confirmed",
-      clientName: displayName,
-      clientGroupId: client?.whatsappGroupId ?? null,
-      clientPlan: client?.meetingPlan ?? null,
+      recurrenceRule: (rule as object) ?? undefined,
       visibleTo: participantUserIds.length
         ? { create: participantUserIds.map((userId) => ({ userId })) }
         : undefined,
     },
     select: { id: true },
   });
+
+  // As ocorrências seguintes. skipDuplicates deixa passar o horário que já
+  // estava ocupado em vez de abortar a série inteira — mesma escolha do
+  // agendamento pelo cliente.
+  const filhas = rule && datas.length > 1
+    ? await prisma.meeting.createManyAndReturn({
+        skipDuplicates: true,
+        data: datas.slice(1).map((d) => ({
+          ...dadosBase,
+          date: d,
+          endDate: d,
+          recurrenceRule: rule as object,
+          recurrenceParentId: meeting.id,
+        })),
+        select: { id: true, date: true },
+      })
+    : [];
+
+  if (filhas.length > 0 && participantUserIds.length > 0) {
+    await prisma.meetingAudience.createMany({
+      skipDuplicates: true,
+      data: filhas.flatMap((filha) =>
+        participantUserIds.map((userId) => ({ meetingId: filha.id, userId })),
+      ),
+    });
+  }
 
   const calendarId = await resolvePlanCalendarId(client?.meetingPlan ?? null)
     ?? host.googleCalendarId
@@ -213,11 +281,37 @@ export async function createManualMeetingAction(
     await prisma.meeting.update({ where: { id: meeting.id }, data: { googleEventId } });
   }
 
+  // As ocorrências seguintes também precisam de evento no Google. Em paralelo e
+  // tolerante a falha: uma ocorrência que não entrar lá não pode derrubar a
+  // série inteira, que já está criada aqui.
+  if (filhas.length > 0) {
+    await Promise.allSettled(
+      filhas.map(async (filha) => {
+        const id = await createCalendarMeeting({
+          date: filha.date,
+          endDate: filha.date,
+          startTime,
+          endTime,
+          isAllDay,
+          ownerName: host.name,
+          clientName: displayName,
+          clientGroupId: client?.whatsappGroupId ?? undefined,
+          attendeeEmails: [...participants.map((participant) => participant.email), ...guestEmails],
+          calendarId,
+        });
+        if (id) await prisma.meeting.update({ where: { id: filha.id }, data: { googleEventId: id } });
+      }),
+    );
+  }
+
   after(async () => {
-    try {
-      await scheduleMeetingReminders(meeting.id);
-    } catch (error) {
-      console.error("[calendario] falha ao agendar lembretes", { meetingId: meeting.id, error });
+    // Cada ocorrência tem os próprios lembretes: as datas são diferentes.
+    for (const id of [meeting.id, ...filhas.map((filha) => filha.id)]) {
+      try {
+        await scheduleMeetingReminders(id);
+      } catch (error) {
+        console.error("[calendario] falha ao agendar lembretes", { meetingId: id, error });
+      }
     }
   });
 

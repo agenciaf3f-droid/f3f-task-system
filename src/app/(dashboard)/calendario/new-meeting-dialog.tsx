@@ -38,6 +38,7 @@ export function NewMeetingDialog({
   const [startDate, setStartDate] = useState(defaultDate);
   const [endDate, setEndDate] = useState(defaultDate);
   const [isAllDay, setIsAllDay] = useState(false);
+  const [recurrence, setRecurrence] = useState<"none" | "weekly" | "monthly">("none");
   const isInternalMeeting = hostId === internalHostId;
 
   function submit(formData: FormData) {
@@ -178,9 +179,36 @@ export function NewMeetingDialog({
               type="checkbox"
               name="isAllDay"
               checked={isAllDay}
-              onChange={(event) => setIsAllDay(event.target.checked)}
+              onChange={(event) => {
+                setIsAllDay(event.target.checked);
+                // Dia inteiro não combina com série: a regra de recorrência
+                // pressupõe uma data com horário.
+                if (event.target.checked) setRecurrence("none");
+              }}
             />
             Dia inteiro
+          </label>
+
+          <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
+            Repetir
+            <select
+              name="recurrence"
+              value={recurrence}
+              disabled={isAllDay}
+              onChange={(event) => setRecurrence(event.target.value as typeof recurrence)}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400"
+            >
+              <option value="none">Não repete</option>
+              <option value="weekly">Toda semana, no mesmo dia</option>
+              <option value="monthly">Todo mês, na mesma semana e dia</option>
+            </select>
+            <span className="text-xs font-normal text-slate-400">
+              {isAllDay
+                ? "Indisponível em reunião de dia inteiro."
+                : recurrence === "none"
+                  ? "Cria uma reunião só."
+                  : "Cria as próximas 12 ocorrências. Ao excluir ou cancelar, você escolhe entre esta e toda a série."}
+            </span>
           </label>
 
           <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
