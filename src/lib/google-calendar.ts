@@ -276,6 +276,8 @@ export type RawCalendarEvent = {
   attendeeEmails: string[];
   updatedAt: string;               // ISO
   sourceCalendarId: string;        // debug: qual agenda o evento veio
+  /** Id da série, quando o evento é uma ocorrência de recorrência. */
+  recurringEventId?: string;
 };
 
 /**
@@ -341,6 +343,9 @@ export async function listCalendarEvents({
               .filter((email): email is string => Boolean(email)),
             updatedAt: ev.updated ?? new Date().toISOString(),
             sourceCalendarId: calendarId,
+            // Com singleEvents: true a API devolve uma ocorrência por vez, e
+            // este campo é o único elo entre elas.
+            recurringEventId: ev.recurringEventId ?? undefined,
           });
         }
 

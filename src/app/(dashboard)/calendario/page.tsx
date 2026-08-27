@@ -159,7 +159,13 @@ export default async function CalendarioPage({
           hostAvatarUrl: userAvatars.get(hostId) ?? null,
           clientPlan: m.clientPlan,
           clientResponse: m.clientResponse,
-          isRecurring: m.recurrenceRule != null || m.recurrenceParentId != null,
+          // Série do Google conta como recorrente: o sync expande a série em
+          // ocorrências soltas, e sem isto a agenda nunca ofereceria "esta e as
+          // seguintes" para reunião que veio de lá — que é a maioria.
+          isRecurring:
+            m.recurrenceRule != null ||
+            m.recurrenceParentId != null ||
+            m.googleRecurringEventId != null,
         };
       })}
       availability={availability.map((a) => ({

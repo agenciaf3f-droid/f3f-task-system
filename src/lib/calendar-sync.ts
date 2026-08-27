@@ -190,6 +190,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
               guestEmails: ev.attendeeEmails,
               clientName: parsed.clientName,
               clientGroupId: parsed.clientGroupId,
+              googleRecurringEventId: ev.recurringEventId ?? null,
               status: "confirmed",
             },
           });
@@ -216,6 +217,7 @@ export async function syncCalendarToSystem(): Promise<SyncResult> {
             guestEmails: ev.attendeeEmails,
             status: "confirmed",
             googleEventId: ev.id,
+            googleRecurringEventId: ev.recurringEventId ?? null,
             clientName: parsed.clientName,
             clientGroupId: parsed.clientGroupId,
           },

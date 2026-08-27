@@ -636,6 +636,10 @@ model Meeting {
   // Recurrence (booker-side fixed monthly)
   recurrenceRule     Json?   @map("recurrence_rule")
   recurrenceParentId String? @map("recurrence_parent_id") @db.Uuid
+  /// Id da série do Google. O sync usa singleEvents: true, que expande a série
+  /// em ocorrências soltas — sem guardar isto, o Task não tem como saber que
+  /// várias reuniões são a mesma série e nunca oferece "esta e as seguintes".
+  googleRecurringEventId String? @map("google_recurring_event_id")
 
   // Confirmação do cliente pelo botão do lembrete de véspera
   clientResponse    String?   @map("client_response") @db.VarChar(20) // "confirmed" | "declined"
@@ -647,6 +651,7 @@ model Meeting {
   visibleTo          MeetingAudience[]
   reminders          MeetingReminder[]
 
+  @@index([googleRecurringEventId])
   @@index([userId, date])
   @@index([recurrenceParentId])
   @@index([googleEventId])

@@ -59,6 +59,26 @@ export async function saveAvailabilityAction(
 
 export type CancelScope = "single" | "series";
 
+/**
+ * Como encontrar as irmãs de uma reunião recorrente.
+ *
+ * São duas origens de série: a marcada pelo cliente no link de agendamento
+ * (recurrenceRule/recurrenceParentId) e a que veio do Google. O sync usa
+ * singleEvents: true, então cada ocorrência do Google chega solta e o único elo
+ * entre elas é o googleRecurringEventId.
+ */
+function serieDe(meeting: {
+  id: string;
+  recurrenceParentId: string | null;
+  googleRecurringEventId: string | null;
+}) {
+  if (meeting.googleRecurringEventId) {
+    return { googleRecurringEventId: meeting.googleRecurringEventId };
+  }
+  const parentId = meeting.recurrenceParentId ?? meeting.id;
+  return { OR: [{ id: parentId }, { recurrenceParentId: parentId }] };
+}
+
 /** Mesma escolha do Google: só esta ocorrência, ou esta e as seguintes. */
 export type DeleteScope = "single" | "series";
 
@@ -446,11 +466,15 @@ export async function cancelMeetingAction(
       user: { select: { googleCalendarId: true } },
       recurrenceRule: true,
       recurrenceParentId: true,
+      googleRecurringEventId: true,
     },
   });
   if (!meeting) return;
 
-  const isRecurring = meeting.recurrenceRule != null || meeting.recurrenceParentId != null;
+  const isRecurring =
+    meeting.recurrenceRule != null ||
+    meeting.recurrenceParentId != null ||
+    meeting.googleRecurringEventId != null;
 
   // Sem recorrência: cancela só ela.
   if (!isRecurring || scope === "single") {
@@ -468,8 +492,7 @@ export async function cancelMeetingAction(
     return;
   }
 
-  // Série: cancela parent + todos os irmãos com date >= hoje, status confirmed.
-  const parentId = meeting.recurrenceParentId ?? meeting.id;
+  // Série: cancela esta e as irmãs de hoje em diante que ainda estão confirmadas.
   const today = todayInBrazil();
 
   const targets = await prisma.meeting.findMany({
@@ -478,7 +501,7 @@ export async function cancelMeetingAction(
       user: { companyId: user.companyId },
       status: "confirmed",
       date: { gte: today },
-      OR: [{ id: parentId }, { recurrenceParentId: parentId }],
+      ...serieDe(meeting),
     },
     select: {
       id: true,
@@ -537,6 +560,7 @@ export async function deleteMeetingForeverAction(
       googleEventId: true,
       clientPlan: true,
       recurrenceParentId: true,
+      googleRecurringEventId: true,
       user: { select: { googleCalendarId: true } },
       recurrenceChildren: {
         orderBy: [{ date: "asc" }, { startTime: "asc" }],
@@ -550,13 +574,12 @@ export async function deleteMeetingForeverAction(
     // "Esta e as seguintes", como no Google: apaga a partir da data desta
     // ocorrência, não do dia de hoje. Quem abre uma reunião passada de uma série
     // e manda apagar a série espera que ela suma dali para a frente.
-    const parentId = meeting.recurrenceParentId ?? meeting.id;
     const alvos = await prisma.meeting.findMany({
       where: {
         userId: meeting.userId,
         user: { companyId: user.companyId },
         date: { gte: meeting.date },
-        OR: [{ id: parentId }, { recurrenceParentId: parentId }],
+        ...serieDe(meeting),
       },
       select: {
         id: true,
