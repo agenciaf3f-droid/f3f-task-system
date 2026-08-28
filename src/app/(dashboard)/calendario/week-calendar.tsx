@@ -56,35 +56,7 @@ type Option = { id: string; name: string };
 
 // Paleta por gestor: eventos compactos com superfície suave, no padrão de mês
 // do Google Calendar, preservando as cores de identificação do Tasks.
-const HOST_EVENT_STYLES = [
-  "border-blue-500 bg-blue-50 text-blue-950 hover:bg-blue-100",
-  "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
-  "border-violet-500 bg-violet-50 text-violet-950 hover:bg-violet-100",
-  "border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100",
-  "border-rose-500 bg-rose-50 text-rose-950 hover:bg-rose-100",
-  "border-cyan-500 bg-cyan-50 text-cyan-950 hover:bg-cyan-100",
-  "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-950 hover:bg-fuchsia-100",
-  "border-teal-500 bg-teal-50 text-teal-950 hover:bg-teal-100",
-];
 
-/**
- * Cor por plano do cliente.
- *
- * O plano é o que define a natureza do atendimento, então é ele que orienta a
- * leitura da agenda — mais útil que colorir por gestor, que já aparece no
- * avatar e no nome. As chaves vêm normalizadas porque a planilha mistura caixa
- * ("Premium"/"PREMIUM", "Low-Ticket"/"Low-ticket").
- */
-const PLAN_EVENT_STYLES: Record<string, string> = {
-  "1 fase": "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
-  "fase 1": "border-emerald-500 bg-emerald-50 text-emerald-950 hover:bg-emerald-100",
-  "2 fases": "border-teal-500 bg-teal-50 text-teal-950 hover:bg-teal-100",
-  "3 fases": "border-cyan-500 bg-cyan-50 text-cyan-950 hover:bg-cyan-100",
-  "16 fases": "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-950 hover:bg-fuchsia-100",
-  funil: "border-blue-500 bg-blue-50 text-blue-950 hover:bg-blue-100",
-  "low-ticket": "border-amber-500 bg-amber-50 text-amber-950 hover:bg-amber-100",
-  premium: "border-violet-500 bg-violet-50 text-violet-950 hover:bg-violet-100",
-};
 
 /** Reunião interna (sem cliente) fica neutra e não disputa atenção. */
 const INTERNAL_EVENT_STYLE = "border-slate-400 bg-slate-100 text-slate-800 hover:bg-slate-200";
@@ -92,41 +64,30 @@ const INTERNAL_EVENT_STYLE = "border-slate-400 bg-slate-100 text-slate-800 hover
 /**
  * Cliente confirmou presença: a reunião inteira fica verde.
  *
- * É verde PREENCHIDO, e não mais um tom pastel como os planos, por dois
- * motivos. O plano "1 FASE" já é emerald-50, então um verde claro se
- * confundiria com ele. E confirmação é o estado que o gestor procura ao bater
- * o olho na agenda — precisa saltar, não se misturar à paleta dos planos.
+ * Verde PREENCHIDO, e não um tom pastel: confirmação é o que o gestor procura
+ * ao bater o olho na agenda, então precisa saltar contra o cinza do restante.
  *
- * Sobrepõe a cor do plano: quando o cliente confirmou, essa informação vale
- * mais que a natureza do atendimento, que continua no tooltip e no detalhe.
+ * O plano do cliente não entra mais na cor — ele continua no tooltip e no
+ * detalhe da reunião.
  */
 const CONFIRMED_EVENT_STYLE =
   "border-emerald-300 bg-emerald-600 text-white hover:bg-emerald-700";
 
-function styleForMeeting(plan: string | null, clientResponse: string | null): string {
-  return clientResponse === "confirmed" ? CONFIRMED_EVENT_STYLE : styleForPlan(plan);
+/**
+ * Ainda sem confirmação do cliente: cinza, igual para todas.
+ *
+ * A agenda passou a responder uma pergunta só — "quem já confirmou?" — e para
+ * isso duas cores bastam. Colorir o que está pendente por plano competia com
+ * essa leitura: um calendário multicolorido não dizia de relance o que falta
+ * cobrar. Reunião interna, que não tem confirmação, cai no mesmo cinza.
+ */
+const PENDING_EVENT_STYLE = INTERNAL_EVENT_STYLE;
+
+function styleForMeeting(_plan: string | null, clientResponse: string | null): string {
+  return clientResponse === "confirmed" ? CONFIRMED_EVENT_STYLE : PENDING_EVENT_STYLE;
 }
 
-function normalizePlan(plan: string | null): string {
-  return (plan ?? "")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-}
 
-function styleForPlan(plan: string | null): string {
-  const chave = normalizePlan(plan);
-  if (!chave) return INTERNAL_EVENT_STYLE;
-  const conhecido = PLAN_EVENT_STYLES[chave];
-  if (conhecido) return conhecido;
-
-  // Plano novo que ainda não está no mapa: cor estável em vez de tudo cinza.
-  let hash = 0;
-  for (let i = 0; i < chave.length; i++) hash = (hash * 31 + chave.charCodeAt(i)) | 0;
-  return HOST_EVENT_STYLES[Math.abs(hash) % HOST_EVENT_STYLES.length];
-}
 
 const DAY_NAMES = ["DOM.", "SEG.", "TER.", "QUA.", "QUI.", "SEX.", "SÁB."];
 const MONTHS = [
