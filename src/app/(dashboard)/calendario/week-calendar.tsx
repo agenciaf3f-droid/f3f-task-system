@@ -292,6 +292,26 @@ type HoverInfo = { meeting: Meeting; dateStr: string; x: number; y: number };
  * `overflow-hidden` e a rolagem vertical cortariam o painel. Não captura mouse
  * para não piscar quando o cursor passa por cima dele.
  */
+/**
+ * Clicar no card abre a edição, sem precisar acertar o lápis.
+ *
+ * O clique nos botões de ação (editar, cancelar, excluir) é ignorado aqui:
+ * cada um já faz o seu, e sem esta guarda excluir também abriria a edição por
+ * baixo do diálogo de confirmação.
+ */
+function aoClicarNoCard(
+  podeGerir: boolean,
+  abrir: () => void,
+  aoAbrir?: () => void,
+) {
+  return (event: React.MouseEvent<HTMLElement>) => {
+    if (!podeGerir) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    aoAbrir?.();
+    abrir();
+  };
+}
+
 function MeetingHoverCard({ info }: { info: HoverInfo }) {
   const { meeting } = info;
   const LARGURA = 260;
@@ -474,12 +494,16 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
+                        className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${canManage ? "cursor-pointer" : ""} ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
                         onMouseEnter={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
                           setHover({ meeting, dateStr, x: rect.right, y: rect.top });
                         }}
                         onMouseLeave={() => setHover(null)}
+                        onClick={aoClicarNoCard(canManage, () => onEditClick(meeting), () => setHover(null))}
+                        role={canManage ? "button" : undefined}
+                        tabIndex={canManage ? 0 : undefined}
+                        title={canManage ? "Abrir reunião" : undefined}
                       >
                         <span className="min-w-0 flex-1 truncate font-semibold">
                           {meeting.clientName || meeting.hostName}
@@ -598,7 +622,7 @@ function WeekTimeGrid({
                     return (
                       <div
                         key={meeting.id}
-                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
+                        className={`group/m absolute overflow-hidden rounded-md border-l-[3px] py-1 text-xs shadow-sm transition-colors ${canManage ? "cursor-pointer" : ""} ${columns >= 3 ? "px-1" : "px-1.5"} ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
                         style={{
                           top: topoDe(inicio),
                           height: altura,
@@ -610,6 +634,10 @@ function WeekTimeGrid({
                           setHover({ meeting, dateStr, x: r.right, y: r.top });
                         }}
                         onMouseLeave={() => setHover(null)}
+                        onClick={aoClicarNoCard(canManage, () => onEditClick(meeting), () => setHover(null))}
+                        role={canManage ? "button" : undefined}
+                        tabIndex={canManage ? 0 : undefined}
+                        title={canManage ? "Abrir reunião" : undefined}
                       >
                         {/* Quanto mais reuniões dividem o horário, menos largura
                             sobra. Avatar, horário e ícone saem antes do nome —
@@ -808,7 +836,10 @@ const DayCell = memo(function DayCell({
           return (
             <div
               key={m.id}
-              className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${eventStyle}`}
+              className={`group/m relative flex min-h-[42px] items-center gap-1.5 rounded-md border-l-[3px] px-2 py-1 text-xs transition-colors ${canManage ? "cursor-pointer" : ""} ${eventStyle}`}
+              onClick={aoClicarNoCard(canManage, () => onEditClick(m))}
+              role={canManage ? "button" : undefined}
+              tabIndex={canManage ? 0 : undefined}
               title={`${tooltipPrefix} · ${timeLabel}${m.date !== m.endDate ? ` · ${m.date} a ${m.endDate}` : ""}${m.isRecurring ? " (recorrente mensal)" : ""}${m.clientResponse === "confirmed" ? " · cliente confirmou" : ""}`}
             >
               {/* Avatar identifica o cliente de relance — antes o evento era só texto. */}
@@ -939,7 +970,10 @@ function DayMeetingsDialog({
               return (
                 <div
                   key={meeting.id}
-                  className={`flex items-center gap-3 rounded-xl border border-l-4 px-3 py-3 shadow-sm ${eventStyle}`}
+                  className={`flex items-center gap-3 rounded-xl border border-l-4 px-3 py-3 shadow-sm ${canManage ? "cursor-pointer" : ""} ${eventStyle}`}
+                  onClick={aoClicarNoCard(canManage, () => onEditClick(meeting))}
+                  role={canManage ? "button" : undefined}
+                  tabIndex={canManage ? 0 : undefined}
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-2.5">
                     <span className="relative shrink-0">
