@@ -28,7 +28,7 @@ function getMonthGridRange(monthRef: Date): { gridStart: Date; gridEnd: Date; fi
 export default async function CalendarioPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ month?: string; date?: string; view?: string }>;
+  searchParams?: Promise<{ month?: string; date?: string; view?: string; day?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
@@ -182,6 +182,11 @@ export default async function CalendarioPage({
       internalHostId={users.find((item) => item.calendarSlug === "admin")?.id}
       defaultDate={todayInBrazil()}
       focusDate={sp?.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : undefined}
+      // "day" é o pedido explícito de abrir o painel daquele dia. Separado de
+      // "date", que é só a âncora da semana: navegar entre semanas colocava
+      // date= na URL e o painel abria sozinho a cada recarga, quase sempre
+      // vazio, porque a âncora é o domingo.
+      openDayParam={sp?.day && /^\d{4}-\d{2}-\d{2}$/.test(sp.day) ? sp.day : undefined}
       initialCalendarView={sp?.view === "month" ? "month" : sp?.view === "day" ? "day" : "week"}
     />
   );

@@ -34,7 +34,8 @@ export function MeetingBookingButton({
 
   function openScheduledMeeting() {
     if (!scheduledDate) return;
-    router.push(`/calendario?month=${scheduledDate.slice(0, 7)}&date=${scheduledDate}`);
+    // "day" abre o painel daquele dia; "date" sozinho é só âncora de semana.
+    router.push(`/calendario?month=${scheduledDate.slice(0, 7)}&day=${scheduledDate}`);
   }
 
   function sendBookingLink() {

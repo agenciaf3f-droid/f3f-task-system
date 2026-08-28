@@ -1022,6 +1022,7 @@ export function WeekCalendar({
   canFilterByUser,
   defaultDate,
   focusDate,
+  openDayParam,
   initialCalendarView,
   internalHostId,
 }: {
@@ -1037,6 +1038,8 @@ export function WeekCalendar({
   canFilterByUser: boolean;
   defaultDate: string;
   focusDate?: string;
+  /** Dia a abrir no painel. Só vem quando alguém pediu isso de propósito. */
+  openDayParam?: string;
   initialCalendarView: "day" | "week" | "month";
   internalHostId?: string;
 }) {
@@ -1070,8 +1073,16 @@ export function WeekCalendar({
     setUltimaView(initialCalendarView);
     setCalendarView(initialCalendarView);
   }
+
   const [selectedHostId, setSelectedHostId] = useState("all");
-  const [openDayDate, setOpenDayDate] = useState<string | null>(focusDate ?? null);
+  const [openDayDate, setOpenDayDate] = useState<string | null>(openDayParam ?? null);
+  // Mesmo motivo: pedir para abrir o mesmo dia duas vezes seguidas precisa
+  // funcionar na segunda, e o inicializador do useState só roda ao montar.
+  const [ultimoOpenDay, setUltimoOpenDay] = useState(openDayParam);
+  if (openDayParam !== ultimoOpenDay) {
+    setUltimoOpenDay(openDayParam);
+    if (openDayParam) setOpenDayDate(openDayParam);
+  }
   const [hoveredOverflowDate, setHoveredOverflowDate] = useState<string | null>(null);
 
   // Reuniões do Admin F3F são internas e permanecem visíveis para toda a
