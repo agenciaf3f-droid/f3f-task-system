@@ -385,3 +385,96 @@ function parseEventInstant(value: string, isAllDay: boolean): { date: string; ti
     time: `${get("hour")}:${get("minute")}`,
   };
 }
+
+export type SeriesTruncateResult =
+  | { ok: true; action: "truncated" | "deleted" }
+  | { ok: false; reason: "no_client" | "not_found" | "no_recurrence" | "failed" };
+
+/**
+ * Encerra uma série recorrente a partir de uma ocorrência — o "este e os
+ * seguintes" do Google Agenda.
+ *
+ * Apagar ocorrência por ocorrência (events.delete em cada instância) só cria
+ * exceções: a regra continua viva e o Google segue gerando datas novas. Como o
+ * Task só enxerga 12 meses à frente, as ocorrências além disso reapareceriam
+ * mais tarde. O jeito certo é encurtar a própria regra com um UNTIL.
+ *
+ * Se a ocorrência escolhida é a primeira da série, não sobra nada para manter e
+ * o evento-mestre é apagado inteiro — encurtar deixaria uma série vazia.
+ *
+ * As ocorrências anteriores ficam intactas, como no Google.
+ */
+export async function truncateRecurringSeries({
+  recurringEventId,
+  cutoff,
+  calendarId: customCalendarId,
+}: {
+  recurringEventId: string;
+  /** Instante da ocorrência a partir da qual a série deixa de existir. */
+  cutoff: Date;
+  calendarId?: string;
+}): Promise<SeriesTruncateResult> {
+  const client = getClient();
+  if (!client) return { ok: false, reason: "no_client" };
+  const calendarId = customCalendarId || client.calendarId;
+
+  let master;
+  try {
+    const res = await client.calendar.events.get({ calendarId, eventId: recurringEventId });
+    master = res.data;
+  } catch (err) {
+    const status = (err as { code?: number }).code;
+    if (status === 404 || status === 410) return { ok: false, reason: "not_found" };
+    console.error("[GCal] Erro ao ler evento-mestre da série:", err);
+    return { ok: false, reason: "failed" };
+  }
+
+  const recurrence = master.recurrence ?? [];
+  const rruleIndex = recurrence.findIndex((linha) => linha.startsWith("RRULE:"));
+  if (rruleIndex < 0) return { ok: false, reason: "no_recurrence" };
+
+  // A série começa na ou depois do corte: não sobra ocorrência nenhuma antes,
+  // então encurtar produziria uma regra vazia. Apagar é o equivalente.
+  const inicioMestre = master.start?.dateTime ?? master.start?.date;
+  if (inicioMestre && new Date(inicioMestre).getTime() >= cutoff.getTime()) {
+    try {
+      await client.calendar.events.delete({ calendarId, eventId: recurringEventId });
+      return { ok: true, action: "deleted" };
+    } catch (err) {
+      const status = (err as { code?: number }).code;
+      if (status === 404 || status === 410) return { ok: true, action: "deleted" };
+      console.error("[GCal] Erro ao apagar série inteira:", err);
+      return { ok: false, reason: "failed" };
+    }
+  }
+
+  // UNTIL é inclusivo, então recua um segundo: a ocorrência do corte fica de
+  // fora. O formato é UTC básico, que é o que o RFC 5545 pede aqui.
+  const until = new Date(cutoff.getTime() - 1000)
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
+
+  // COUNT e UNTIL não podem coexistir na mesma regra; um UNTIL antigo é
+  // substituído em vez de duplicado.
+  const partes = recurrence[rruleIndex]
+    .slice("RRULE:".length)
+    .split(";")
+    .filter((parte) => parte && !/^(UNTIL|COUNT)=/i.test(parte));
+  partes.push(`UNTIL=${until}`);
+
+  const novaRecorrencia = [...recurrence];
+  novaRecorrencia[rruleIndex] = `RRULE:${partes.join(";")}`;
+
+  try {
+    await client.calendar.events.patch({
+      calendarId,
+      eventId: recurringEventId,
+      requestBody: { recurrence: novaRecorrencia },
+    });
+    return { ok: true, action: "truncated" };
+  } catch (err) {
+    console.error("[GCal] Erro ao encurtar a série:", err);
+    return { ok: false, reason: "failed" };
+  }
+}

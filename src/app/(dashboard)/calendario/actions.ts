@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createCalendarMeeting, deleteCalendarMeeting, updateCalendarMeeting } from "@/lib/google-calendar";
+import { createCalendarMeeting, deleteCalendarMeeting, truncateRecurringSeries, updateCalendarMeeting } from "@/lib/google-calendar";
 import {
   generateMonthlyOccurrences,
   generateWeeklyOccurrences,
@@ -20,7 +20,7 @@ import { RECURRING_INSTANCES_AHEAD } from "@/lib/meeting-duration";
 import { resolvePlanCalendarId } from "@/lib/plan-calendar";
 import { isElevated } from "@/lib/task-visibility";
 import { logActivity } from "@/lib/activity";
-import { applyClientResponse, cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
+import { applyClientResponse, brazilWallClockToInstant, cancelMeetingReminders, scheduleMeetingReminders } from "@/lib/meeting-reminders";
 
 export type AvailabilityInput = {
   dayOfWeek: number;
@@ -651,6 +651,7 @@ export async function deleteMeetingForeverAction(
       id: true,
       userId: true,
       date: true,
+      startTime: true,
       googleEventId: true,
       clientPlan: true,
       recurrenceParentId: true,
@@ -687,20 +688,50 @@ export async function deleteMeetingForeverAction(
     // folder_id junto, deixando a campanha viva e órfã na UAZAPI.
     await cancelMeetingReminders(alvos.map((alvo) => alvo.id));
 
-    const falhasNoGoogle = await Promise.allSettled(
-      alvos
-        .filter((alvo) => alvo.googleEventId)
-        .map(async (alvo) => {
-          const calendarId = await resolvePlanCalendarId(alvo.clientPlan)
-            ?? alvo.user.googleCalendarId
-            ?? undefined;
-          const ok = await deleteCalendarMeeting(alvo.googleEventId!, calendarId);
-          if (!ok) throw new Error(alvo.id);
-        }),
-    );
-    // Falha no Google não impede apagar aqui: o evento lá vira um resíduo
-    // visível, enquanto uma reunião que não some do Task confunde mais.
-    const naoApagados = falhasNoGoogle.filter((r) => r.status === "rejected").length;
+    const apagarUmAUm = async () => {
+      const falhas = await Promise.allSettled(
+        alvos
+          .filter((alvo) => alvo.googleEventId)
+          .map(async (alvo) => {
+            const calendarId = await resolvePlanCalendarId(alvo.clientPlan)
+              ?? alvo.user.googleCalendarId
+              ?? undefined;
+            const ok = await deleteCalendarMeeting(alvo.googleEventId!, calendarId);
+            if (!ok) throw new Error(alvo.id);
+          }),
+      );
+      return falhas.filter((r) => r.status === "rejected").length;
+    };
+
+    let naoApagados = 0;
+    let avisoSerie: string | null = null;
+
+    if (meeting.googleRecurringEventId) {
+      // Série do Google: encurta a regra, como o "este e os seguintes" de lá.
+      // Apagar instância por instância só cria exceções — a regra continuaria
+      // gerando datas novas, e elas voltariam ao Task quando entrassem na
+      // janela de 12 meses do sync.
+      const calendarId = await resolvePlanCalendarId(meeting.clientPlan)
+        ?? meeting.user.googleCalendarId
+        ?? undefined;
+      const corte = brazilWallClockToInstant(meeting.date, meeting.startTime);
+      const resultado = await truncateRecurringSeries({
+        recurringEventId: meeting.googleRecurringEventId,
+        cutoff: corte,
+        calendarId,
+      });
+
+      if (!resultado.ok) {
+        // Não conseguir encurtar não pode impedir a exclusão: cai no caminho
+        // antigo, que ao menos tira do Google o que o Task conhece.
+        naoApagados = await apagarUmAUm();
+        avisoSerie = resultado.reason === "no_recurrence"
+          ? "O evento no Google não tinha regra de repetição; as ocorrências conhecidas foram apagadas uma a uma."
+          : "Não foi possível encerrar a série no Google; as ocorrências conhecidas foram apagadas uma a uma, mas datas futuras podem reaparecer.";
+      }
+    } else {
+      naoApagados = await apagarUmAUm();
+    }
 
     await prisma.meeting.deleteMany({ where: { id: { in: alvos.map((alvo) => alvo.id) } } });
 
@@ -713,9 +744,11 @@ export async function deleteMeetingForeverAction(
       newValue: { escopo: "series", apagadas: alvos.length, aPartirDe: meeting.date },
     });
     revalidatePath("/calendario");
-    return naoApagados > 0
-      ? { error: `${alvos.length} reunião(ões) apagada(s), mas ${naoApagados} evento(s) continuam no Google Calendar.` }
-      : { success: true };
+    if (naoApagados > 0) {
+      return { error: `${alvos.length} reunião(ões) apagada(s), mas ${naoApagados} evento(s) continuam no Google Calendar.` };
+    }
+    if (avisoSerie) return { error: avisoSerie };
+    return { success: true };
   }
 
   if (meeting.googleEventId) {
