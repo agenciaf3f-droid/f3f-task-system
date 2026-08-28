@@ -16,9 +16,22 @@ const PUBLIC_PATHS = ["/login", "/criar-conta", "/esqueci-senha", "/redefinir-se
 
 const sessionSecret = process.env.SESSION_SECRET!;
 const COOKIE_NAME = "f3f_session";
+const CANONICAL_HOST = "task.agenciaf3f.com.br";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const host = request.headers.get("host")?.split(":")[0]?.toLowerCase();
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    host !== CANONICAL_HOST &&
+    !pathname.startsWith("/api/cron")
+  ) {
+    const canonicalUrl = request.nextUrl.clone();
+    canonicalUrl.protocol = "https:";
+    canonicalUrl.host = CANONICAL_HOST;
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", pathname);
