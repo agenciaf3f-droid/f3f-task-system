@@ -244,7 +244,16 @@ function layoutDayMeetings(meetings: Meeting[]): PositionedMeeting[] {
 }
 
 
-type HoverInfo = { meeting: Meeting; dateStr: string; x: number; y: number };
+type HoverInfo = {
+  meeting: Meeting;
+  dateStr: string;
+  /** Bordas do card, em coordenadas de tela. As duas: o painel vai para o lado
+   *  que couber, e cada lado precisa da sua própria referência. */
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+};
 
 /**
  * Detalhes da reunião ao passar o mouse.
@@ -276,13 +285,32 @@ function aoClicarNoCard(
 function MeetingHoverCard({ info }: { info: HoverInfo }) {
   const { meeting } = info;
   const LARGURA = 260;
-  // Vira para a esquerda quando não cabe à direita da tela.
-  const x = typeof window !== "undefined" && info.x + LARGURA + 24 > window.innerWidth
-    ? info.x - LARGURA - 12
-    : info.x + 12;
-  const y = typeof window !== "undefined"
-    ? Math.min(info.y, window.innerHeight - 200)
-    : info.y;
+  const FOLGA = 12;
+  const MARGEM = 8;
+
+  const larguraTela = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const alturaTela = typeof window !== "undefined" ? window.innerHeight : 800;
+
+  // Ao lado do card, nunca por cima dele. Cada lado tem a sua âncora: à direita
+  // parte da borda direita, à esquerda da borda esquerda. Usar a borda direita
+  // nos dois casos — como era antes — jogava o painel em cima da própria
+  // reunião sempre que ela estava perto da margem direita da tela.
+  const cabeDireita = info.right + FOLGA + LARGURA + MARGEM <= larguraTela;
+  const cabeEsquerda = info.left - FOLGA - LARGURA >= MARGEM;
+
+  let x: number;
+  let y = Math.min(info.top, alturaTela - 200);
+
+  if (cabeDireita) {
+    x = info.right + FOLGA;
+  } else if (cabeEsquerda) {
+    x = info.left - FOLGA - LARGURA;
+  } else {
+    // Coluna estreita demais para os dois lados: desce para baixo do card e
+    // encosta na margem. Abaixo em vez de acima porque a grade rola para baixo.
+    x = Math.max(MARGEM, Math.min(info.left, larguraTela - LARGURA - MARGEM));
+    y = Math.min(info.bottom + FOLGA, alturaTela - 200);
+  }
 
   return (
     <div
@@ -458,7 +486,7 @@ function WeekTimeGrid({
                         className={`group/m relative flex min-h-7 items-center gap-1 rounded border-l-[3px] px-1.5 py-1 text-[11px] ${canManage ? "cursor-pointer" : ""} ${styleForMeeting(meeting.clientPlan, meeting.clientResponse)}`}
                         onMouseEnter={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
-                          setHover({ meeting, dateStr, x: rect.right, y: rect.top });
+                          setHover({ meeting, dateStr, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom });
                         }}
                         onMouseLeave={() => setHover(null)}
                         onClick={aoClicarNoCard(canManage, () => onEditClick(meeting), () => setHover(null))}
@@ -592,7 +620,7 @@ function WeekTimeGrid({
                         }}
                         onMouseEnter={(event) => {
                           const r = event.currentTarget.getBoundingClientRect();
-                          setHover({ meeting, dateStr, x: r.right, y: r.top });
+                          setHover({ meeting, dateStr, left: r.left, right: r.right, top: r.top, bottom: r.bottom });
                         }}
                         onMouseLeave={() => setHover(null)}
                         onClick={aoClicarNoCard(canManage, () => onEditClick(meeting), () => setHover(null))}
