@@ -576,6 +576,17 @@ export async function cancelMeetingAction(
       where: { id: meetingId },
       data: { status: "cancelled" },
     });
+
+    // Tira os lembretes da fila da UAZAPI. Sem isto o cliente recebe aviso de
+    // uma reunião que não existe mais: a mensagem já está agendada do lado de
+    // lá e sai sozinha. O cancelamento de série sempre fez isso; só este
+    // caminho ficou de fora.
+    //
+    // O reconciliador diário também limpa lembrete de reunião não confirmada,
+    // mas ele roda 01:30 — cancelar de manhã e deixar o lembrete das 18h sair
+    // seria tarde demais.
+    await cancelMeetingReminders([meetingId]);
+
     if (meeting.googleEventId) {
       const calendarId = await resolvePlanCalendarId(meeting.clientPlan)
         ?? meeting.user.googleCalendarId
