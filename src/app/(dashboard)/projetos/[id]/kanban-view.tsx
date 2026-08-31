@@ -41,7 +41,14 @@ type Task = {
   subtasks: { id: string; status: string }[];
 };
 
-type Column = { id: string; label: string; color: string; bg: string };
+type Column = {
+  id: string;
+  label: string;
+  color: string;
+  bg: string;
+  /** Controle opcional no cabeçalho da coluna, à direita da contagem. */
+  action?: React.ReactNode;
+};
 const CANCEL_DROP_ZONE_ID = "cancel-task-drop-zone";
 
 const COLUMNS: Column[] = [
@@ -170,6 +177,7 @@ function KanbanColumn({ column, tasks }: { column: Column; tasks: Task[] }) {
         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[column.id] ?? "bg-neutral-400"}`} />
         <span className={`text-[11px] font-semibold uppercase tracking-wider ${STATUS_TEXT[column.id] ?? "text-neutral-500"}`}>{column.label}</span>
         <span className="text-[11px] font-semibold text-neutral-400 bg-neutral-100 rounded-full px-1.5 min-w-[1.25rem] text-center tabular-nums">{tasks.length}</span>
+        {column.action ? <span className="ml-auto">{column.action}</span> : null}
       </div>
       <div
         ref={setNodeRef}

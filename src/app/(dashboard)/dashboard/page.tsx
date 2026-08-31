@@ -22,16 +22,33 @@ const boardTaskSelect = {
   subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
 } satisfies Prisma.TaskSelect;
 
-// Fluxo operacional exibido na home.
-const DASHBOARD_COLUMNS = [
-  { id: "todo",        label: "A ser iniciado",     color: "text-neutral-600", bg: "bg-neutral-50"  },
-  { id: "in_progress", label: "Em andamento",        color: "text-blue-600",    bg: "bg-blue-50"     },
-  { id: "review",      label: "Revisão",             color: "text-amber-600",   bg: "bg-amber-50"    },
-  { id: "blocked",     label: "Ajustes",             color: "text-rose-600",    bg: "bg-rose-50"     },
-  { id: "done",        label: "Concluído · 7 dias",  color: "text-emerald-600", bg: "bg-emerald-50"  },
-];
+// Fluxo operacional exibido na home. A coluna de concluídas leva um controle
+// para alternar entre os últimos 7 dias e o histórico inteiro.
+function dashboardColumns(todasConcluidas: boolean, alternarHref: string) {
+  return [
+    { id: "todo",        label: "A ser iniciado", color: "text-neutral-600", bg: "bg-neutral-50" },
+    { id: "in_progress", label: "Em andamento",   color: "text-blue-600",    bg: "bg-blue-50"    },
+    { id: "review",      label: "Revisão",        color: "text-amber-600",   bg: "bg-amber-50"   },
+    { id: "blocked",     label: "Ajustes",        color: "text-rose-600",    bg: "bg-rose-50"    },
+    {
+      id: "done",
+      label: todasConcluidas ? "Concluído · todas" : "Concluído · 7 dias",
+      color: "text-emerald-600",
+      bg: "bg-emerald-50",
+      action: (
+        <Link
+          href={alternarHref}
+          title={todasConcluidas ? "Mostrar só os últimos 7 dias" : "Ver todas as concluídas"}
+          className="inline-flex items-center gap-1 rounded-md border border-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+        >
+          {todasConcluidas ? "Últimos 7 dias" : "Ver todas"}
+        </Link>
+      ),
+    },
+  ];
+}
 
-async function getDashboardData(memberId: string | null, clientId: string | null, companyId: string, includeCancelled: boolean) {
+async function getDashboardData(memberId: string | null, clientId: string | null, companyId: string, includeCancelled: boolean, todasConcluidas: boolean) {
   const now = new Date();
   const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999);
@@ -57,11 +74,20 @@ async function getDashboardData(memberId: string | null, clientId: string | null
       take: 100,
       select: boardTaskSelect,
     }),
-    // Board: Concluído — só recentes (7 dias), senão a coluna cresce sem limite
+    // Board: Concluído. Por padrão só os últimos 7 dias, senão a coluna cresce
+    // sem limite no uso diário; "ver todas" abre o histórico, com um teto maior
+    // para a consulta não ficar cara. Sempre da mais recente para a mais antiga.
     prisma.task.findMany({
-      where: { companyId, deletedAt: null, archivedAt: null, AND: taskScopes, status: "done", completedAt: { gte: sevenDaysAgo } },
+      where: {
+        companyId,
+        deletedAt: null,
+        archivedAt: null,
+        AND: taskScopes,
+        status: "done",
+        ...(todasConcluidas ? {} : { completedAt: { gte: sevenDaysAgo } }),
+      },
       orderBy: [{ completedAt: "desc" }],
-      take: 50,
+      take: todasConcluidas ? 500 : 50,
       select: boardTaskSelect,
     }),
     // Board: canceladas mais recentes, disponíveis para consulta ou reativação por drag.
@@ -96,12 +122,13 @@ async function getDashboardData(memberId: string | null, clientId: string | null
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string; member?: string; client?: string; cancelled?: string }>;
+  searchParams?: Promise<{ view?: string; member?: string; client?: string; cancelled?: string; concluidas?: string }>;
 }) {
   const user = await requireAuth();
   const sp = await searchParams;
   const view = sp?.view === "list" ? "list" : "board";
   const showCancelled = sp?.cancelled === "1";
+  const todasConcluidas = sp?.concluidas === "todas";
 
   // Exceção: cargos elevados (admin/manager/supervisor) podem ver/filtrar as
   // tarefas de qualquer membro da empresa — não só as próprias, incl. "Todos"
@@ -153,7 +180,7 @@ export default async function DashboardPage({
   }${selectedClient ? ` · ${selectedClient.name}` : ""}`;
 
   const { myTasks, cancelledTasks, overdueCount, todayCount, completedTodayCount, inProgressCount } =
-    await getDashboardData(viewingUserId, selectedClient?.id ?? null, user.companyId, showCancelled);
+    await getDashboardData(viewingUserId, selectedClient?.id ?? null, user.companyId, showCancelled, todasConcluidas);
 
   const pendingTasks = myTasks.filter((t) => t.status !== "done" && t.status !== "cancelled");
 
@@ -312,7 +339,10 @@ export default async function DashboardPage({
             <KanbanView
               key={`${viewingAll ? "all" : viewingUserId}:${selectedClient?.id ?? "all-clients"}`}
               tasks={myTasks}
-              columns={DASHBOARD_COLUMNS}
+              columns={dashboardColumns(
+                todasConcluidas,
+                `/dashboard?view=${view}${filterParams}${todasConcluidas ? "" : "&concluidas=todas"}`,
+              )}
               headerTitle={taskHeading}
               cancelledHref={`/dashboard?view=${view}${filterParams}&cancelled=1`}
               toolbarActions={
